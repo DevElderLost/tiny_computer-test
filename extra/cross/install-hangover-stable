@@ -38,7 +38,7 @@ done
 
 echo "正在安装Hangover..."
 tar xvf hangover.tar
-sudo apt install -y ./hangover*.deb
+sudo DEBIAN_FRONTEND=noninteractive apt install -y ./hangover*.deb
 if [ $? -ne 0 ]; then
     cd /tmp
     rm -rf /tmp/hangover
