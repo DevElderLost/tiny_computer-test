@@ -1205,7 +1205,7 @@ class TerminalPage extends StatelessWidget {
           }, child: Text(D.termCommands[index]["name"]! as String));
         }, separatorBuilder:(context, index) {
           return const SizedBox.square(dimension: 4);
-        }, itemCount: D.termCommands.length))), SizedBox.fromSize(size: const Size(72, 0))])):const SizedBox.square(dimension: 0);
+        }, itemCount: D.termCommands.length)))])):const SizedBox.square(dimension: 0);
       })
     ]);
   }
@@ -1344,6 +1344,22 @@ class _MyHomePageState extends State<MyHomePage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(isLoadingComplete ? Util.getCurrentProp("name") : widget.title),
+        actions: [
+          Visibility(
+              visible: isLoadingComplete,
+              child: IconButton.filledTonal(
+                  onPressed: () {
+                    if (G.wasX11Enabled) {
+                      Workflow.launchX11();
+                    } else if (G.wasAvncEnabled) {
+                      Workflow.launchAvnc();
+                    } else {
+                      Workflow.launchBrowser();
+                    }
+                  },
+                  icon: const Icon(Icons.play_arrow),
+                  tooltip: AppLocalizations.of(context)!.enterGUI))
+        ],
       ),
       body: isLoadingComplete
           ? ValueListenableBuilder(
@@ -1409,27 +1425,6 @@ class _MyHomePageState extends State<MyHomePage> {
               onDestinationSelected: (index) {
                 G.pageIndex.value = index;
               },
-            ),
-          );
-        },
-      ),
-      floatingActionButton: ValueListenableBuilder(
-        valueListenable: G.pageIndex,
-        builder: (context, value, child) {
-          return Visibility(
-            visible: isLoadingComplete && (value == 0),
-            child: FloatingActionButton(
-              tooltip: AppLocalizations.of(context)!.enterGUI,
-              onPressed: () {
-                if (G.wasX11Enabled) {
-                  Workflow.launchX11();
-                } else if (G.wasAvncEnabled) {
-                  Workflow.launchAvnc();
-                } else {
-                  Workflow.launchBrowser();
-                }
-              },
-              child: const Icon(Icons.play_arrow),
             ),
           );
         },
