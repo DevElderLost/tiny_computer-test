@@ -171,7 +171,6 @@ class SettingPage extends StatefulWidget {
 class _SettingPageState extends State<SettingPage> {
 
   final List<bool> _expandState = [false, false, false, false, false, false, false];
-  bool _isMicMonitoring = false;
 
   double _avncScaleFactor = Util.getGlobal("avncScaleFactor") as double;
 
@@ -628,26 +627,10 @@ pactl list short modules | grep "Android" | cut -f1 | xargs -L1 pactl unload-mod
 pkill -f tiny_virtual_mic""");
               G.pageIndex.value = 0;
               D.androidChannel.invokeMethod("stopStreaming", {});
-              if (_isMicMonitoring) {
-                Util.termWrite("""
-pactl unload-module module-loopback""");
-                _isMicMonitoring = false;
-              }
             }
             G.isStreaming = value;
             setState(() {});
           },),
-          SwitchListTile(title: const Text("Mic Realtime Audio Monitoring"), subtitle: G.isStreaming ? null : const Text("Requires Start Microphone to be active"), value: _isMicMonitoring, onChanged: G.isStreaming ? (value) {
-            if (value) {
-              Util.termWrite("""
-pactl load-module module-loopback latency_msec=1""");
-            } else {
-              Util.termWrite("""
-pactl unload-module module-loopback""");
-            }
-            G.pageIndex.value = 0;
-            setState(() { _isMicMonitoring = value; });
-          } : null,),
           const SizedBox.square(dimension: 16),
         ],))),
     ],);
