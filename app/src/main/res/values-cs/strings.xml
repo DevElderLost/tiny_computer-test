@@ -1,0 +1,265 @@
+<resources>
+    <string name="tc4_app_name">Malý kontejner</string>
+
+    <string name="tc4_btn_ok">OK</string>
+    <string name="tc4_btn_cancel">Zrušit</string>
+    <string name="tc4_btn_delete">Smazat</string>
+    <string name="tc4_btn_continue">Pokračovat</string>
+    <string name="tc4_btn_save_exit">Uložit a ukončit</string>
+    <string name="tc4_btn_save_send">Uložit a odeslat příkaz</string>
+    <string name="tc4_btn_back">Zpět</string>
+    <string name="tc4_btn_generate">Generovat</string>
+    <string name="tc4_btn_quick_fill">Rychlé vyplnění</string>
+    <string name="tc4_btn_confirm_install">Potvrdit instalaci</string>
+    <string name="tc4_btn_details">Podrobnosti</string>
+    <string name="tc4_btn_edit">Upravit</string>
+    <string name="tc4_btn_share">Sdílet</string>
+    <string name="tc4_btn_update">Aktualizovat</string>
+
+
+    <string name="tc4_label_enable">Povolit</string>
+    <string name="tc4_label_default_gui">Nastavit jako výchozí GUI</string>
+    <string name="tc4_label_adapt_screen">Přizpůsobit velikosti obrazovky</string>
+    <string name="tc4_label_effective_next_launch">Projeví se při příštím spuštění kontejneru</string>
+    <string name="tc4_label_effective_this_session">Platí pouze pro tuto relaci. Před ukončením je nutné zakázat.</string>
+    <string name="tc4_label_version">Verze %1$s</string>
+
+    <string name="tc4_container_title">Správa kontejnerů</string>
+    <string name="tc4_container_empty_hint">Žádné kontejnery, klepněte vpravo nahoře pro import</string>
+    <string name="tc4_container_calculating_space">Výpočet využití…</string>
+    <string name="tc4_container_delete_success">Úspěšně smazáno</string>
+    <string name="tc4_container_delete_failed">Smazání selhalo: %1$s</string>
+    <string name="tc4_container_loading_failed">\"%1$s\" se nepodařilo načíst</string>
+    <string name="tc4_container_list_load_failed">Načtení seznamu kontejnerů selhalo: %1$s</string>
+    <string name="tc4_container_config_missing">Konfigurace kontejneru nenalezena</string>
+    <string name="tc4_container_missing_boot_cmd">Kontejneru \"%1$s\" chybí konfigurace boot_command</string>
+    <string name="tc4_container_config_lost">Konfigurace kontejneru \"%1$s\" ztracena, přeinstalujte prosím</string>
+
+    <string name="tc4_dialog_delete_title">Potvrdit smazání</string>
+    <string name="tc4_dialog_delete_message">Opravdu chcete trvale smazat \"%1$s\"?\nTuto akci nelze vrátit zpět.</string>
+    <string name="tc4_dialog_deleting_title">Mazání souborů kontejneru, čekejte prosím…</string>
+
+    <string name="tc4_dialog_edit_container_title">Upravit informace o kontejneru</string>
+
+    <string name="tc4_dialog_exit_title">Ukončit kontejner</string>
+    <string name="tc4_dialog_exit_message">Chcete zastavit kontejner a vrátit se na stránku správy?</string>
+
+    <string name="tc4_import_title">Importovat kontejner</string>
+    <string name="tc4_import_warning">1. Importujte pouze kontejnery z důvěryhodných zdrojů.\nŠkodlivý kontejner může zničit ostatní kontejnery a dokonce i samotnou aplikaci.\nPokud udělíte oprávnění k úložišti, může také upravovat, odesílat nebo mazat důležitá data ve vašem zařízení (např. fotografie).\n\n2. Zřeknutí se odpovědnosti: Tento software je open source pod GPL, poskytován BEZ JAKÉKOLI ZÁRUKY.\nAutor nenese za žádných okolností žádnou odpovědnost.\nUživatelé musí zkontrolovat zdrojový kód a převzít veškerá rizika.</string>
+    <string name="tc4_import_builtin_btn">Instalovat vestavěný kontejner</string>
+    <string name="tc4_import_copying_title">Kopírování souborů kontejneru do mezipaměti…</string>
+    <string name="tc4_import_extracting_title">Extrakce konfigurace…</string>
+    <string name="tc4_import_installing_title">Instalace kontejneru…</string>
+    <string name="tc4_import_deleting_old_title">Mazání starých souborů kontejneru…</string>
+    <string name="tc4_import_cleaning_title">Čištění dočasných souborů…</string>
+    <string name="tc4_import_completed">\"%1$s\" úspěšně nainstalován</string>
+    <string name="tc4_import_failed">Instalace selhala: %1$s</string>
+    <string name="tc4_import_builtin_failed">Instalace vestavěného kontejneru selhala: %1$s</string>
+    <string name="tc4_import_auto_failed">Automatická instalace vestavěného kontejneru selhala: %1$s</string>
+    <string name="tc4_install_state_error">Chyba stavu instalace, zkuste to znovu</string>
+    <string name="tc4_import_missing_code">Chybí pole \'code\' v konfiguraci</string>
+    <string name="tc4_import_missing_code_builtin">Chybí pole \'code\' v konfiguraci vestavěného kontejneru</string>
+    <string name="tc4_import_no_config">Konfigurace .tiny.yaml nenalezena v souboru kontejneru</string>
+    <string name="tc4_import_config_parse_failed">Analýza konfigurace selhala: %1$s</string>
+    <string name="tc4_import_completed_title">Instalace dokončena</string>
+    <string name="tc4_import_failed_title">Instalace selhala</string>
+
+    <string name="tc4_install_launch_after">Spustit po instalaci</string>
+    <string name="tc4_install_warning_data">Obsah %1$s bude vymazán, tuto akci nelze vrátit zpět</string>
+    <string name="tc4_install_warning_overwrite">\"%1$s\" je již nainstalován, bude přepsán a nelze jej obnovit</string>
+
+    <string name="tc4_export_title">Exportovat kontejner</string>
+    <string name="tc4_export_warning">1. Příkaz \"export\" poskytuje tvůrce kontejneru.\nExport obvykle není záloha — vytváří sdílitelný kontejner a může obsahovat příkazy k vyčištění soukromých dat.\nLinux je flexibilní a výsledek exportu se může lišit od očekávání.\nNejprve prosím zkontrolujte export_command v /.tiny.yaml.\n\n2. Zřeknutí se odpovědnosti: Tento software je open source pod GPL, poskytován BEZ JAKÉKOLI ZÁRUKY.\nAutor nenese za žádných okolností žádnou odpovědnost.\nUživatelé musí zkontrolovat zdrojový kód a převzít veškerá rizika.</string>
+    <string name="tc4_export_success">Export úspěšný</string>
+    <string name="tc4_export_failed">Export selhal: %1$s</string>
+    <string name="tc4_export_missing_cmd">Chybí export_command v konfiguraci</string>
+    <string name="tc4_export_no_output">Export nevytvořil žádný soubor</string>
+    <string name="tc4_export_cannot_write">Nelze zapisovat do vybrané cesty</string>
+    <string name="tc4_export_progress_title">Export souborů kontejneru…</string>
+
+    <string name="tc4_settings_title">Nastavení</string>
+    <string name="tc4_settings_description">Zde nakonfigurujte nastavení aplikace!\nPro nastavení specifická pro kontejner viz \"Funkce\" nebo \"Zkratky - Možnosti\".</string>
+    <string name="tc4_settings_shortcut_title">Generátor zástupců spouštěče</string>
+    <string name="tc4_settings_shortcut_desc">Vytvořte zástupce na ploše pro aktuální kontejner pro přímé spouštění příkazů</string>
+    <string name="tc4_settings_auto_launch_title">Automatické spuštění kontejneru</string>
+    <string name="tc4_settings_auto_launch_desc">Projeví se při příštím spuštění kontejneru</string>
+    <string name="tc4_settings_auto_launch_gui_title">Automatické spuštění GUI</string>
+    <string name="tc4_settings_legacy_proot_title">Použít starší Proot</string>
+    <string name="tc4_settings_legacy_proot_desc">Nejnovější proot přináší vzrušující emulaci bwrap a netlink.\nZlepšuje kompatibilitu, ale také zpomaluje načítání v některých scénářích (např. přehrávání síťového videa se zpomaluje).\n*Toto nastavení je globální. Pro nastavení pro jednotlivé kontejnery změňte binární soubor proot v boot příkazu /.tiny.yaml na proot-classic nebo proot-latest.\nProjeví se při příštím spuštění kontejneru</string>
+    <string name="tc4_settings_reset_bootstrap_title">Přeinstalovat Bootstrap</string>
+    <string name="tc4_settings_reset_bootstrap_desc">Projeví se při příštím spuštění kontejneru</string>
+    <string name="tc4_settings_auto_check_update_title">Automatická kontrola aktualizací</string>
+    <string name="tc4_settings_auto_check_update_desc">Kontrola nových verzí při spuštění kontejneru</string>
+    <string name="tc4_settings_manage_files_title">Přístup ke všem souborům</string>
+    <string name="tc4_settings_manage_files_desc">Povolit kontejneru přístup k souborům Androidu\nPři použití oficiálních kontejnerů je úložiště Android obvykle na /mnt/sdcard</string>
+    <string name="tc4_settings_battery_title">Neomezená baterie</string>
+    <string name="tc4_settings_battery_desc">Zakázat optimalizaci baterie, aby aplikace nebyla ukončena systémem</string>
+
+    <string name="tc4_help_source_code_title">Repozitář zdrojového kódu</string>
+    <string name="tc4_help_source_code_desc">Podívejte se na každý řádek kódu. Získejte dokumentaci, zpětnou vazbu a další.</string>
+    <string name="tc4_help_releases_title">Stránka vydání</string>
+    <string name="tc4_help_releases_desc">Získejte nejnovější verzi Tiny Container</string>
+    <string name="tc4_help_oss_title">Open Source knihovny</string>
+    <string name="tc4_help_oss_desc">Děkujeme těmto knihovnám za zjednodušení vývoje.</string>
+    <string name="tc4_help_license_title">Licence</string>
+    <string name="tc4_help_license_desc">PRoot — nezbytná součást pro běh Linuxu — je licencován pod GPL, takže i já musím zveřejnit svůj kód :D</string>
+    <string name="tc4_help_wechat_title">Oficiální účet WeChat: 装机宝典</string>
+    <string name="tc4_help_wechat_desc">Mohu zde zveřejnit nějaké návody k Tiny Container. Pokud nemůžete získat přístup na GitHub, může to pomoci.</string>
+    <string name="tc4_help_bilibili_title">Catenův Bilibili</string>
+    <string name="tc4_help_bilibili_desc">Mohu zveřejňovat videa o Tiny Container a také další věci, jako Plants vs. Zombies :P</string>
+    <string name="tc4_help_spark_store_title">Odkaz: Spark App Store</string>
+    <string name="tc4_help_spark_store_desc">Jedna jiskra může zapálit oheň na prérii</string>
+    <string name="tc4_help_gxde_title">Odkaz: GXDE OS</string>
+    <string name="tc4_help_gxde_desc">Krásná, lehká, připravená linuxová distribuce.\nPostavená na aktualizovaném základu, GXDE přivádí DDE 15 zpět do centra pozornosti</string>
+
+    <string name="tc4_quick_commands_tab">Rychlé příkazy</string>
+    <string name="tc4_quick_options_tab">Možnosti</string>
+    <string name="tc4_quick_commands_default_desc">Klepnutím na příkaz jej automaticky vložíte do terminálu.</string>
+    <string name="tc4_quick_options_default_desc">Přepnout možnosti, projeví se při příštím spuštění.</string>
+    <string name="tc4_quick_commands_empty">Žádné rychlé příkazy. Přidejte nebo vložte pro import.</string>
+    <string name="tc4_quick_options_empty">Žádné nakonfigurované možnosti. Přidejte nebo vložte pro import.</string>
+    <string name="tc4_quick_folder_added">Složka přidána</string>
+    <string name="tc4_quick_command_added">Příkaz přidán</string>
+    <string name="tc4_quick_option_added">Možnost přidána</string>
+    <string name="tc4_quick_updated">Aktualizováno</string>
+    <string name="tc4_quick_deleted">Smazáno</string>
+    <string name="tc4_quick_delete_title">Smazat uzel</string>
+    <string name="tc4_quick_delete_selected">Potvrdit smazání vybraných uzlů?</string>
+    <string name="tc4_quick_delete_named">Potvrdit smazání následujících uzlů?\n%1$s</string>
+    <string name="tc4_quick_import_success">Úspěšně importováno %1$d uzlů</string>
+    <string name="tc4_quick_import_partial">Importováno %1$d, selhalo %2$d</string>
+    <string name="tc4_quick_import_failed">Import selhal: %1$s</string>
+    <string name="tc4_quick_copied">Zkopírováno %1$d uzlů do schránky</string>
+
+    <string name="tc4_validate_name_empty">Název nemůže být prázdný</string>
+    <string name="tc4_validate_command_empty">Příkaz nemůže být prázdný</string>
+    <string name="tc4_validate_code_length">Délka musí být 1-32 znaků</string>
+    <string name="tc4_validate_code_chars">Povolena pouze písmena a číslice</string>
+    <string name="tc4_validate_code_reserved">Tento název je vyhrazen systémem, použijte jiný</string>
+    <string name="tc4_validate_clipboard_empty">Schránka je prázdná</string>
+    <string name="tc4_validate_clipboard_read">Nelze přečíst obsah schránky</string>
+    <string name="tc4_validate_clipboard_content_empty">Obsah schránky je prázdný</string>
+    <string name="tc4_validate_yaml_not_object">Není platný YAML objekt</string>
+    <string name="tc4_validate_yaml_missing_type">Chybí pole \'type\' nebo type není řetězec</string>
+    <string name="tc4_validate_yaml_invalid_type">Typ \'%1$s\' je neplatný, povoleno: %2$s</string>
+    <string name="tc4_validate_yaml_format_error">Chyba formátu YAML: %1$s</string>
+    <string name="tc4_validate_list_unavailable">Nelze získat přístup k aktuálnímu seznamu</string>
+
+    <string name="tc4_feature_mic_permission">Vyžadováno oprávnění k mikrofonu</string>
+    <string name="tc4_feature_cmd_sent">Příkaz odeslán do terminálu</string>
+    <string name="tc4_feature_link_copied">Zkopírováno %1$s</string>
+    <string name="tc4_feature_screen_scale">Měřítko obrazovky %1$sx</string>
+
+    <string name="tc4_shortcut_dialog_title">Generátor zástupců spouštěče</string>
+    <string name="tc4_shortcut_pin_unsupported">Aktuální spouštěč nepodporuje připínání zástupců</string>
+
+    <string name="tc4_desktop_picker_title">Vybrat soubor .desktop</string>
+    <string name="tc4_desktop_picker_empty">Nenalezeny žádné soubory .desktop</string>
+
+    <string name="tc4_terminal_no_session">Žádná relace</string>
+
+    <string name="tc4_import_file_label">Importovat do veřejné složky</string>
+    <string name="tc4_import_file_result">Importováno %1$d/%2$d souborů do veřejné složky</string>
+
+    <string name="tc4_shortcut_container_not_found">Kontejner \"%1$s\" nenalezen, vytvořte zástupce znovu</string>
+    <string name="tc4_shortcut_another_running">Jiný kontejner je spuštěn, příkaz ignorován</string>
+
+    <string name="tc4_permission_file_granted">Oprávnění ke správě souborů uděleno</string>
+    <string name="tc4_permission_file_denied">Oprávnění ke správě souborů zamítnuto</string>
+
+    <string name="tc4_signal9_title">Co se stalo?</string>
+    <string name="tc4_signal9_description">Terminál byl abnormálně ukončen s chybovým kódem 9. To je způsobeno omezením podřízených procesů v Android 12+. Musíte toto omezení ručně zakázat.</string>
+    <string name="tc4_signal9_tool_hint">K opravě můžete použít tyto nástroje:</string>
+    <string name="tc4_signal9_tool_btn">Opravný nástroj</string>
+    <string name="tc4_signal9_tutorial_hint">Pokud výše uvedené nástroje nefungují nebo je vaše zařízení HarmonyOS mimo AOSP, postupujte podle tohoto návodu (vyžaduje PC a USB kabel):</string>
+    <string name="tc4_signal9_tutorial_btn">Odkaz na návod</string>
+    <string name="tc4_signal9_dev_options_note">Povolte Možnosti pro vývojáře v Nastavení (obvykle najděte O zařízení → klepněte 7krát na Číslo sestavení), poté v Možnostech pro vývojáře najděte \"Zakázat omezení podřízených procesů\" a zapněte jej. Kroky se mohou lišit podle zařízení — vyhledejte podrobnosti online.</string>
+
+    <string name="tc4_license_title">GNU General Public License v3.0</string>
+    <string name="tc4_license_description">Tiny Container je open source pod licencí GPLv3</string>
+
+    <string name="tc4_oss_title">Open Source knihovny</string>
+    <string name="tc4_oss_description">Tato aplikace používá následující open source knihovny. Děkujeme těmto projektům za zjednodušení vývoje.</string>
+
+    <string name="tc4_hint_name">Název</string>
+    <string name="tc4_hint_description">Popis</string>
+    <string name="tc4_hint_command">Příkaz</string>
+    <string name="tc4_hint_link">Odkaz</string>
+    <string name="tc4_hint_shortcut_name">Název zástupce</string>
+    <string name="tc4_hint_cache_path">Cesta mezipaměti</string>
+    <string name="tc4_hint_xserver_args">Argumenty X Serveru</string>
+    <string name="tc4_hint_container_code">Kód kontejneru</string>
+    <string name="tc4_hint_env_vars">Proměnné prostředí</string>
+    <string name="tc4_hint_path_extra">Dodatečná PATH</string>
+    <string name="tc4_hint_ld_path_extra">Dodatečná LD_LIBRARY_PATH</string>
+    <string name="tc4_hint_ld_preload">Knihovny LD_PRELOAD</string>
+    <string name="tc4_hint_proot_args">Argumenty Proot</string>
+    <string name="tc4_hint_pre_host_cmd">Příkaz hostitele před spuštěním</string>
+    <string name="tc4_hint_post_container_cmd">Příkaz kontejneru po spuštění</string>
+    <string name="tc4_hint_post_end_host_cmd">Příkaz hostitele po ukončení</string>
+
+    <string name="tc4_helper_one_per_line">Jeden na řádek</string>
+    <string name="tc4_helper_one_path_per_line">Jedna cesta na řádek</string>
+    <string name="tc4_helper_key_value_per_line">Jeden na řádek, formát KLÍČ=HODNOTA</string>
+    <string name="tc4_helper_exec_on_host">Spouští se na hostiteli Android</string>
+    <string name="tc4_helper_exec_in_container">Spouští se uvnitř kontejneru</string>
+    <string name="tc4_helper_exec_on_host_after_exit">Spouští se na hostiteli Android, po ukončení kontejneru</string>
+    <string name="tc4_helper_exec_in_container_note">Příkaz spouštěný uvnitř kontejneru</string>
+    <string name="tc4_helper_code_rules">1-32 alfanumerických znaků, nesmí kolidovat s vyhrazenými systémovými názvy</string>
+
+    <string name="tc4_feature_label_settings">Nastavení</string>
+    <string name="tc4_feature_label_about">O aplikaci</string>
+
+    <string name="tc4_quicks_cd_paste">Vložit</string>
+    <string name="tc4_quicks_cd_add_folder">Přidat složku</string>
+    <string name="tc4_quicks_cd_add">Přidat</string>
+    <string name="tc4_quicks_cd_delete">Smazat</string>
+    <string name="tc4_quicks_cd_copy">Kopírovat</string>
+    <string name="tc4_quicks_cd_edit">Upravit</string>
+    <string name="tc4_quicks_cd_close">Zavřít</string>
+
+    <string name="tc4_feature_label_set_avnc">Nastavení AVNC</string>
+    <string name="tc4_feature_label_about_avnc">O AVNC</string>
+    <string name="tc4_feature_label_set_x11">Nastavení Termux:X11</string>
+
+    <string name="tc4_tooltip_export">Exportovat</string>
+    <string name="tc4_tooltip_launch">Spustit</string>
+    <string name="tc4_tooltip_remove_error">Odstranit chybovou položku</string>
+
+    <string name="tc4_features_title">Funkce</string>
+    <string name="tc4_features_description">Zde nakonfigurujte softwarové funkce kontejneru!</string>
+    <string name="tc4_features_empty">Pro tento kontejner nejsou k dispozici žádné funkce</string>
+
+    <string name="tc4_help_title">Nápověda</string>
+    <string name="tc4_help_description">Zobrazit informace o projektu, získat nápovědu a aktualizace</string>
+
+    <string name="tc4_container_initializing">Inicializace kontejneru…</string>
+    <string name="tc4_container_loading">Načítání seznamu kontejnerů…</string>
+    <string name="tc4_container_empty_with_link">Nejsou nainstalovány žádné kontejnery.\nStáhněte kontejnery z oficiální stránky a importujte:\nhttps://www.github.com/tiny-computer/images/releases</string>
+    <string name="tc4_update_available">Nová verze %1$s je k dispozici! Aktualizujte prosím.</string>
+
+    <string name="tc4_helper_cache_vars">Jeden na řádek, podporuje $CACHE_DIR a $CONTAINER_DIR</string>
+
+    <string name="tc4_validate_yaml_line_error">Řádek %1$d: %2$s</string>
+    <string name="tc4_validate_yaml_child_null">Podřízený uzel %1$d je prázdný</string>
+    <string name="tc4_validate_yaml_child_error">Podřízený uzel %1$d: %2$s</string>
+
+    <string name="tc4_documents_root_containers">Kořenové souborové systémy nainstalovaných kontejnerů</string>
+    <string name="tc4_documents_root_public">Sdílená složka napříč kontejnery</string>
+    <string name="tc4_documents_error_create">Nelze vytvořit soubory v tomto umístění</string>
+    <string name="tc4_documents_error_rename_root">Tento soubor nelze přejmenovat</string>
+    <string name="tc4_documents_error_target_exists">Cílový soubor již existuje: %1$s</string>
+    <string name="tc4_documents_error_rename_failed">Přejmenování selhalo: %1$s</string>
+    <string name="tc4_documents_error_delete">Tento soubor nelze smazat</string>
+    <string name="tc4_documents_root_containers_label">Kontejnery</string>
+    <string name="tc4_documents_root_public_label">Veřejné</string>
+
+    <string name="tc4_menu_toggle_terminal">Přepnout terminál</string>
+    <string name="tc4_menu_enter_gui">Vstoupit do GUI</string>
+    <string name="tc4_menu_import_container">Importovat kontejner</string>
+    <string name="tc4_menu_file_permission">Požádat o přístup k souborům</string>
+    <string name="tc4_menu_battery_optimization">Zakázat optimalizaci baterie</string>
+    <string name="tc4_menu_shortcuts">Zkratky</string>
+
+
+</resources>

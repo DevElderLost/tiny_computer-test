@@ -1,0 +1,264 @@
+<resources>
+    <string name="tc4_app_name">टिनी कंटेनर</string>
+
+    <string name="tc4_btn_ok">ठीक है</string>
+    <string name="tc4_btn_cancel">रद्द करें</string>
+    <string name="tc4_btn_delete">हटाएँ</string>
+    <string name="tc4_btn_continue">जारी रखें</string>
+    <string name="tc4_btn_save_exit">सहेजें और बाहर निकलें</string>
+    <string name="tc4_btn_save_send">सहेजें और कमांड भेजें</string>
+    <string name="tc4_btn_back">वापस</string>
+    <string name="tc4_btn_generate">उत्पन्न करें</string>
+    <string name="tc4_btn_quick_fill">त्वरित भरें</string>
+    <string name="tc4_btn_confirm_install">इंस्टॉल की पुष्टि करें</string>
+    <string name="tc4_btn_details">विवरण</string>
+    <string name="tc4_btn_edit">संपादित करें</string>
+    <string name="tc4_btn_share">साझा करें</string>
+    <string name="tc4_btn_update">अद्यतन</string>
+
+    <string name="tc4_label_enable">सक्षम करें</string>
+    <string name="tc4_label_default_gui">डिफ़ॉल्ट GUI के रूप में सेट करें</string>
+    <string name="tc4_label_adapt_screen">स्क्रीन आकार के अनुसार ढालें</string>
+    <string name="tc4_label_effective_next_launch">अगले कंटेनर लॉन्च पर प्रभावी होगा</string>
+    <string name="tc4_label_effective_this_session">केवल इस सत्र के लिए प्रभावी। बाहर निकलने से पहले अक्षम करना होगा।</string>
+    <string name="tc4_label_version">संस्करण %1$s</string>
+
+    <string name="tc4_container_title">कंटेनर प्रबंधन</string>
+    <string name="tc4_container_empty_hint">कोई कंटेनर नहीं, आयात करने के लिए ऊपर दाएँ टैप करें</string>
+    <string name="tc4_container_calculating_space">उपयोग की गणना हो रही है…</string>
+    <string name="tc4_container_delete_success">सफलतापूर्वक हटाया गया</string>
+    <string name="tc4_container_delete_failed">हटाना विफल: %1$s</string>
+    <string name="tc4_container_loading_failed">\"%1$s\" लोड करने में विफल</string>
+    <string name="tc4_container_list_load_failed">कंटेनर सूची लोड करने में विफल: %1$s</string>
+    <string name="tc4_container_config_missing">कंटेनर कॉन्फ़िग नहीं मिला</string>
+    <string name="tc4_container_missing_boot_cmd">कंटेनर \"%1$s\" में boot_command कॉन्फ़िग गायब है</string>
+    <string name="tc4_container_config_lost">कंटेनर \"%1$s\" का कॉन्फ़िग खो गया, कृपया पुनः इंस्टॉल करें</string>
+
+    <string name="tc4_dialog_delete_title">हटाने की पुष्टि करें</string>
+    <string name="tc4_dialog_delete_message">क्या आप वाकई \"%1$s\" को स्थायी रूप से हटाना चाहते हैं?\nयह क्रिया वापस नहीं ली जा सकती।</string>
+    <string name="tc4_dialog_deleting_title">कंटेनर फ़ाइलें हटाई जा रही हैं, कृपया प्रतीक्षा करें…</string>
+
+    <string name="tc4_dialog_edit_container_title">कंटेनर जानकारी संपादित करें</string>
+
+    <string name="tc4_dialog_exit_title">कंटेनर से बाहर निकलें</string>
+    <string name="tc4_dialog_exit_message">क्या आप कंटेनर रोककर प्रबंधन पृष्ठ पर वापस जाना चाहते हैं?</string>
+
+    <string name="tc4_import_title">कंटेनर आयात करें</string>
+    <string name="tc4_import_warning">१. केवल विश्वसनीय स्रोतों से कंटेनर आयात करें।\nएक दुर्भावनापूर्ण कंटेनर अन्य कंटेनरों और स्वयं ऐप को भी नष्ट कर सकता है।\nयदि आप स्टोरेज अनुमति देते हैं, तो यह आपके डिवाइस के महत्वपूर्ण डेटा (जैसे फ़ोटो) को संशोधित, भेज या हटा सकता है।\n\n२. अस्वीकरण: यह सॉफ़्टवेयर GPL के तहत ओपन सोर्स है, बिना किसी वारंटी के प्रदान किया गया है।\nलेखक किसी भी परिस्थिति में कोई दायित्व नहीं लेता।\nउपयोगकर्ताओं को स्रोत कोड की समीक्षा करनी चाहिए और सभी जोखिम उठाने चाहिए।</string>
+    <string name="tc4_import_builtin_btn">अंतर्निहित कंटेनर इंस्टॉल करें</string>
+    <string name="tc4_import_copying_title">कंटेनर फ़ाइलें कैश में कॉपी हो रही हैं…</string>
+    <string name="tc4_import_extracting_title">कॉन्फ़िगरेशन निकाला जा रहा है…</string>
+    <string name="tc4_import_installing_title">कंटेनर इंस्टॉल हो रहा है…</string>
+    <string name="tc4_import_deleting_old_title">पुरानी कंटेनर फ़ाइलें हटाई जा रही हैं…</string>
+    <string name="tc4_import_cleaning_title">अस्थायी फ़ाइलें साफ़ की जा रही हैं…</string>
+    <string name="tc4_import_completed">\"%1$s\" सफलतापूर्वक इंस्टॉल हुआ</string>
+    <string name="tc4_import_failed">इंस्टॉलेशन विफल: %1$s</string>
+    <string name="tc4_import_builtin_failed">अंतर्निहित कंटेनर इंस्टॉल करने में विफल: %1$s</string>
+    <string name="tc4_import_auto_failed">अंतर्निहित कंटेनर स्वतः इंस्टॉल करने में विफल: %1$s</string>
+    <string name="tc4_install_state_error">इंस्टॉलेशन स्थिति त्रुटि, कृपया पुनः प्रयास करें</string>
+    <string name="tc4_import_missing_code">कॉन्फ़िग में \'code\' फ़ील्ड गायब है</string>
+    <string name="tc4_import_missing_code_builtin">अंतर्निहित कंटेनर कॉन्फ़िग में \'code\' फ़ील्ड गायब है</string>
+    <string name="tc4_import_no_config">कंटेनर फ़ाइल में .tiny.yaml कॉन्फ़िग नहीं मिला</string>
+    <string name="tc4_import_config_parse_failed">कॉन्फ़िग विश्लेषण विफल: %1$s</string>
+    <string name="tc4_import_completed_title">इंस्टॉलेशन पूर्ण</string>
+    <string name="tc4_import_failed_title">इंस्टॉलेशन विफल</string>
+
+    <string name="tc4_install_launch_after">इंस्टॉल के बाद लॉन्च करें</string>
+    <string name="tc4_install_warning_data">%1$s की सामग्री मिटा दी जाएगी, यह क्रिया वापस नहीं ली जा सकती</string>
+    <string name="tc4_install_warning_overwrite">\"%1$s\" पहले से इंस्टॉल है, अधिलेखित हो जाएगा और पुनर्प्राप्त नहीं किया जा सकता</string>
+
+    <string name="tc4_export_title">कंटेनर निर्यात करें</string>
+    <string name="tc4_export_warning">१. \"निर्यात\" कमांड कंटेनर निर्माता द्वारा प्रदान किया जाता है।\nआमतौर पर निर्यात बैकअप नहीं है — यह एक साझा करने योग्य कंटेनर बनाता है और इसमें निजी डेटा साफ़ करने के कमांड शामिल हो सकते हैं।\nलिनक्स लचीला है और निर्यात परिणाम अपेक्षाओं से भिन्न हो सकता है।\nकृपया पहले /.tiny.yaml में export_command की समीक्षा करें।\n\n२. अस्वीकरण: यह सॉफ़्टवेयर GPL के तहत ओपन सोर्स है, बिना किसी वारंटी के प्रदान किया गया है।\nलेखक किसी भी परिस्थिति में कोई दायित्व नहीं लेता।\nउपयोगकर्ताओं को स्रोत कोड की समीक्षा करनी चाहिए और सभी जोखिम उठाने चाहिए।</string>
+    <string name="tc4_export_success">निर्यात सफल</string>
+    <string name="tc4_export_failed">निर्यात विफल: %1$s</string>
+    <string name="tc4_export_missing_cmd">कॉन्फ़िग में export_command गायब है</string>
+    <string name="tc4_export_no_output">निर्यात ने कोई फ़ाइल उत्पन्न नहीं की</string>
+    <string name="tc4_export_cannot_write">चयनित पथ पर लिखा नहीं जा सकता</string>
+    <string name="tc4_export_progress_title">कंटेनर फ़ाइलें निर्यात हो रही हैं…</string>
+
+    <string name="tc4_settings_title">सेटिंग्स</string>
+    <string name="tc4_settings_description">यहाँ ऐप सेटिंग्स कॉन्फ़िगर करें!\nकंटेनर-विशिष्ट सेटिंग्स के लिए, \"सुविधाएँ\" या \"शॉर्टकट - विकल्प\" देखें।</string>
+    <string name="tc4_settings_shortcut_title">लॉन्चर शॉर्टकट जनरेटर</string>
+    <string name="tc4_settings_shortcut_desc">सीधे कमांड चलाने के लिए वर्तमान कंटेनर का डेस्कटॉप शॉर्टकट बनाएँ</string>
+    <string name="tc4_settings_auto_launch_title">कंटेनर स्वतः लॉन्च करें</string>
+    <string name="tc4_settings_auto_launch_desc">अगले कंटेनर लॉन्च पर प्रभावी होगा</string>
+    <string name="tc4_settings_auto_launch_gui_title">GUI स्वतः लॉन्च करें</string>
+    <string name="tc4_settings_legacy_proot_title">लीगेसी Proot का उपयोग करें</string>
+    <string name="tc4_settings_legacy_proot_desc">नवीनतम proot रोमांचक bwrap और netlink एमुलेशन लाता है।\nयह संगतता में सुधार करता है, लेकिन कुछ परिदृश्यों में लोडिंग धीमी कर देता है (जैसे नेटवर्क वीडियो प्लेबैक धीमा हो जाता है)।\n*यह सेटिंग वैश्विक है। प्रति-कंटेनर सेटिंग्स के लिए, /.tiny.yaml के बूट कमांड में proot बाइनरी को proot-classic या proot-latest में बदलें।\nअगले कंटेनर लॉन्च पर प्रभावी होगा</string>
+    <string name="tc4_settings_reset_bootstrap_title">Bootstrap पुनः इंस्टॉल करें</string>
+    <string name="tc4_settings_reset_bootstrap_desc">अगले कंटेनर लॉन्च पर प्रभावी होगा</string>
+    <string name="tc4_settings_auto_check_update_title">स्वचालित अद्यतन जाँच</string>
+    <string name="tc4_settings_auto_check_update_desc">कंटेनर लॉन्च करते समय नए संस्करणों की जाँच करें</string>
+    <string name="tc4_settings_manage_files_title">सभी फ़ाइलों तक पहुँच</string>
+    <string name="tc4_settings_manage_files_desc">कंटेनर को Android फ़ाइलों तक पहुँचने की अनुमति दें\nआधिकारिक कंटेनरों का उपयोग करते समय, Android संग्रहण आमतौर पर /mnt/sdcard पर होता है</string>
+    <string name="tc4_settings_battery_title">बैटरी असीमित</string>
+    <string name="tc4_settings_battery_desc">ऐप को सिस्टम द्वारा मारे जाने से रोकने के लिए बैटरी ऑप्टिमाइज़ेशन अक्षम करें</string>
+
+    <string name="tc4_help_source_code_title">स्रोत कोड रिपॉज़िटरी</string>
+    <string name="tc4_help_source_code_desc">कोड की हर पंक्ति देखें। दस्तावेज़ प्राप्त करें, प्रतिक्रिया दें और अधिक।</string>
+    <string name="tc4_help_releases_title">रिलीज़ पृष्ठ</string>
+    <string name="tc4_help_releases_desc">Tiny Container का नवीनतम संस्करण प्राप्त करें</string>
+    <string name="tc4_help_oss_title">ओपन सोर्स लाइब्रेरीज़</string>
+    <string name="tc4_help_oss_desc">विकास को सरल बनाने के लिए इन लाइब्रेरीज़ का धन्यवाद।</string>
+    <string name="tc4_help_license_title">लाइसेंस</string>
+    <string name="tc4_help_license_desc">PRoot — लिनक्स चलाने के लिए एक आवश्यक घटक — GPL के तहत लाइसेंस प्राप्त है, इसलिए मुझे भी अपना कोड ओपन सोर्स करना होगा :D</string>
+    <string name="tc4_help_wechat_title">WeChat आधिकारिक खाता: 装机宝典</string>
+    <string name="tc4_help_wechat_desc">मैं यहाँ कुछ Tiny Container ट्यूटोरियल पोस्ट कर सकता हूँ। यदि आप GitHub तक नहीं पहुँच सकते, तो यह मदद कर सकता है।</string>
+    <string name="tc4_help_bilibili_title">Caten का Bilibili</string>
+    <string name="tc4_help_bilibili_desc">मैं Tiny Container के बारे में वीडियो पोस्ट कर सकता हूँ, और अन्य चीज़ें भी, जैसे Plants vs. Zombies :P</string>
+    <string name="tc4_help_spark_store_title">लिंक: Spark App Store</string>
+    <string name="tc4_help_spark_store_desc">एक चिंगारी प्रेयरी में आग लगा सकती है</string>
+    <string name="tc4_help_gxde_title">लिंक: GXDE OS</string>
+    <string name="tc4_help_gxde_desc">सुंदर, हल्का, उपयोग के लिए तैयार लिनक्स वितरण।\nअपडेटेड बेस पर निर्मित, GXDE DDE 15 को फिर से सुर्खियों में लाता है</string>
+
+    <string name="tc4_quick_commands_tab">त्वरित कमांड</string>
+    <string name="tc4_quick_options_tab">विकल्प</string>
+    <string name="tc4_quick_commands_default_desc">टर्मिनल में स्वचालित रूप से इनपुट करने के लिए कमांड टैप करें।</string>
+    <string name="tc4_quick_options_default_desc">विकल्प टॉगल करें, अगले लॉन्च पर प्रभावी होगा।</string>
+    <string name="tc4_quick_commands_empty">कोई त्वरित कमांड नहीं। जोड़ें या आयात करने के लिए पेस्ट करें।</string>
+    <string name="tc4_quick_options_empty">कोई विकल्प कॉन्फ़िगर नहीं। जोड़ें या आयात करने के लिए पेस्ट करें।</string>
+    <string name="tc4_quick_folder_added">फ़ोल्डर जोड़ा गया</string>
+    <string name="tc4_quick_command_added">कमांड जोड़ा गया</string>
+    <string name="tc4_quick_option_added">विकल्प जोड़ा गया</string>
+    <string name="tc4_quick_updated">अपडेट किया गया</string>
+    <string name="tc4_quick_deleted">हटाया गया</string>
+    <string name="tc4_quick_delete_title">नोड हटाएँ</string>
+    <string name="tc4_quick_delete_selected">चयनित नोड्स हटाने की पुष्टि करें?</string>
+    <string name="tc4_quick_delete_named">निम्नलिखित नोड्स हटाने की पुष्टि करें?\n%1$s</string>
+    <string name="tc4_quick_import_success">%1$d नोड सफलतापूर्वक आयात किए गए</string>
+    <string name="tc4_quick_import_partial">%1$d आयातित, %2$d विफल</string>
+    <string name="tc4_quick_import_failed">आयात विफल: %1$s</string>
+    <string name="tc4_quick_copied">%1$d नोड क्लिपबोर्ड पर कॉपी किए गए</string>
+
+    <string name="tc4_validate_name_empty">नाम खाली नहीं हो सकता</string>
+    <string name="tc4_validate_command_empty">कमांड खाली नहीं हो सकता</string>
+    <string name="tc4_validate_code_length">लंबाई १-३२ अक्षर होनी चाहिए</string>
+    <string name="tc4_validate_code_chars">केवल अक्षर और संख्याएँ अनुमत हैं</string>
+    <string name="tc4_validate_code_reserved">यह नाम सिस्टम द्वारा आरक्षित है, कृपया दूसरा उपयोग करें</string>
+    <string name="tc4_validate_clipboard_empty">क्लिपबोर्ड खाली है</string>
+    <string name="tc4_validate_clipboard_read">क्लिपबोर्ड सामग्री पढ़ी नहीं जा सकती</string>
+    <string name="tc4_validate_clipboard_content_empty">क्लिपबोर्ड सामग्री खाली है</string>
+    <string name="tc4_validate_yaml_not_object">मान्य YAML ऑब्जेक्ट नहीं है</string>
+    <string name="tc4_validate_yaml_missing_type">\'type\' फ़ील्ड गायब है या type स्ट्रिंग नहीं है</string>
+    <string name="tc4_validate_yaml_invalid_type">प्रकार \'%1$s\' अमान्य है, अनुमत: %2$s</string>
+    <string name="tc4_validate_yaml_format_error">YAML प्रारूप त्रुटि: %1$s</string>
+    <string name="tc4_validate_list_unavailable">वर्तमान सूची तक पहुँचा नहीं जा सकता</string>
+
+    <string name="tc4_feature_mic_permission">माइक्रोफ़ोन अनुमति आवश्यक</string>
+    <string name="tc4_feature_cmd_sent">टर्मिनल पर कमांड भेजा गया</string>
+    <string name="tc4_feature_link_copied">%1$s कॉपी किया गया</string>
+    <string name="tc4_feature_screen_scale">स्क्रीन स्केल %1$sx</string>
+
+    <string name="tc4_shortcut_dialog_title">लॉन्चर शॉर्टकट जनरेटर</string>
+    <string name="tc4_shortcut_pin_unsupported">वर्तमान लॉन्चर शॉर्टकट पिन करने का समर्थन नहीं करता</string>
+
+    <string name="tc4_desktop_picker_title">.desktop फ़ाइल चुनें</string>
+    <string name="tc4_desktop_picker_empty">कोई .desktop फ़ाइल नहीं मिली</string>
+
+    <string name="tc4_terminal_no_session">कोई सत्र नहीं</string>
+
+    <string name="tc4_import_file_label">सार्वजनिक फ़ोल्डर में आयात करें</string>
+    <string name="tc4_import_file_result">%1$d/%2$d फ़ाइल(एँ) सार्वजनिक फ़ोल्डर में आयात की गईं</string>
+
+    <string name="tc4_shortcut_container_not_found">कंटेनर \"%1$s\" नहीं मिला, कृपया शॉर्टकट पुनः बनाएँ</string>
+    <string name="tc4_shortcut_another_running">अन्य कंटेनर चल रहा है, कमांड अनदेखा किया गया</string>
+
+    <string name="tc4_permission_file_granted">फ़ाइल प्रबंधन अनुमति प्रदान की गई</string>
+    <string name="tc4_permission_file_denied">फ़ाइल प्रबंधन अनुमति अस्वीकृत</string>
+
+    <string name="tc4_signal9_title">क्या हुआ?</string>
+    <string name="tc4_signal9_description">टर्मिनल त्रुटि कोड ९ के साथ असामान्य रूप से समाप्त हुआ। यह Android 12+ द्वारा चाइल्ड प्रोसेस को सीमित करने के कारण हुआ है। आपको मैन्युअल रूप से इस सीमा को अक्षम करना होगा।</string>
+    <string name="tc4_signal9_tool_hint">आप ठीक करने के लिए इन उपकरणों का उपयोग कर सकते हैं:</string>
+    <string name="tc4_signal9_tool_btn">ठीक करने का उपकरण</string>
+    <string name="tc4_signal9_tutorial_hint">यदि उपरोक्त उपकरण काम नहीं करते, या आपका डिवाइस गैर-AOSP HarmonyOS डिवाइस है, तो इस ट्यूटोरियल का पालन करें (PC और USB केबल की आवश्यकता):</string>
+    <string name="tc4_signal9_tutorial_btn">ट्यूटोरियल लिंक</string>
+    <string name="tc4_signal9_dev_options_note">सेटिंग्स में डेवलपर विकल्प सक्षम करें (आमतौर पर डिवाइस के बारे में खोजें → बिल्ड नंबर पर ७ बार टैप करें), फिर डेवलपर विकल्पों में \"चाइल्ड प्रोसेस प्रतिबंध अक्षम करें\" ढूँढ़ें और इसे चालू करें। डिवाइस के अनुसार चरण भिन्न हो सकते हैं — विवरण के लिए ऑनलाइन खोजें।</string>
+
+    <string name="tc4_license_title">GNU जनरल पब्लिक लाइसेंस v3.0</string>
+    <string name="tc4_license_description">Tiny Container GPLv3 लाइसेंस के तहत ओपन सोर्स है</string>
+
+    <string name="tc4_oss_title">ओपन सोर्स लाइब्रेरीज़</string>
+    <string name="tc4_oss_description">यह ऐप निम्नलिखित ओपन सोर्स लाइब्रेरीज़ का उपयोग करता है। विकास को सरल बनाने के लिए इन परियोजनाओं का धन्यवाद।</string>
+
+    <string name="tc4_hint_name">नाम</string>
+    <string name="tc4_hint_description">विवरण</string>
+    <string name="tc4_hint_command">कमांड</string>
+    <string name="tc4_hint_link">लिंक</string>
+    <string name="tc4_hint_shortcut_name">शॉर्टकट नाम</string>
+    <string name="tc4_hint_cache_path">कैश पथ</string>
+    <string name="tc4_hint_xserver_args">X Server आर्गुमेंट्स</string>
+    <string name="tc4_hint_container_code">कंटेनर कोड</string>
+    <string name="tc4_hint_env_vars">एनवायरनमेंट वेरिएबल्स</string>
+    <string name="tc4_hint_path_extra">अतिरिक्त PATH</string>
+    <string name="tc4_hint_ld_path_extra">अतिरिक्त LD_LIBRARY_PATH</string>
+    <string name="tc4_hint_ld_preload">LD_PRELOAD लाइब्रेरीज़</string>
+    <string name="tc4_hint_proot_args">Proot आर्गुमेंट्स</string>
+    <string name="tc4_hint_pre_host_cmd">प्री-स्टार्ट होस्ट कमांड</string>
+    <string name="tc4_hint_post_container_cmd">पोस्ट-स्टार्ट कंटेनर कमांड</string>
+    <string name="tc4_hint_post_end_host_cmd">पोस्ट-एक्ज़िट होस्ट कमांड</string>
+
+    <string name="tc4_helper_one_per_line">प्रति पंक्ति एक</string>
+    <string name="tc4_helper_one_path_per_line">प्रति पंक्ति एक पथ</string>
+    <string name="tc4_helper_key_value_per_line">प्रति पंक्ति एक, प्रारूप KEY=VALUE</string>
+    <string name="tc4_helper_exec_on_host">Android होस्ट पर निष्पादित होता है</string>
+    <string name="tc4_helper_exec_in_container">कंटेनर के अंदर निष्पादित होता है</string>
+    <string name="tc4_helper_exec_on_host_after_exit">Android होस्ट पर निष्पादित होता है, कंटेनर से बाहर निकलने के बाद</string>
+    <string name="tc4_helper_exec_in_container_note">कंटेनर के अंदर निष्पादित कमांड</string>
+    <string name="tc4_helper_code_rules">१-३२ अक्षरांकीय वर्ण, आरक्षित सिस्टम नामों से टकराना नहीं चाहिए</string>
+
+    <string name="tc4_feature_label_settings">सेटिंग्स</string>
+    <string name="tc4_feature_label_about">के बारे में</string>
+
+    <string name="tc4_quicks_cd_paste">चिपकाएँ</string>
+    <string name="tc4_quicks_cd_add_folder">फ़ोल्डर जोड़ें</string>
+    <string name="tc4_quicks_cd_add">जोड़ें</string>
+    <string name="tc4_quicks_cd_delete">हटाएँ</string>
+    <string name="tc4_quicks_cd_copy">कॉपी करें</string>
+    <string name="tc4_quicks_cd_edit">संपादित करें</string>
+    <string name="tc4_quicks_cd_close">बंद करें</string>
+
+    <string name="tc4_feature_label_set_avnc">AVNC सेटिंग्स</string>
+    <string name="tc4_feature_label_about_avnc">AVNC के बारे में</string>
+    <string name="tc4_feature_label_set_x11">Termux:X11 सेटिंग्स</string>
+
+    <string name="tc4_tooltip_export">निर्यात करें</string>
+    <string name="tc4_tooltip_launch">लॉन्च करें</string>
+    <string name="tc4_tooltip_remove_error">त्रुटि प्रविष्टि हटाएँ</string>
+
+    <string name="tc4_features_title">सुविधाएँ</string>
+    <string name="tc4_features_description">यहाँ कंटेनर सॉफ़्टवेयर सुविधाएँ कॉन्फ़िगर करें!</string>
+    <string name="tc4_features_empty">इस कंटेनर के लिए कोई सुविधा उपलब्ध नहीं</string>
+
+    <string name="tc4_help_title">सहायता</string>
+    <string name="tc4_help_description">परियोजना जानकारी देखें, सहायता और अपडेट प्राप्त करें</string>
+
+    <string name="tc4_container_initializing">कंटेनर आरंभ हो रहा है…</string>
+    <string name="tc4_container_loading">कंटेनर सूची लोड हो रही है…</string>
+    <string name="tc4_container_empty_with_link">कोई कंटेनर इंस्टॉल नहीं है।\nआधिकारिक पृष्ठ से कंटेनर डाउनलोड करें और आयात करें:\nhttps://www.github.com/tiny-computer/images/releases</string>
+    <string name="tc4_update_available">नया संस्करण %1$s उपलब्ध है! कृपया अद्यतन करें।</string>
+
+    <string name="tc4_helper_cache_vars">प्रति पंक्ति एक, $CACHE_DIR और $CONTAINER_DIR का समर्थन करता है</string>
+
+    <string name="tc4_validate_yaml_line_error">पंक्ति %1$d: %2$s</string>
+    <string name="tc4_validate_yaml_child_null">चाइल्ड नोड %1$d खाली है</string>
+    <string name="tc4_validate_yaml_child_error">चाइल्ड नोड %1$d: %2$s</string>
+
+    <string name="tc4_documents_root_containers">इंस्टॉल किए गए कंटेनरों के रूट फ़ाइलसिस्टम</string>
+    <string name="tc4_documents_root_public">कंटेनरों में साझा फ़ोल्डर</string>
+    <string name="tc4_documents_error_create">इस स्थान पर फ़ाइलें नहीं बनाई जा सकतीं</string>
+    <string name="tc4_documents_error_rename_root">इस फ़ाइल का नाम नहीं बदला जा सकता</string>
+    <string name="tc4_documents_error_target_exists">लक्ष्य फ़ाइल पहले से मौजूद है: %1$s</string>
+    <string name="tc4_documents_error_rename_failed">नाम बदलना विफल: %1$s</string>
+    <string name="tc4_documents_error_delete">यह फ़ाइल हटाई नहीं जा सकती</string>
+    <string name="tc4_documents_root_containers_label">कंटेनर</string>
+    <string name="tc4_documents_root_public_label">सार्वजनिक</string>
+
+    <string name="tc4_menu_toggle_terminal">टर्मिनल टॉगल करें</string>
+    <string name="tc4_menu_enter_gui">GUI में प्रवेश करें</string>
+    <string name="tc4_menu_import_container">कंटेनर आयात करें</string>
+    <string name="tc4_menu_file_permission">फ़ाइल एक्सेस का अनुरोध करें</string>
+    <string name="tc4_menu_battery_optimization">बैटरी ऑप्टिमाइज़ेशन अक्षम करें</string>
+    <string name="tc4_menu_shortcuts">शॉर्टकट</string>
+
+
+</resources>

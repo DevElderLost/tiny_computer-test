@@ -1,0 +1,265 @@
+<resources>
+    <string name="tc4_app_name">کۆنتێنەری بچووک</string>
+
+    <string name="tc4_btn_ok">باشە</string>
+    <string name="tc4_btn_cancel">ڕەتبکەرەوە</string>
+    <string name="tc4_btn_delete">سڕینەوە</string>
+    <string name="tc4_btn_continue">بەردەوام بوون</string>
+    <string name="tc4_btn_save_exit">پاشەکەوت و دەرچوون</string>
+    <string name="tc4_btn_save_send">پاشەکەوت و ناردنی فەرمان</string>
+    <string name="tc4_btn_back">گەڕانەوە</string>
+    <string name="tc4_btn_generate">دروستکردن</string>
+    <string name="tc4_btn_quick_fill">پڕکردنەوەی خێرا</string>
+    <string name="tc4_btn_confirm_install">پشتڕاستکردنەوەی دامەزراندن</string>
+    <string name="tc4_btn_details">وردەکارییەکان</string>
+    <string name="tc4_btn_edit">دەستکاری</string>
+    <string name="tc4_btn_share">هاوبەشکردن</string>
+    <string name="tc4_btn_update">نوێکردنەوە</string>
+
+
+    <string name="tc4_label_enable">چالاککردن</string>
+    <string name="tc4_label_default_gui">وەک GUIی بنەڕەتی دابنێ</string>
+    <string name="tc4_label_adapt_screen">خۆگونجاندن لەگەڵ قەبارەی شاشە</string>
+    <string name="tc4_label_effective_next_launch">لە هەڵدانی داهاتووی کۆنتێنەردا کاریگەر دەبێت</string>
+    <string name="tc4_label_effective_this_session">تەنها بۆ ئەم دانیشتنە کاریگەرە. پێویستە پێش دەرچوون ناچالاک بکرێت.</string>
+    <string name="tc4_label_version">وەشانی %1$s</string>
+
+    <string name="tc4_container_title">بەڕێوەبردنی کۆنتێنەر</string>
+    <string name="tc4_container_empty_hint">هیچ کۆنتێنەرێک نییە، بۆ هاوردەکردن سەرەوەی ڕاست داگرە</string>
+    <string name="tc4_container_calculating_space">حسابکردنی بەکارهێنان…</string>
+    <string name="tc4_container_delete_success">بە سەرکەوتوویی سڕایەوە</string>
+    <string name="tc4_container_delete_failed">سڕینەوە شکستی هێنا: %1$s</string>
+    <string name="tc4_container_loading_failed">\"%1$s\" بارکردن شکستی هێنا</string>
+    <string name="tc4_container_list_load_failed">بارکردنی لیستی کۆنتێنەر شکستی هێنا: %1$s</string>
+    <string name="tc4_container_config_missing">ڕێکخستنی کۆنتێنەر نەدۆزرایەوە</string>
+    <string name="tc4_container_missing_boot_cmd">کۆنتێنەری \"%1$s\" ڕێکخستنی boot_commandی تێدا نییە</string>
+    <string name="tc4_container_config_lost">ڕێکخستنی کۆنتێنەری \"%1$s\" ون بووە، تکایە دووبارە دایمەزرێنە</string>
+
+    <string name="tc4_dialog_delete_title">پشتڕاستکردنەوەی سڕینەوە</string>
+    <string name="tc4_dialog_delete_message">دڵنیایت کە دەتەوێت بە هەمیشەیی \"%1$s\" بسڕیتەوە؟\nئەم کردارە ناگەڕێتەوە.</string>
+    <string name="tc4_dialog_deleting_title">سڕینەوەی فایلەکانی کۆنتێنەر، تکایە چاوەڕێ بکە…</string>
+
+    <string name="tc4_dialog_edit_container_title">دەستکاری زانیاری کۆنتێنەر</string>
+
+    <string name="tc4_dialog_exit_title">دەرچوون لە کۆنتێنەر</string>
+    <string name="tc4_dialog_exit_message">دەتەوێت کۆنتێنەر بوەستێنیت و بگەڕێیتەوە بۆ پەڕەی بەڕێوەبردن؟</string>
+
+    <string name="tc4_import_title">هاوردەکردنی کۆنتێنەر</string>
+    <string name="tc4_import_warning">١. تەنها کۆنتێنەری سەرچاوە متمانەپێکراوەکان هاوردە بکە.\nکۆنتێنەرێکی زیانبەخش دەتوانێت کۆنتێنەرەکانی تر و تەنانەت خودی ئەپەکەش لەناو ببات.\nئەگەر مۆڵەتی هەڵگرتن بدەیت، دەتوانێت داتا گرنگەکانی ئامێرەکەت (وەک وێنەکان) دەستکاری، بنێردرێت یان بسڕێتەوە.\n\n٢. بەرپرسیارێتی: ئەم نەرمامێرە بە GPL سەرچاوە کراوەیە، بەبێ هیچ گەرەنتییەک پێشکەش کراوە.\nنووسەر لە هیچ بارودۆخێکدا بەرپرسیار نییە.\nبەکارهێنەران دەبێت کۆدی سەرچاوە بپشکنن و هەموو مەترسییەکان قبوڵ بکەن.</string>
+    <string name="tc4_import_builtin_btn">دامەزراندنی کۆنتێنەری ناوەکی</string>
+    <string name="tc4_import_copying_title">کۆپیکردنی فایلەکانی کۆنتێنەر بۆ کاشی…</string>
+    <string name="tc4_import_extracting_title">دەرهێنانی ڕێکخستن…</string>
+    <string name="tc4_import_installing_title">دامەزراندنی کۆنتێنەر…</string>
+    <string name="tc4_import_deleting_old_title">سڕینەوەی فایلە کۆنەکانی کۆنتێنەر…</string>
+    <string name="tc4_import_cleaning_title">پاککردنەوەی فایلە کاتییەکان…</string>
+    <string name="tc4_import_completed">\"%1$s\" بە سەرکەوتوویی دامەزرا</string>
+    <string name="tc4_import_failed">دامەزراندن شکستی هێنا: %1$s</string>
+    <string name="tc4_import_builtin_failed">دامەزراندنی کۆنتێنەری ناوەکی شکستی هێنا: %1$s</string>
+    <string name="tc4_import_auto_failed">دامەزراندنی خۆکاری کۆنتێنەری ناوەکی شکستی هێنا: %1$s</string>
+    <string name="tc4_install_state_error">هەڵەی دۆخی دامەزراندن، تکایە دووبارە هەوڵ بدە</string>
+    <string name="tc4_import_missing_code">بەشی \'code\' لە ڕێکخستندا نییە</string>
+    <string name="tc4_import_missing_code_builtin">بەشی \'code\' لە ڕێکخستنی کۆنتێنەری ناوەکیدا نییە</string>
+    <string name="tc4_import_no_config">ڕێکخستنی .tiny.yaml لە فایلی کۆنتێنەردا نەدۆزرایەوە</string>
+    <string name="tc4_import_config_parse_failed">شیکاری ڕێکخستن شکستی هێنا: %1$s</string>
+    <string name="tc4_import_completed_title">دامەزراندن تەواو بوو</string>
+    <string name="tc4_import_failed_title">دامەزراندن شکستی هێنا</string>
+
+    <string name="tc4_install_launch_after">دوای دامەزراندن هەڵبدە</string>
+    <string name="tc4_install_warning_data">ناوەڕۆکی %1$s دەسڕێتەوە، ئەم کردارە ناگەڕێتەوە</string>
+    <string name="tc4_install_warning_overwrite">\"%1$s\" پێشتر دامەزراوە، دەگۆڕدرێت و ناگەڕێتەوە</string>
+
+    <string name="tc4_export_title">هەناردەکردنی کۆنتێنەر</string>
+    <string name="tc4_export_warning">١. فەرمانی \"هەناردەکردن\" لەلایەن دروستکەری کۆنتێنەرەوە دابین کراوە.\nبە شێوەیەکی ئاسایی هەناردەکردن پشتگیری نییە — کۆنتێنەرێکی هاوبەشکراو دروست دەکات و لەوانەیە فەرمانی پاککردنەوەی داتا تایبەتییەکان لەخۆ بگرێت.\nلینوکس گونجاوە و ئەنجامی هەناردەکردن لەوانەیە جیاواز بێت لە چاوەڕوانییەکان.\nتکایە سەرەتا export_command لە /.tiny.yaml بپشکنە.\n\n٢. بەرپرسیارێتی: ئەم نەرمامێرە بە GPL سەرچاوە کراوەیە، بەبێ هیچ گەرەنتییەک پێشکەش کراوە.\nنووسەر لە هیچ بارودۆخێکدا بەرپرسیار نییە.\nبەکارهێنەران دەبێت کۆدی سەرچاوە بپشکنن و هەموو مەترسییەکان قبوڵ بکەن.</string>
+    <string name="tc4_export_success">هەناردەکردن سەرکەوتوو بوو</string>
+    <string name="tc4_export_failed">هەناردەکردن شکستی هێنا: %1$s</string>
+    <string name="tc4_export_missing_cmd">export_command لە ڕێکخستندا نییە</string>
+    <string name="tc4_export_no_output">هەناردەکردن هیچ فایلێکی بەرهەم نەهێنا</string>
+    <string name="tc4_export_cannot_write">ناتوانرێت لە ڕێڕەوی هەڵبژێردراو بنووسرێت</string>
+    <string name="tc4_export_progress_title">هەناردەکردنی فایلەکانی کۆنتێنەر…</string>
+
+    <string name="tc4_settings_title">ڕێکخستنەکان</string>
+    <string name="tc4_settings_description">ڕێکخستنەکانی ئەپ لێرە ڕێکبخە!\nبۆ ڕێکخستنە تایبەتییەکانی کۆنتێنەر، سەیری \"تایبەتمەندییەکان\" یان \"کورتەڕێ - هەڵبژاردنەکان\" بکە.</string>
+    <string name="tc4_settings_shortcut_title">دروستکەری کورتەڕێی لانچەر</string>
+    <string name="tc4_settings_shortcut_desc">کورتەڕێیەکی ڕوومێز بۆ کۆنتێنەری ئێستا دروست بکە بۆ جێبەجێکردنی ڕاستەوخۆی فەرمانەکان</string>
+    <string name="tc4_settings_auto_launch_title">خۆکار هەڵدانی کۆنتێنەر</string>
+    <string name="tc4_settings_auto_launch_desc">لە هەڵدانی داهاتووی کۆنتێنەردا کاریگەر دەبێت</string>
+    <string name="tc4_settings_auto_launch_gui_title">خۆکار هەڵدانی GUI</string>
+    <string name="tc4_settings_legacy_proot_title">بەکارهێنانی Prootی کۆن</string>
+    <string name="tc4_settings_legacy_proot_desc">نوێترین proot هاوشێوەکاری bwrap و netlinkی سەرنجڕاکێش دەهێنێت.\nگونجان باشتر دەکات، بەڵام لە هەندێک بارودۆخدا بارکردن خاوتر دەکات (وەک پەخشی ڤیدیۆی تۆڕ خاو دەبێت).\n*ئەم ڕێکخستنە جیهانییە. بۆ ڕێکخستنی هەر کۆنتێنەرێک، پڕۆگرامی proot لە فەرمانی دەستپێکردنی /.tiny.yaml بگۆڕە بۆ proot-classic یان proot-latest.\nلە هەڵدانی داهاتووی کۆنتێنەردا کاریگەر دەبێت</string>
+    <string name="tc4_settings_reset_bootstrap_title">دووبارە دامەزراندنی Bootstrap</string>
+    <string name="tc4_settings_reset_bootstrap_desc">لە هەڵدانی داهاتووی کۆنتێنەردا کاریگەر دەبێت</string>
+    <string name="tc4_settings_auto_check_update_title">پشکنینی خۆکاری بۆ نوێکردنەوەکان</string>
+    <string name="tc4_settings_auto_check_update_desc">کاتی دەستپێکردنی کۆنتێنەر بۆ وەشانی نوێ بپشکنە</string>
+    <string name="tc4_settings_manage_files_title">دەستگەیشتن بە هەموو فایلەکان</string>
+    <string name="tc4_settings_manage_files_desc">ڕێگەدان بە کۆنتێنەر بۆ دەستگەیشتن بە فایلەکانی ئەندرۆید\nکاتێک کۆنتێنەری فەرمی بەکاردەهێنیت، هەڵگرتنی ئەندرۆید بەزۆری لە /mnt/sdcard دایە</string>
+    <string name="tc4_settings_battery_title">پاتری بێسنوور</string>
+    <string name="tc4_settings_battery_desc">ناچالاککردنی باشترکردنی پاتری بۆ ڕێگری لە کوشتنی ئەپ لەلایەن سیستەمەوە</string>
+
+    <string name="tc4_help_source_code_title">کۆگای کۆدی سەرچاوە</string>
+    <string name="tc4_help_source_code_desc">هەموو هێڵێکی کۆد ببینە. بەڵگەنامە وەربگرە، فیدباک بدە و زیاتر.</string>
+    <string name="tc4_help_releases_title">پەڕەی وەشانەکان</string>
+    <string name="tc4_help_releases_desc">نوێترین وەشانی Tiny Container وەربگرە</string>
+    <string name="tc4_help_oss_title">کتێبخانە سەرچاوە کراوەکان</string>
+    <string name="tc4_help_oss_desc">سوپاس بۆ ئەم کتێبخانانە کە پەرەپێدان ئاسانتر دەکەن.</string>
+    <string name="tc4_help_license_title">مۆڵەت</string>
+    <string name="tc4_help_license_desc">PRoot — پێکهاتەیەکی پێویست بۆ بەڕێوەبردنی لینوکس — بە GPL مۆڵەت دراوە، بۆیە منیش دەبێت کۆدەکەم سەرچاوە کراوە بکەم :D</string>
+    <string name="tc4_help_wechat_title">هەژماری فەرمی WeChat: 装机宝典</string>
+    <string name="tc4_help_wechat_desc">لەوانەیە هەندێک فێرکاری Tiny Container لێرە بڵاو بکەمەوە. ئەگەر ناتوانیت GitHub بکەیتەوە، ئەمە لەوانەیە یارمەتیدەر بێت.</string>
+    <string name="tc4_help_bilibili_title">Bilibiliی Caten</string>
+    <string name="tc4_help_bilibili_desc">لەوانەیە ڤیدیۆ لەسەر Tiny Container بڵاو بکەمەوە، و شتی تریش، وەک Plants vs. Zombies :P</string>
+    <string name="tc4_help_spark_store_title">بەستەر: فرۆشگای ئەپی Spark</string>
+    <string name="tc4_help_spark_store_desc">پشکۆیەک دەتوانێت ئاگرێک لە دەشتدا هەڵبگیرسێنێت</string>
+    <string name="tc4_help_gxde_title">بەستەر: GXDE OS</string>
+    <string name="tc4_help_gxde_desc">دابەشکراوی لینوکسی جوان، سووک، ئامادە بۆ بەکارهێنان.\nلەسەر بنەمایەکی نوێکراوە دروست کراوە، GXDE DDE 15 دەگەڕێنێتەوە بۆ ناوەڕۆکی سەرنج</string>
+
+    <string name="tc4_quick_commands_tab">فەرمانە خێراکان</string>
+    <string name="tc4_quick_options_tab">هەڵبژاردنەکان</string>
+    <string name="tc4_quick_commands_default_desc">فەرمانێک داگرە بۆ خۆکار داخڵکردن لە تێرمیناڵ.</string>
+    <string name="tc4_quick_options_default_desc">گۆڕینی هەڵبژاردنەکان، لە هەڵدانی داهاتوودا کاریگەر دەبێت.</string>
+    <string name="tc4_quick_commands_empty">هیچ فەرمانێکی خێرا نییە. زیاد بکە یان بچەسپێنە بۆ هاوردەکردن.</string>
+    <string name="tc4_quick_options_empty">هیچ هەڵبژاردنێک ڕێکخراوە نییە. زیاد بکە یان بچەسپێنە بۆ هاوردەکردن.</string>
+    <string name="tc4_quick_folder_added">بوخچە زیاد کرا</string>
+    <string name="tc4_quick_command_added">فەرمان زیاد کرا</string>
+    <string name="tc4_quick_option_added">هەڵبژاردن زیاد کرا</string>
+    <string name="tc4_quick_updated">نوێ کرایەوە</string>
+    <string name="tc4_quick_deleted">سڕایەوە</string>
+    <string name="tc4_quick_delete_title">سڕینەوەی گرێ</string>
+    <string name="tc4_quick_delete_selected">دڵنیایت لە سڕینەوەی گرێ هەڵبژێردراوەکان؟</string>
+    <string name="tc4_quick_delete_named">دڵنیایت لە سڕینەوەی ئەم گرێیانە؟\n%1$s</string>
+    <string name="tc4_quick_import_success">%1$d گرێ بە سەرکەوتوویی هاوردە کرا</string>
+    <string name="tc4_quick_import_partial">%1$d هاوردە کرا، %2$d شکستی هێنا</string>
+    <string name="tc4_quick_import_failed">هاوردەکردن شکستی هێنا: %1$s</string>
+    <string name="tc4_quick_copied">%1$d گرێ بۆ کلیپبۆرد کۆپی کرا</string>
+
+    <string name="tc4_validate_name_empty">ناو ناتوانێت بەتاڵ بێت</string>
+    <string name="tc4_validate_command_empty">فەرمان ناتوانێت بەتاڵ بێت</string>
+    <string name="tc4_validate_code_length">درێژی دەبێت ١-٣٢ پیت بێت</string>
+    <string name="tc4_validate_code_chars">تەنها پیت و ژمارە ڕێگەپێدراوە</string>
+    <string name="tc4_validate_code_reserved">ئەم ناوە لەلایەن سیستەمەوە پارێزراوە، تکایە ناوێکی تر بەکار بهێنە</string>
+    <string name="tc4_validate_clipboard_empty">کلیپبۆرد بەتاڵە</string>
+    <string name="tc4_validate_clipboard_read">ناتوانرێت ناوەڕۆکی کلیپبۆرد بخوێنرێتەوە</string>
+    <string name="tc4_validate_clipboard_content_empty">ناوەڕۆکی کلیپبۆرد بەتاڵە</string>
+    <string name="tc4_validate_yaml_not_object">شتێکی YAMLی دروست نییە</string>
+    <string name="tc4_validate_yaml_missing_type">بەشی \'type\' نییە یان type زنجیرەنییە</string>
+    <string name="tc4_validate_yaml_invalid_type">جۆری \'%1$s\' نادروستە، ڕێگەپێدراو: %2$s</string>
+    <string name="tc4_validate_yaml_format_error">هەڵەی فۆرماتی YAML: %1$s</string>
+    <string name="tc4_validate_list_unavailable">ناتوانرێت بگەیت بە لیستی ئێستا</string>
+
+    <string name="tc4_feature_mic_permission">پێویستی بە مۆڵەتی مایکرۆفۆنە</string>
+    <string name="tc4_feature_cmd_sent">فەرمان بۆ تێرمیناڵ نێردرا</string>
+    <string name="tc4_feature_link_copied">%1$s کۆپی کرا</string>
+    <string name="tc4_feature_screen_scale">پێوەری شاشە %1$sx</string>
+
+    <string name="tc4_shortcut_dialog_title">دروستکەری کورتەڕێی لانچەر</string>
+    <string name="tc4_shortcut_pin_unsupported">لانچەری ئێستا پشتگیری لە جێگیرکردنی کورتەڕێ ناکات</string>
+
+    <string name="tc4_desktop_picker_title">هەڵبژاردنی فایلی .desktop</string>
+    <string name="tc4_desktop_picker_empty">هیچ فایلێکی .desktop نەدۆزرایەوە</string>
+
+    <string name="tc4_terminal_no_session">هیچ دانیشتنێک نییە</string>
+
+    <string name="tc4_import_file_label">هاوردەکردن بۆ بوخچەی گشتی</string>
+    <string name="tc4_import_file_result">%1$d/%2$d فایل بۆ بوخچەی گشتی هاوردە کرا</string>
+
+    <string name="tc4_shortcut_container_not_found">کۆنتێنەری \"%1$s\" نەدۆزرایەوە، تکایە کورتەڕێکە دووبارە دروست بکە</string>
+    <string name="tc4_shortcut_another_running">کۆنتێنەرێکی تر لە کاردایە، فەرمان پشتگوێ خراوە</string>
+
+    <string name="tc4_permission_file_granted">مۆڵەتی بەڕێوەبردنی فایل درا</string>
+    <string name="tc4_permission_file_denied">مۆڵەتی بەڕێوەبردنی فایل ڕەتکرایەوە</string>
+
+    <string name="tc4_signal9_title">چی ڕوویدا؟</string>
+    <string name="tc4_signal9_description">تێرمیناڵ بە شێوەیەکی نائاسایی بە کۆدی هەڵەی ٩ وەستا. ئەمە بەهۆی سنووردارکردنی پرۆسەکانی ژێرەوەی Android 12+ ڕوویداوە. پێویستە بە دەستی ئەم سنوورە ناچالاک بکەیت.</string>
+    <string name="tc4_signal9_tool_hint">دەتوانیت ئەم ئامرازانە بۆ چاککردنەوە بەکار بهێنیت:</string>
+    <string name="tc4_signal9_tool_btn">ئامرازی چاککردنەوە</string>
+    <string name="tc4_signal9_tutorial_hint">ئەگەر ئامرازەکانی سەرەوە کار ناکەن، یان ئامێرەکەت HarmonyOSی نا-AOSPە، ئەم فێرکارییە بەدواوە بچۆ (پێویستی بە کۆمپیوتەر و کەیبڵی USBە):</string>
+    <string name="tc4_signal9_tutorial_btn">بەستەری فێرکاری</string>
+    <string name="tc4_signal9_dev_options_note">هەڵبژاردنەکانی پەرەپێدەر لە ڕێکخستنەکاندا چالاک بکە (بە شێوەیەکی ئاسایی About Device بدۆزەوە → ٧ جار Build Number داگرە)، پاشان \"Disable child process restrictions\" لە هەڵبژاردنەکانی پەرەپێدەردا بدۆزەوە و چالاکی بکە. هەنگاوەکان ڕەنگە بەپێی ئامێر جیاواز بن — بۆ وردەکاری لە ئینتەرنێت بگەڕێ.</string>
+
+    <string name="tc4_license_title">مۆڵەتی گشتی GNU v3.0</string>
+    <string name="tc4_license_description">Tiny Container بە GPLv3 سەرچاوە کراوەیە</string>
+
+    <string name="tc4_oss_title">کتێبخانە سەرچاوە کراوەکان</string>
+    <string name="tc4_oss_description">ئەم ئەپە کتێبخانە سەرچاوە کراوەکانی خوارەوە بەکار دەهێنێت. سوپاس بۆ ئەم پڕۆژانە کە پەرەپێدان ئاسانتر دەکەن.</string>
+
+    <string name="tc4_hint_name">ناو</string>
+    <string name="tc4_hint_description">وەسف</string>
+    <string name="tc4_hint_command">فەرمان</string>
+    <string name="tc4_hint_link">بەستەر</string>
+    <string name="tc4_hint_shortcut_name">ناوی کورتەڕێ</string>
+    <string name="tc4_hint_cache_path">ڕێڕەوی کاشی</string>
+    <string name="tc4_hint_xserver_args">پارامێتەری X Server</string>
+    <string name="tc4_hint_container_code">کۆدی کۆنتێنەر</string>
+    <string name="tc4_hint_env_vars">گۆڕاوەکانی ژینگە</string>
+    <string name="tc4_hint_path_extra">PATHی زیادە</string>
+    <string name="tc4_hint_ld_path_extra">LD_LIBRARY_PATHی زیادە</string>
+    <string name="tc4_hint_ld_preload">کتێبخانەکانی LD_PRELOAD</string>
+    <string name="tc4_hint_proot_args">پارامێتەری Proot</string>
+    <string name="tc4_hint_pre_host_cmd">فەرمانی پێش-دەستپێکردنی خانەخوێ</string>
+    <string name="tc4_hint_post_container_cmd">فەرمانی پاش-دەستپێکردنی کۆنتێنەر</string>
+    <string name="tc4_hint_post_end_host_cmd">فەرمانی پاش-دەرچوونی خانەخوێ</string>
+
+    <string name="tc4_helper_one_per_line">یەکێک بۆ هەر هێڵێک</string>
+    <string name="tc4_helper_one_path_per_line">یەک ڕێڕەو بۆ هەر هێڵێک</string>
+    <string name="tc4_helper_key_value_per_line">یەکێک بۆ هەر هێڵێک، فۆرماتی KEY=VALUE</string>
+    <string name="tc4_helper_exec_on_host">لەسەر خانەخوێی ئەندرۆید جێبەجێ دەکرێت</string>
+    <string name="tc4_helper_exec_in_container">لە ناو کۆنتێنەردا جێبەجێ دەکرێت</string>
+    <string name="tc4_helper_exec_on_host_after_exit">لەسەر خانەخوێی ئەندرۆید جێبەجێ دەکرێت، دوای دەرچوونی کۆنتێنەر</string>
+    <string name="tc4_helper_exec_in_container_note">فەرمانێک کە لە ناو کۆنتێنەردا جێبەجێ دەکرێت</string>
+    <string name="tc4_helper_code_rules">١-٣٢ پیتی ژمارەیی، نابێت لەگەڵ ناوە پارێزراوەکانی سیستەم بێت</string>
+
+    <string name="tc4_feature_label_settings">ڕێکخستنەکان</string>
+    <string name="tc4_feature_label_about">دەربارە</string>
+
+    <string name="tc4_quicks_cd_paste">لکاندن</string>
+    <string name="tc4_quicks_cd_add_folder">زیادکردنی بوخچە</string>
+    <string name="tc4_quicks_cd_add">زیادکردن</string>
+    <string name="tc4_quicks_cd_delete">سڕینەوە</string>
+    <string name="tc4_quicks_cd_copy">کۆپی</string>
+    <string name="tc4_quicks_cd_edit">دەستکاری</string>
+    <string name="tc4_quicks_cd_close">داخستن</string>
+
+    <string name="tc4_feature_label_set_avnc">ڕێکخستنەکانی AVNC</string>
+    <string name="tc4_feature_label_about_avnc">دەربارەی AVNC</string>
+    <string name="tc4_feature_label_set_x11">ڕێکخستنەکانی Termux:X11</string>
+
+    <string name="tc4_tooltip_export">هەناردەکردن</string>
+    <string name="tc4_tooltip_launch">هەڵدان</string>
+    <string name="tc4_tooltip_remove_error">لابردنی تۆماری هەڵە</string>
+
+    <string name="tc4_features_title">تایبەتمەندییەکان</string>
+    <string name="tc4_features_description">تایبەتمەندییەکانی نەرمامێری کۆنتێنەر لێرە ڕێکبخە!</string>
+    <string name="tc4_features_empty">هیچ تایبەتمەندییەک بۆ ئەم کۆنتێنەرە بەردەست نییە</string>
+
+    <string name="tc4_help_title">یارمەتی</string>
+    <string name="tc4_help_description">بینینی زانیاری پڕۆژە، وەرگرتنی یارمەتی و نوێکارییەکان</string>
+
+    <string name="tc4_container_initializing">خۆڕێکخستنی کۆنتێنەر…</string>
+    <string name="tc4_container_loading">بارکردنی لیستی کۆنتێنەر…</string>
+    <string name="tc4_container_empty_with_link">هیچ کۆنتێنەرێک دانەمەزراوە.\nکۆنتێنەرەکان لە پەڕەی فەرمی دابگرە و هاوردەیان بکە:\nhttps://www.github.com/tiny-computer/images/releases</string>
+    <string name="tc4_update_available">وەشانی نوێ %1$s بەردەستە! تکایە نوێی بکەرەوە.</string>
+
+    <string name="tc4_helper_cache_vars">یەکێک بۆ هەر هێڵێک، پشتگیری $CACHE_DIR و $CONTAINER_DIR دەکات</string>
+
+    <string name="tc4_validate_yaml_line_error">هێڵی %1$d: %2$s</string>
+    <string name="tc4_validate_yaml_child_null">گرێی ژێرەوەی %1$d بەتاڵە</string>
+    <string name="tc4_validate_yaml_child_error">گرێی ژێرەوەی %1$d: %2$s</string>
+
+    <string name="tc4_documents_root_containers">سیستەمی فایلی ڕەگی کۆنتێنەرە دامەزراوەکان</string>
+    <string name="tc4_documents_root_public">بوخچەی هاوبەش لە نێوان کۆنتێنەرەکان</string>
+    <string name="tc4_documents_error_create">ناتوانرێت فایل لەم شوێنە دروست بکرێت</string>
+    <string name="tc4_documents_error_rename_root">ناتوانرێت ناوی ئەم فایلە بگۆڕدرێت</string>
+    <string name="tc4_documents_error_target_exists">فایلی مەبەست پێشتر هەیە: %1$s</string>
+    <string name="tc4_documents_error_rename_failed">گۆڕینی ناو شکستی هێنا: %1$s</string>
+    <string name="tc4_documents_error_delete">ناتوانرێت ئەم فایلە بسڕدرێتەوە</string>
+    <string name="tc4_documents_root_containers_label">کۆنتێنەرەکان</string>
+    <string name="tc4_documents_root_public_label">گشتی</string>
+
+    <string name="tc4_menu_toggle_terminal">گۆڕینی تێرمیناڵ</string>
+    <string name="tc4_menu_enter_gui">چوونە ناو GUI</string>
+    <string name="tc4_menu_import_container">هاوردەکردنی کۆنتێنەر</string>
+    <string name="tc4_menu_file_permission">داواکردنی دەستگەیشتن بە فایل</string>
+    <string name="tc4_menu_battery_optimization">ناچالاککردنی باشترکردنی پاتری</string>
+    <string name="tc4_menu_shortcuts">کورتەڕێکان</string>
+
+
+</resources>

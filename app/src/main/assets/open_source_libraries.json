@@ -1,0 +1,205 @@
+[
+    {
+        "name": "AndroidX Core KTX",
+        "author": "Google",
+        "description": "为 Android 平台 API 提供惯用的 Kotlin 扩展",
+        "license": "Apache 2.0",
+        "url": "https://developer.android.com/kotlin/ktx"
+    },
+    {
+        "name": "AppCompat",
+        "author": "Google",
+        "description": "在旧版 Android 上提供现代 Material Design 兼容支持",
+        "license": "Apache 2.0",
+        "url": "https://developer.android.com/jetpack/androidx/releases/appcompat"
+    },
+    {
+        "name": "Material Design Components",
+        "author": "Google",
+        "description": "实现 Material Design 规范的 UI 组件库",
+        "license": "Apache 2.0",
+        "url": "https://github.com/material-components/material-components-android"
+    },
+    {
+        "name": "Fragment KTX",
+        "author": "Google",
+        "description": "Fragment 的 Kotlin 扩展，简化 Fragment 事务和生命周期管理",
+        "license": "Apache 2.0",
+        "url": "https://developer.android.com/guide/fragments"
+    },
+    {
+        "name": "Navigation Fragment KTX",
+        "author": "Google",
+        "description": "导航组件的 Kotlin 扩展",
+        "license": "Apache 2.0",
+        "url": "https://developer.android.com/guide/navigation"
+    },
+    {
+        "name": "Lifecycle",
+        "author": "Google",
+        "description": "生命周期感知组件，管理 Activity 和 Fragment 的生命周期",
+        "license": "Apache 2.0",
+        "url": "https://developer.android.com/topic/libraries/architecture/lifecycle"
+    },
+    {
+        "name": "ViewPagerIndicator",
+        "author": "zhpanvip",
+        "description": "ViewPager 页面指示器",
+        "license": "Apache 2.0",
+        "url": "https://github.com/zhpanvip/viewpagerindicator"
+    },
+    {
+        "name": "BlurView",
+        "author": "Dimezis",
+        "description": "实时模糊背景视图，用于创建毛玻璃效果",
+        "license": "Apache 2.0",
+        "url": "https://github.com/Dimezis/BlurView"
+    },
+    {
+        "name": "SnakeYAML",
+        "author": "SnakeYAML",
+        "description": "Java YAML 解析库，用于读写容器配置文件",
+        "license": "Apache 2.0",
+        "url": "https://bitbucket.org/snakeyaml/snakeyaml"
+    },
+    {
+        "name": "Coil",
+        "author": "Coil Contributors",
+        "description": "Kotlin 协程驱动的 Android 图片加载库",
+        "license": "Apache 2.0",
+        "url": "https://coil-kt.github.io/coil/"
+    },
+    {
+        "name": "AVNC",
+        "author": "Gaurav",
+        "description": "Android VNC 客户端，用于远程桌面连接",
+        "license": "GPL-3.0",
+        "url": "https://github.com/gujjwal00/avnc"
+    },
+    {
+        "name": "Termux:X11",
+        "author": "Termux",
+        "description": "Termux X11 插件，在 Android 上运行 X11 应用",
+        "license": "GPL-3.0",
+        "url": "https://github.com/termux/termux-x11"
+    },
+    {
+        "name": "AndroidX ConstraintLayout",
+        "author": "Google",
+        "description": "灵活的布局管理器，使用约束关系定义视图位置",
+        "license": "Apache 2.0",
+        "url": "https://developer.android.com/reference/androidx/constraintlayout/widget/ConstraintLayout"
+    },
+    {
+        "name": "Kotlin Coroutines",
+        "author": "JetBrains",
+        "description": "Kotlin 协程库，用于异步编程和并发",
+        "license": "Apache 2.0",
+        "url": "https://github.com/Kotlin/kotlinx.coroutines"
+    },
+    {
+        "name": "neoterm (terminal-lib)",
+        "author": "Offensive Security",
+        "description": "终端 PTY 后端 JNI 库，管理 shell 会话的伪终端子进程",
+        "license": "GPL-3.0",
+        "url": "https://gitlab.com/kalilinux/nethunter/apps/kali-nethunter-term"
+    },
+    {
+        "name": "BusyBox",
+        "author": "BusyBox Contributors",
+        "description": "Unix 工具箱，提供 sh/cat/gzip/sed 等基础命令",
+        "license": "GPL-2.0",
+        "url": "https://busybox.net"
+    },
+    {
+        "name": "PRoot",
+        "author": "PRoot Contributors",
+        "description": "用户态 chroot 实现，容器核心，无需 root 权限运行 Linux 发行版",
+        "license": "GPL-2.0",
+        "url": "https://proot-me.github.io"
+    },
+    {
+        "name": "talloc",
+        "author": "Samba Team",
+        "description": "分层内存分配器，PRoot 的运行时依赖",
+        "license": "LGPL-3.0",
+        "url": "https://talloc.samba.org"
+    },
+    {
+        "name": "GNU tar",
+        "author": "GNU Project",
+        "description": "归档和解压工具，用于容器 rootfs 的解包",
+        "license": "GPL-3.0",
+        "url": "https://www.gnu.org/software/tar/"
+    },
+    {
+        "name": "Zstandard (zstd)",
+        "author": "Meta",
+        "description": "高性能压缩算法及命令行工具",
+        "license": "BSD-3",
+        "url": "https://github.com/facebook/zstd"
+    },
+    {
+        "name": "XZ Utils / liblzma",
+        "author": "Tukaani Project",
+        "description": "LZMA 压缩库，支持 .xz 格式的解压",
+        "license": "Public Domain",
+        "url": "https://tukaani.org/xz/"
+    },
+    {
+        "name": "zlib",
+        "author": "Jean-loup Gailly and Mark Adler",
+        "description": "通用无损压缩库",
+        "license": "Zlib",
+        "url": "https://zlib.net"
+    },
+    {
+        "name": "libiconv",
+        "author": "GNU Project",
+        "description": "字符编码转换库，支持多种编码之间的互转",
+        "license": "LGPL-2.1",
+        "url": "https://www.gnu.org/software/libiconv/"
+    },
+    {
+        "name": "PCRE2",
+        "author": "Philip Hazel",
+        "description": "Perl 兼容正则表达式库",
+        "license": "BSD-3",
+        "url": "https://github.com/PCRE2Project/pcre2"
+    },
+    {
+        "name": "ACL",
+        "author": "Linux ACL Contributors",
+        "description": "POSIX 访问控制列表库，管理文件的细粒度权限",
+        "license": "LGPL-2.1",
+        "url": "https://savannah.nongnu.org/projects/acl"
+    },
+    {
+        "name": "attr",
+        "author": "Linux attr Contributors",
+        "description": "扩展文件属性库，支持文件的附加元数据",
+        "license": "LGPL-2.1",
+        "url": "https://savannah.nongnu.org/projects/attr"
+    },
+    {
+        "name": "libepoxy",
+        "author": "Intel / GNOME",
+        "description": "OpenGL 函数指针管理库，运行时解析 OpenGL 扩展",
+        "license": "MIT",
+        "url": "https://github.com/anholt/libepoxy"
+    },
+    {
+        "name": "Virglrenderer",
+        "author": "Virgil 3D Contributors",
+        "description": "虚拟 3D GPU 渲染库，为容器内 Linux 提供图形硬件加速",
+        "license": "MIT",
+        "url": "https://gitlab.freedesktop.org/virgl/virglrenderer"
+    },
+    {
+        "name": "android-selinux",
+        "author": "AOSP",
+        "description": "Android SELinux 兼容库，为容器提供必要的 SELinux 接口",
+        "license": "BSD-3",
+        "url": "https://android.googlesource.com/platform/external/libselinux"
+    }
+]

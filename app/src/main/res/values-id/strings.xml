@@ -1,0 +1,264 @@
+<resources>
+    <string name="tc4_app_name">Kontainer Kecil</string>
+
+    <string name="tc4_btn_ok">OK</string>
+    <string name="tc4_btn_cancel">Batal</string>
+    <string name="tc4_btn_delete">Hapus</string>
+    <string name="tc4_btn_continue">Lanjutkan</string>
+    <string name="tc4_btn_save_exit">Simpan &amp; Keluar</string>
+    <string name="tc4_btn_save_send">Simpan &amp; Kirim Perintah</string>
+    <string name="tc4_btn_back">Kembali</string>
+    <string name="tc4_btn_generate">Buat</string>
+    <string name="tc4_btn_quick_fill">Isi Cepat</string>
+    <string name="tc4_btn_confirm_install">Konfirmasi Instal</string>
+    <string name="tc4_btn_details">Detail</string>
+    <string name="tc4_btn_edit">Edit</string>
+    <string name="tc4_btn_share">Bagikan</string>
+    <string name="tc4_btn_update">Perbarui</string>
+
+    <string name="tc4_label_enable">Aktifkan</string>
+    <string name="tc4_label_default_gui">Atur sebagai GUI Default</string>
+    <string name="tc4_label_adapt_screen">Sesuaikan dengan Ukuran Layar</string>
+    <string name="tc4_label_effective_next_launch">Berlaku pada peluncuran kontainer berikutnya</string>
+    <string name="tc4_label_effective_this_session">Hanya berlaku sesi ini. Harus dinonaktifkan sebelum keluar.</string>
+    <string name="tc4_label_version">Versi %1$s</string>
+
+    <string name="tc4_container_title">Manajemen Kontainer</string>
+    <string name="tc4_container_empty_hint">Tidak ada kontainer, ketuk kanan atas untuk impor</string>
+    <string name="tc4_container_calculating_space">Menghitung penggunaan…</string>
+    <string name="tc4_container_delete_success">Berhasil dihapus</string>
+    <string name="tc4_container_delete_failed">Gagal menghapus: %1$s</string>
+    <string name="tc4_container_loading_failed">\"%1$s\" gagal dimuat</string>
+    <string name="tc4_container_list_load_failed">Gagal memuat daftar kontainer: %1$s</string>
+    <string name="tc4_container_config_missing">Konfigurasi kontainer tidak ditemukan</string>
+    <string name="tc4_container_missing_boot_cmd">Kontainer \"%1$s\" tidak memiliki konfigurasi boot_command</string>
+    <string name="tc4_container_config_lost">Konfigurasi kontainer \"%1$s\" hilang, silakan instal ulang</string>
+
+    <string name="tc4_dialog_delete_title">Konfirmasi Hapus</string>
+    <string name="tc4_dialog_delete_message">Apakah Anda yakin ingin menghapus permanen \"%1$s\"?\nTindakan ini tidak dapat dibatalkan.</string>
+    <string name="tc4_dialog_deleting_title">Menghapus file kontainer, harap tunggu…</string>
+
+    <string name="tc4_dialog_edit_container_title">Edit Informasi Kontainer</string>
+
+    <string name="tc4_dialog_exit_title">Keluar Kontainer</string>
+    <string name="tc4_dialog_exit_message">Apakah Anda ingin menghentikan kontainer dan kembali ke halaman manajemen?</string>
+
+    <string name="tc4_import_title">Impor Kontainer</string>
+    <string name="tc4_import_warning">1. Hanya impor kontainer dari sumber tepercaya.\nKontainer berbahaya dapat menghancurkan kontainer lain dan bahkan aplikasi itu sendiri.\nJika Anda memberikan izin penyimpanan, ia juga dapat mengubah, mengirim, atau menghapus data penting di perangkat Anda (misalnya foto).\n\n2. Penyangkalan: Perangkat lunak ini bersifat open source di bawah GPL, disediakan TANPA GARANSI APA PUN.\nPenulis tidak bertanggung jawab dalam keadaan apa pun.\nPengguna harus meninjau kode sumber dan menanggung semua risiko.</string>
+    <string name="tc4_import_builtin_btn">Instal Kontainer Bawaan</string>
+    <string name="tc4_import_copying_title">Menyalin file kontainer ke cache…</string>
+    <string name="tc4_import_extracting_title">Mengekstrak konfigurasi…</string>
+    <string name="tc4_import_installing_title">Menginstal kontainer…</string>
+    <string name="tc4_import_deleting_old_title">Menghapus file kontainer lama…</string>
+    <string name="tc4_import_cleaning_title">Membersihkan file sementara…</string>
+    <string name="tc4_import_completed">\"%1$s\" berhasil diinstal</string>
+    <string name="tc4_import_failed">Instalasi gagal: %1$s</string>
+    <string name="tc4_import_builtin_failed">Gagal menginstal kontainer bawaan: %1$s</string>
+    <string name="tc4_import_auto_failed">Instalasi otomatis kontainer bawaan gagal: %1$s</string>
+    <string name="tc4_install_state_error">Kesalahan status instalasi, silakan coba lagi</string>
+    <string name="tc4_import_missing_code">Kolom \'code\' tidak ada dalam konfigurasi</string>
+    <string name="tc4_import_missing_code_builtin">Kolom \'code\' tidak ada dalam konfigurasi kontainer bawaan</string>
+    <string name="tc4_import_no_config">Konfigurasi .tiny.yaml tidak ditemukan dalam file kontainer</string>
+    <string name="tc4_import_config_parse_failed">Gagal mengurai konfigurasi: %1$s</string>
+    <string name="tc4_import_completed_title">Instalasi Selesai</string>
+    <string name="tc4_import_failed_title">Instalasi Gagal</string>
+
+    <string name="tc4_install_launch_after">Luncurkan setelah instal</string>
+    <string name="tc4_install_warning_data">Isi %1$s akan dihapus, tindakan ini tidak dapat dibatalkan</string>
+    <string name="tc4_install_warning_overwrite">\"%1$s\" sudah terinstal, akan ditimpa dan tidak dapat dipulihkan</string>
+
+    <string name="tc4_export_title">Ekspor Kontainer</string>
+    <string name="tc4_export_warning">1. Perintah \"ekspor\" disediakan oleh pembuat kontainer.\nBiasanya ekspor bukanlah cadangan — ini menghasilkan kontainer yang dapat dibagikan dan mungkin menyertakan perintah untuk membersihkan data pribadi.\nLinux fleksibel dan hasil ekspor mungkin berbeda dari harapan.\nSilakan tinjau export_command di /.tiny.yaml terlebih dahulu.\n\n2. Penyangkalan: Perangkat lunak ini bersifat open source di bawah GPL, disediakan TANPA GARANSI APA PUN.\nPenulis tidak bertanggung jawab dalam keadaan apa pun.\nPengguna harus meninjau kode sumber dan menanggung semua risiko.</string>
+    <string name="tc4_export_success">Ekspor berhasil</string>
+    <string name="tc4_export_failed">Ekspor gagal: %1$s</string>
+    <string name="tc4_export_missing_cmd">export_command tidak ada dalam konfigurasi</string>
+    <string name="tc4_export_no_output">Ekspor tidak menghasilkan file</string>
+    <string name="tc4_export_cannot_write">Tidak dapat menulis ke jalur yang dipilih</string>
+    <string name="tc4_export_progress_title">Mengekspor file kontainer…</string>
+
+    <string name="tc4_settings_title">Pengaturan</string>
+    <string name="tc4_settings_description">Konfigurasikan pengaturan aplikasi di sini!\nUntuk pengaturan khusus kontainer, lihat \"Fitur\" atau \"Pintasan - Opsi\".</string>
+    <string name="tc4_settings_shortcut_title">Pembangkit Pintasan Peluncur</string>
+    <string name="tc4_settings_shortcut_desc">Buat pintasan desktop untuk kontainer saat ini untuk menjalankan perintah langsung</string>
+    <string name="tc4_settings_auto_launch_title">Luncurkan Kontainer Otomatis</string>
+    <string name="tc4_settings_auto_launch_desc">Berlaku pada peluncuran kontainer berikutnya</string>
+    <string name="tc4_settings_auto_launch_gui_title">Luncurkan GUI Otomatis</string>
+    <string name="tc4_settings_legacy_proot_title">Gunakan Proot Lama</string>
+    <string name="tc4_settings_legacy_proot_desc">Proot terbaru membawa emulasi bwrap dan netlink yang menarik.\nIni meningkatkan kompatibilitas, tetapi juga memperlambat pemuatan dalam beberapa skenario (misalnya pemutaran video jaringan menjadi lambat).\n*Pengaturan ini bersifat global. Untuk pengaturan per kontainer, ubah biner proot di perintah boot /.tiny.yaml menjadi proot-classic atau proot-latest.\nBerlaku pada peluncuran kontainer berikutnya</string>
+    <string name="tc4_settings_reset_bootstrap_title">Instal Ulang Bootstrap</string>
+    <string name="tc4_settings_reset_bootstrap_desc">Berlaku pada peluncuran kontainer berikutnya</string>
+    <string name="tc4_settings_auto_check_update_title">Periksa Pembaruan Otomatis</string>
+    <string name="tc4_settings_auto_check_update_desc">Periksa versi baru saat meluncurkan kontainer</string>
+    <string name="tc4_settings_manage_files_title">Akses Semua File</string>
+    <string name="tc4_settings_manage_files_desc">Izinkan kontainer mengakses file Android\nSaat menggunakan kontainer resmi, penyimpanan Android biasanya di /mnt/sdcard</string>
+    <string name="tc4_settings_battery_title">Baterai Tanpa Batasan</string>
+    <string name="tc4_settings_battery_desc">Nonaktifkan optimasi baterai untuk mencegah aplikasi dimatikan oleh sistem</string>
+
+    <string name="tc4_help_source_code_title">Repositori Kode Sumber</string>
+    <string name="tc4_help_source_code_desc">Lihat setiap baris kode. Dapatkan dokumen, berikan umpan balik, dan lainnya.</string>
+    <string name="tc4_help_releases_title">Halaman Rilis</string>
+    <string name="tc4_help_releases_desc">Dapatkan versi terbaru Tiny Container</string>
+    <string name="tc4_help_oss_title">Pustaka Sumber Terbuka</string>
+    <string name="tc4_help_oss_desc">Terima kasih kepada pustaka ini karena membuat pengembangan lebih sederhana.</string>
+    <string name="tc4_help_license_title">Lisensi</string>
+    <string name="tc4_help_license_desc">PRoot — komponen penting untuk menjalankan Linux — dilisensikan di bawah GPL, jadi saya juga harus membuka kode sumber saya :D</string>
+    <string name="tc4_help_wechat_title">Akun Resmi WeChat: 装机宝典</string>
+    <string name="tc4_help_wechat_desc">Saya mungkin akan memposting beberapa tutorial Tiny Container di sini. Jika Anda tidak dapat mengakses GitHub, ini mungkin membantu.</string>
+    <string name="tc4_help_bilibili_title">Bilibili Caten</string>
+    <string name="tc4_help_bilibili_desc">Saya mungkin akan memposting video tentang Tiny Container, dan juga hal lainnya, seperti Plants vs. Zombies :P</string>
+    <string name="tc4_help_spark_store_title">Tautan: Spark App Store</string>
+    <string name="tc4_help_spark_store_desc">Satu percikan dapat memulai api di padang rumput</string>
+    <string name="tc4_help_gxde_title">Tautan: GXDE OS</string>
+    <string name="tc4_help_gxde_desc">Distribusi Linux yang indah, ringan, siap pakai.\nDibangun di atas basis yang diperbarui, GXDE membawa DDE 15 kembali menjadi sorotan</string>
+
+    <string name="tc4_quick_commands_tab">Perintah Cepat</string>
+    <string name="tc4_quick_options_tab">Opsi</string>
+    <string name="tc4_quick_commands_default_desc">Ketuk perintah untuk memasukkan otomatis ke terminal.</string>
+    <string name="tc4_quick_options_default_desc">Alihkan opsi, berlaku pada peluncuran berikutnya.</string>
+    <string name="tc4_quick_commands_empty">Tidak ada perintah cepat. Tambahkan atau tempel untuk impor.</string>
+    <string name="tc4_quick_options_empty">Tidak ada opsi yang dikonfigurasi. Tambahkan atau tempel untuk impor.</string>
+    <string name="tc4_quick_folder_added">Folder ditambahkan</string>
+    <string name="tc4_quick_command_added">Perintah ditambahkan</string>
+    <string name="tc4_quick_option_added">Opsi ditambahkan</string>
+    <string name="tc4_quick_updated">Diperbarui</string>
+    <string name="tc4_quick_deleted">Dihapus</string>
+    <string name="tc4_quick_delete_title">Hapus Node</string>
+    <string name="tc4_quick_delete_selected">Konfirmasi hapus node yang dipilih?</string>
+    <string name="tc4_quick_delete_named">Konfirmasi hapus node berikut?\n%1$s</string>
+    <string name="tc4_quick_import_success">Berhasil mengimpor %1$d node</string>
+    <string name="tc4_quick_import_partial">Berhasil %1$d, gagal %2$d</string>
+    <string name="tc4_quick_import_failed">Impor gagal: %1$s</string>
+    <string name="tc4_quick_copied">%1$d node disalin ke papan klip</string>
+
+    <string name="tc4_validate_name_empty">Nama tidak boleh kosong</string>
+    <string name="tc4_validate_command_empty">Perintah tidak boleh kosong</string>
+    <string name="tc4_validate_code_length">Panjang harus 1-32 karakter</string>
+    <string name="tc4_validate_code_chars">Hanya huruf dan angka yang diizinkan</string>
+    <string name="tc4_validate_code_reserved">Nama ini dicadangkan oleh sistem, gunakan yang lain</string>
+    <string name="tc4_validate_clipboard_empty">Papan klip kosong</string>
+    <string name="tc4_validate_clipboard_read">Tidak dapat membaca isi papan klip</string>
+    <string name="tc4_validate_clipboard_content_empty">Isi papan klip kosong</string>
+    <string name="tc4_validate_yaml_not_object">Bukan objek YAML yang valid</string>
+    <string name="tc4_validate_yaml_missing_type">Kolom \'type\' tidak ada atau type bukan string</string>
+    <string name="tc4_validate_yaml_invalid_type">Tipe \'%1$s\' tidak valid, diizinkan: %2$s</string>
+    <string name="tc4_validate_yaml_format_error">Kesalahan format YAML: %1$s</string>
+    <string name="tc4_validate_list_unavailable">Tidak dapat mengakses daftar saat ini</string>
+
+    <string name="tc4_feature_mic_permission">Izin mikrofon diperlukan</string>
+    <string name="tc4_feature_cmd_sent">Perintah dikirim ke terminal</string>
+    <string name="tc4_feature_link_copied">%1$s disalin</string>
+    <string name="tc4_feature_screen_scale">Skala Layar %1$sx</string>
+
+    <string name="tc4_shortcut_dialog_title">Pembangkit Pintasan Peluncur</string>
+    <string name="tc4_shortcut_pin_unsupported">Peluncur saat ini tidak mendukung penyematan pintasan</string>
+
+    <string name="tc4_desktop_picker_title">Pilih File .desktop</string>
+    <string name="tc4_desktop_picker_empty">Tidak ada file .desktop ditemukan</string>
+
+    <string name="tc4_terminal_no_session">Tidak Ada Sesi</string>
+
+    <string name="tc4_import_file_label">Impor ke Folder Publik</string>
+    <string name="tc4_import_file_result">%1$d/%2$d file diimpor ke folder publik</string>
+
+    <string name="tc4_shortcut_container_not_found">Kontainer \"%1$s\" tidak ditemukan, silakan buat ulang pintasan</string>
+    <string name="tc4_shortcut_another_running">Kontainer lain sedang berjalan, perintah diabaikan</string>
+
+    <string name="tc4_permission_file_granted">Izin manajemen file diberikan</string>
+    <string name="tc4_permission_file_denied">Izin manajemen file ditolak</string>
+
+    <string name="tc4_signal9_title">Apa yang terjadi?</string>
+    <string name="tc4_signal9_description">Terminal berakhir tidak normal dengan kode kesalahan 9. Ini disebabkan oleh Android 12+ yang membatasi proses anak. Anda perlu menonaktifkan batasan ini secara manual.</string>
+    <string name="tc4_signal9_tool_hint">Anda dapat menggunakan alat ini untuk memperbaiki:</string>
+    <string name="tc4_signal9_tool_btn">Alat Perbaikan</string>
+    <string name="tc4_signal9_tutorial_hint">Jika alat di atas tidak berfungsi, atau perangkat Anda adalah HarmonyOS non-AOSP, ikuti tutorial ini (memerlukan PC dan kabel USB):</string>
+    <string name="tc4_signal9_tutorial_btn">Tautan Tutorial</string>
+    <string name="tc4_signal9_dev_options_note">Aktifkan Opsi Pengembang di Pengaturan (biasanya cari Tentang Perangkat → ketuk Nomor Build 7 kali), lalu cari \"Nonaktifkan pembatasan proses anak\" di Opsi Pengembang dan nyalakan. Langkah mungkin berbeda tergantung perangkat — cari online untuk detailnya.</string>
+
+    <string name="tc4_license_title">Lisensi Publik Umum GNU v3.0</string>
+    <string name="tc4_license_description">Tiny Container bersifat open source di bawah lisensi GPLv3</string>
+
+    <string name="tc4_oss_title">Pustaka Sumber Terbuka</string>
+    <string name="tc4_oss_description">Aplikasi ini menggunakan pustaka sumber terbuka berikut. Terima kasih kepada proyek-proyek ini karena membuat pengembangan lebih sederhana.</string>
+
+    <string name="tc4_hint_name">Nama</string>
+    <string name="tc4_hint_description">Deskripsi</string>
+    <string name="tc4_hint_command">Perintah</string>
+    <string name="tc4_hint_link">Tautan</string>
+    <string name="tc4_hint_shortcut_name">Nama Pintasan</string>
+    <string name="tc4_hint_cache_path">Jalur Cache</string>
+    <string name="tc4_hint_xserver_args">Argumen X Server</string>
+    <string name="tc4_hint_container_code">Kode Kontainer</string>
+    <string name="tc4_hint_env_vars">Variabel Lingkungan</string>
+    <string name="tc4_hint_path_extra">PATH Tambahan</string>
+    <string name="tc4_hint_ld_path_extra">LD_LIBRARY_PATH Tambahan</string>
+    <string name="tc4_hint_ld_preload">Pustaka LD_PRELOAD</string>
+    <string name="tc4_hint_proot_args">Argumen Proot</string>
+    <string name="tc4_hint_pre_host_cmd">Perintah Host Pra-Mulai</string>
+    <string name="tc4_hint_post_container_cmd">Perintah Kontainer Pasca-Mulai</string>
+    <string name="tc4_hint_post_end_host_cmd">Perintah Host Pasca-Keluar</string>
+
+    <string name="tc4_helper_one_per_line">Satu per baris</string>
+    <string name="tc4_helper_one_path_per_line">Satu jalur per baris</string>
+    <string name="tc4_helper_key_value_per_line">Satu per baris, format KEY=VALUE</string>
+    <string name="tc4_helper_exec_on_host">Dijalankan di host Android</string>
+    <string name="tc4_helper_exec_in_container">Dijalankan di dalam kontainer</string>
+    <string name="tc4_helper_exec_on_host_after_exit">Dijalankan di host Android, setelah kontainer keluar</string>
+    <string name="tc4_helper_exec_in_container_note">Perintah yang dijalankan di dalam kontainer</string>
+    <string name="tc4_helper_code_rules">1-32 karakter alfanumerik, tidak boleh bentrok dengan nama sistem yang dicadangkan</string>
+
+    <string name="tc4_feature_label_settings">Pengaturan</string>
+    <string name="tc4_feature_label_about">Tentang</string>
+
+    <string name="tc4_quicks_cd_paste">Tempel</string>
+    <string name="tc4_quicks_cd_add_folder">Tambah Folder</string>
+    <string name="tc4_quicks_cd_add">Tambah</string>
+    <string name="tc4_quicks_cd_delete">Hapus</string>
+    <string name="tc4_quicks_cd_copy">Salin</string>
+    <string name="tc4_quicks_cd_edit">Edit</string>
+    <string name="tc4_quicks_cd_close">Tutup</string>
+
+    <string name="tc4_feature_label_set_avnc">Pengaturan AVNC</string>
+    <string name="tc4_feature_label_about_avnc">Tentang AVNC</string>
+    <string name="tc4_feature_label_set_x11">Pengaturan Termux:X11</string>
+
+    <string name="tc4_tooltip_export">Ekspor</string>
+    <string name="tc4_tooltip_launch">Luncurkan</string>
+    <string name="tc4_tooltip_remove_error">Hapus entri kesalahan</string>
+
+    <string name="tc4_features_title">Fitur</string>
+    <string name="tc4_features_description">Konfigurasikan fitur perangkat lunak kontainer di sini!</string>
+    <string name="tc4_features_empty">Tidak ada fitur yang tersedia untuk kontainer ini</string>
+
+    <string name="tc4_help_title">Bantuan</string>
+    <string name="tc4_help_description">Lihat info proyek, dapatkan bantuan dan pembaruan</string>
+
+    <string name="tc4_container_initializing">Menginisialisasi kontainer…</string>
+    <string name="tc4_container_loading">Memuat daftar kontainer…</string>
+    <string name="tc4_container_empty_with_link">Tidak ada kontainer terinstal.\nUnduh kontainer dari halaman resmi dan impor:\nhttps://www.github.com/tiny-computer/images/releases</string>
+    <string name="tc4_update_available">Versi baru %1$s tersedia! Silakan perbarui.</string>
+
+    <string name="tc4_helper_cache_vars">Satu per baris, mendukung $CACHE_DIR dan $CONTAINER_DIR</string>
+
+    <string name="tc4_validate_yaml_line_error">Baris %1$d: %2$s</string>
+    <string name="tc4_validate_yaml_child_null">Node anak %1$d kosong</string>
+    <string name="tc4_validate_yaml_child_error">Node anak %1$d: %2$s</string>
+
+    <string name="tc4_documents_root_containers">Sistem file root kontainer terinstal</string>
+    <string name="tc4_documents_root_public">Folder bersama antar kontainer</string>
+    <string name="tc4_documents_error_create">Tidak dapat membuat file di lokasi ini</string>
+    <string name="tc4_documents_error_rename_root">Tidak dapat mengganti nama file ini</string>
+    <string name="tc4_documents_error_target_exists">File target sudah ada: %1$s</string>
+    <string name="tc4_documents_error_rename_failed">Gagal mengganti nama: %1$s</string>
+    <string name="tc4_documents_error_delete">Tidak dapat menghapus file ini</string>
+    <string name="tc4_documents_root_containers_label">Kontainer</string>
+    <string name="tc4_documents_root_public_label">Publik</string>
+
+    <string name="tc4_menu_toggle_terminal">Alihkan Terminal</string>
+    <string name="tc4_menu_enter_gui">Masuk GUI</string>
+    <string name="tc4_menu_import_container">Impor Kontainer</string>
+    <string name="tc4_menu_file_permission">Minta Akses File</string>
+    <string name="tc4_menu_battery_optimization">Nonaktifkan Optimasi Baterai</string>
+    <string name="tc4_menu_shortcuts">Pintasan</string>
+
+
+</resources>

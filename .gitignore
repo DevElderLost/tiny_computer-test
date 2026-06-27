@@ -1,0 +1,32 @@
+*.iml
+.gradle
+/local.properties
+.idea
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+app/src/main/jniLibs
+app/src/main/assets/rootfs.tar.zst
+
+# Built application files
+*.apk
+*.aab
+*.ap_
+*.aar
+
+# Release outputs
+app/release/
+
+# Kotlin
+.kotlin/
+
+# Signing keys
+*.jks
+*.keystore
+
+# Logs
+*.log
+*.hprof

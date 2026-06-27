@@ -1,0 +1,310 @@
+<resources>
+    <string name="tc4_app_name">Tiny Container</string>
+
+    <!-- ==================== Common Buttons ==================== -->
+    <string name="tc4_btn_ok">OK</string>
+    <string name="tc4_btn_cancel">Cancel</string>
+    <string name="tc4_btn_delete">Delete</string>
+    <string name="tc4_btn_continue">Continue</string>
+    <string name="tc4_btn_save_exit">Save &amp; Exit</string>
+    <string name="tc4_btn_save_send">Save &amp; Send Command</string>
+    <string name="tc4_btn_back">Back</string>
+    <string name="tc4_btn_generate">Generate</string>
+    <string name="tc4_btn_quick_fill">Quick Fill</string>
+    <string name="tc4_btn_confirm_install">Confirm Install</string>
+    <string name="tc4_btn_details">Details</string>
+    <string name="tc4_btn_edit">Edit</string>
+    <string name="tc4_btn_share">Share</string>
+    <string name="tc4_btn_update">Update</string>
+
+    <!-- ==================== Common Labels ==================== -->
+    <string name="tc4_label_enable">Enable</string>
+    <string name="tc4_label_default_gui">Set as Default GUI</string>
+    <string name="tc4_label_adapt_screen">Adapt to Screen Size</string>
+    <string name="tc4_label_effective_next_launch">Takes effect on next container launch</string>
+    <string name="tc4_label_effective_this_session">Takes effect this session only. Must disable before exiting.</string>
+    <string name="tc4_label_version">Version %1$s</string>
+
+    <!-- ==================== Container Management ==================== -->
+    <string name="tc4_container_title">Container Management</string>
+    <string name="tc4_container_empty_hint">No containers, tap top-right to import</string>
+    <string name="tc4_container_calculating_space">Calculating usage…</string>
+    <string name="tc4_container_delete_success">Deleted successfully</string>
+    <string name="tc4_container_delete_failed">Delete failed: %1$s</string>
+    <string name="tc4_container_loading_failed">"%1$s" failed to load</string>
+    <string name="tc4_container_list_load_failed">Failed to load container list: %1$s</string>
+    <string name="tc4_container_config_missing">Container config not found</string>
+    <string name="tc4_container_missing_boot_cmd">Container "%1$s" missing boot_command config</string>
+    <string name="tc4_container_config_lost">Container "%1$s" config lost, please reinstall</string>
+
+    <!-- Delete dialog -->
+    <string name="tc4_dialog_delete_title">Confirm Delete</string>
+    <string name="tc4_dialog_delete_message">Are you sure you want to permanently delete "%1$s"?\nThis action cannot be undone.</string>
+    <string name="tc4_dialog_deleting_title">Deleting container files, please wait…</string>
+
+    <!-- Edit dialog -->
+    <string name="tc4_dialog_edit_container_title">Edit Container Info</string>
+
+    <!-- Exit dialog -->
+    <string name="tc4_dialog_exit_title">Exit Container</string>
+    <string name="tc4_dialog_exit_message">Do you want to stop the container and return to the management page?</string>
+
+    <!-- ==================== Import Flow ==================== -->
+    <string name="tc4_import_title">Import Container</string>
+    <string name="tc4_import_warning">1. Only import containers from trusted sources.\nA malicious container can destroy other containers and even the app itself.\nIf you grant storage permission, it can also modify, send, or delete important data on your device (e.g. photos).\n\n2. Disclaimer: This software is open source under GPL, provided WITHOUT ANY WARRANTY.\nThe author assumes no liability under any circumstances.\nUsers must review the source code and assume all risks.</string>
+    <string name="tc4_import_builtin_btn">Install Built-in Container</string>
+    <string name="tc4_import_copying_title">Copying container files to cache…</string>
+    <string name="tc4_import_extracting_title">Extracting configuration…</string>
+    <string name="tc4_import_installing_title">Installing container…</string>
+    <string name="tc4_import_deleting_old_title">Deleting old container files…</string>
+    <string name="tc4_import_cleaning_title">Cleaning temporary files…</string>
+    <string name="tc4_import_completed">"%1$s" installed successfully</string>
+    <string name="tc4_import_failed">Installation failed: %1$s</string>
+    <string name="tc4_import_builtin_failed">Failed to install built-in container: %1$s</string>
+    <string name="tc4_import_auto_failed">Auto-install built-in container failed: %1$s</string>
+    <string name="tc4_install_state_error">Installation state error, please retry</string>
+    <string name="tc4_import_missing_code">Missing \'code\' field in config</string>
+    <string name="tc4_import_missing_code_builtin">Missing \'code\' field in built-in container config</string>
+    <string name="tc4_import_no_config">.tiny.yaml config not found in container file</string>
+    <string name="tc4_import_config_parse_failed">Config parsing failed: %1$s</string>
+    <string name="tc4_import_completed_title">Installation Complete</string>
+    <string name="tc4_import_failed_title">Installation Failed</string>
+
+    <!-- Install confirm dialog -->
+    <string name="tc4_install_launch_after">Launch after install</string>
+    <string name="tc4_install_warning_data">Contents of %1$s will be wiped, this action cannot be undone</string>
+    <string name="tc4_install_warning_overwrite">"%1$s" is already installed, will be overwritten and cannot be recovered</string>
+
+    <!-- ==================== Export Flow ==================== -->
+    <string name="tc4_export_title">Export Container</string>
+    <string name="tc4_export_warning">1. The "export" command is provided by the container creator.\nUsually export is not a backup — it generates a shareable container and may include commands to clean private data.\nLinux is flexible and the export result may differ from expectations.\nPlease review export_command in /.tiny.yaml first.\n\n2. Disclaimer: This software is open source under GPL, provided WITHOUT ANY WARRANTY.\nThe author assumes no liability under any circumstances.\nUsers must review the source code and assume all risks.</string>
+    <string name="tc4_export_success">Export successful</string>
+    <string name="tc4_export_failed">Export failed: %1$s</string>
+    <string name="tc4_export_missing_cmd">Missing export_command in config</string>
+    <string name="tc4_export_no_output">Export did not produce a file</string>
+    <string name="tc4_export_cannot_write">Cannot write to selected path</string>
+    <string name="tc4_export_progress_title">Exporting container files…</string>
+
+    <!-- ==================== Settings Page ==================== -->
+    <string name="tc4_settings_title">Settings</string>
+    <string name="tc4_settings_description">Configure app settings here!\nFor container-specific settings, see "Features" or "Shortcuts - Options".</string>
+    <string name="tc4_settings_shortcut_title">Launcher Shortcut Generator</string>
+    <string name="tc4_settings_shortcut_desc">Create a desktop shortcut for the current container to run commands directly</string>
+    <string name="tc4_settings_auto_launch_title">Auto-launch Container</string>
+    <string name="tc4_settings_auto_launch_desc">Takes effect on next container launch</string>
+    <string name="tc4_settings_auto_launch_gui_title">Auto-launch GUI</string>
+    <string name="tc4_settings_legacy_proot_title">Use Legacy Proot</string>
+    <string name="tc4_settings_legacy_proot_desc">The latest proot brings exciting bwrap and netlink emulation.\nIt improves compatibility, but also slows down loading in some scenarios (e.g. network video playback becomes laggy).\n*This setting is global. For per-container settings, change the proot binary in /.tiny.yaml\'s boot command to proot-classic or proot-latest.\nTakes effect on next container launch</string>
+    <string name="tc4_settings_reset_bootstrap_title">Reinstall Bootstrap</string>
+    <string name="tc4_settings_reset_bootstrap_desc">Takes effect on next container launch</string>
+    <string name="tc4_settings_auto_check_update_title">Auto Check for Updates</string>
+    <string name="tc4_settings_auto_check_update_desc">Check for new versions when launching a container</string>
+    <string name="tc4_settings_manage_files_title">All Files Access</string>
+    <string name="tc4_settings_manage_files_desc">Allow the container to access Android files\nWhen using official containers, Android storage is usually at /mnt/sdcard</string>
+    <string name="tc4_settings_battery_title">Battery Unrestricted</string>
+    <string name="tc4_settings_battery_desc">Disable battery optimization to prevent the app from being killed by the system</string>
+
+    <!-- ==================== Help Page ==================== -->
+    <string name="tc4_help_source_code_title">Source Code Repository</string>
+    <string name="tc4_help_source_code_desc">See every line of code. Get docs, give feedback and more.</string>
+    <string name="tc4_help_releases_title">Release Page</string>
+    <string name="tc4_help_releases_desc">Get the latest version of Tiny Container</string>
+    <string name="tc4_help_oss_title">Open Source Libraries</string>
+    <string name="tc4_help_oss_desc">Thanks to these libraries for making development simpler.</string>
+    <string name="tc4_help_license_title">License</string>
+    <string name="tc4_help_license_desc">PRoot — an essential component for running Linux — is licensed under GPL, so I have to open source my code too :D</string>
+    <string name="tc4_help_wechat_title">WeChat Official Account: 装机宝典</string>
+    <string name="tc4_help_wechat_desc">I may post some Tiny Container tutorials here. If you cannot access GitHub, this might help.</string>
+    <string name="tc4_help_bilibili_title">Caten\'s Bilibili</string>
+    <string name="tc4_help_bilibili_desc">I may post videos about Tiny Container, and also other stuff, like Plants vs. Zombies :P</string>
+    <string name="tc4_help_spark_store_title">Link: Spark App Store</string>
+    <string name="tc4_help_spark_store_desc">A single spark can start a prairie fire</string>
+    <string name="tc4_help_gxde_title">Link: GXDE OS</string>
+    <string name="tc4_help_gxde_desc">A Linux distro that is beautiful, light weight and out-of-the-box\nWe bring back DDE 15 with an updated basis on GXDE</string>
+
+    <!-- ==================== Quick Commands / Options ==================== -->
+    <string name="tc4_quick_commands_tab">Quick Commands</string>
+    <string name="tc4_quick_options_tab">Options</string>
+    <string name="tc4_quick_commands_default_desc">Tap a command to auto-input to the terminal.</string>
+    <string name="tc4_quick_options_default_desc">Toggle options, takes effect on the next launch.</string>
+    <string name="tc4_quick_commands_empty">No quick commands. Add or paste to import.</string>
+    <string name="tc4_quick_options_empty">No options configured. Add or paste to import.</string>
+    <string name="tc4_quick_folder_added">Folder added</string>
+    <string name="tc4_quick_command_added">Command added</string>
+    <string name="tc4_quick_option_added">Option added</string>
+    <string name="tc4_quick_updated">Updated</string>
+    <string name="tc4_quick_deleted">Deleted</string>
+    <string name="tc4_quick_delete_title">Delete Node</string>
+    <string name="tc4_quick_delete_selected">Confirm delete selected nodes?</string>
+    <string name="tc4_quick_delete_named">Confirm delete the following nodes?\n%1$s</string>
+    <string name="tc4_quick_import_success">Successfully imported %1$d node(s)</string>
+    <string name="tc4_quick_import_partial">Imported %1$d, failed %2$d</string>
+    <string name="tc4_quick_import_failed">Import failed: %1$s</string>
+    <string name="tc4_quick_copied">Copied %1$d node(s) to clipboard</string>
+
+    <!-- ==================== Validation ==================== -->
+    <string name="tc4_validate_name_empty">Name cannot be empty</string>
+    <string name="tc4_validate_command_empty">Command cannot be empty</string>
+    <string name="tc4_validate_code_length">Length must be 1-32 characters</string>
+    <string name="tc4_validate_code_chars">Only letters and numbers allowed</string>
+    <string name="tc4_validate_code_reserved">This name is reserved by the system, please use another</string>
+    <string name="tc4_validate_clipboard_empty">Clipboard is empty</string>
+    <string name="tc4_validate_clipboard_read">Cannot read clipboard content</string>
+    <string name="tc4_validate_clipboard_content_empty">Clipboard content is empty</string>
+    <string name="tc4_validate_yaml_not_object">Not a valid YAML object</string>
+    <string name="tc4_validate_yaml_missing_type">Missing \'type\' field or type is not a string</string>
+    <string name="tc4_validate_yaml_invalid_type">Type \'%1$s\' is invalid, allowed: %2$s</string>
+    <string name="tc4_validate_yaml_format_error">YAML format error: %1$s</string>
+    <string name="tc4_validate_list_unavailable">Cannot access current list</string>
+
+    <!-- ==================== Features ==================== -->
+    <string name="tc4_feature_mic_permission">Microphone permission required</string>
+    <string name="tc4_feature_cmd_sent">Command sent to terminal</string>
+    <string name="tc4_feature_link_copied">Copied %1$s</string>
+    <string name="tc4_feature_screen_scale">Screen Scale %1$sx</string>
+
+    <!-- ==================== Launcher Shortcut ==================== -->
+    <string name="tc4_shortcut_dialog_title">Launcher Shortcut Generator</string>
+    <string name="tc4_shortcut_pin_unsupported">Current launcher does not support pinning shortcuts</string>
+
+    <!-- ==================== Desktop File Picker ==================== -->
+    <string name="tc4_desktop_picker_title">Select .desktop File</string>
+    <string name="tc4_desktop_picker_empty">No .desktop files found</string>
+
+    <!-- ==================== Terminal ==================== -->
+    <string name="tc4_terminal_no_session">No Session</string>
+
+    <!-- ==================== Import Files ==================== -->
+    <string name="tc4_import_file_label">Import to Public Folder</string>
+    <string name="tc4_import_file_result">Imported %1$d/%2$d file(s) to public folder</string>
+
+    <!-- ==================== Shortcut Launch ==================== -->
+    <string name="tc4_shortcut_container_not_found">Container "%1$s" not found, please recreate the shortcut</string>
+    <string name="tc4_shortcut_another_running">Another container is running, command ignored</string>
+
+    <!-- ==================== Permissions ==================== -->
+    <string name="tc4_permission_file_granted">File management permission granted</string>
+    <string name="tc4_permission_file_denied">File management permission denied</string>
+
+    <!-- ==================== Signal 9 Page ==================== -->
+    <string name="tc4_signal9_title">What happened?</string>
+    <string name="tc4_signal9_description">Terminal terminated abnormally with error code 9. This is caused by Android 12+ limiting child processes. You need to manually disable this limit.</string>
+    <string name="tc4_signal9_tool_hint">You can use these tools to fix:</string>
+    <string name="tc4_signal9_tool_btn">Fix Tool</string>
+    <string name="tc4_signal9_tutorial_hint">If the above tools don\'t work, or your device is a non-AOSP HarmonyOS device, follow this tutorial (requires PC and USB cable):</string>
+    <string name="tc4_signal9_tutorial_btn">Tutorial Link</string>
+    <string name="tc4_signal9_dev_options_note">Enable Developer Options in Settings (usually find About Device → tap Build Number 7 times), then find "Disable child process restrictions" in Developer Options and turn it on. Steps may vary by device — search online for specifics.</string>
+
+    <!-- ==================== License Page ==================== -->
+    <string name="tc4_license_title">GNU General Public License v3.0</string>
+    <string name="tc4_license_description">Tiny Container is open source under the GPLv3 license</string>
+
+    <!-- ==================== Open Source Libs Page ==================== -->
+    <string name="tc4_oss_title">Open Source Libraries</string>
+    <string name="tc4_oss_description">This app uses the following open source libraries. Thanks to these projects for making development simpler.</string>
+
+    <!-- ==================== Input Hints ==================== -->
+    <string name="tc4_hint_name">Name</string>
+    <string name="tc4_hint_description">Description</string>
+    <string name="tc4_hint_command">Command</string>
+    <string name="tc4_hint_link">Link</string>
+    <string name="tc4_hint_shortcut_name">Shortcut Name</string>
+    <string name="tc4_hint_cache_path">Cache Path</string>
+    <string name="tc4_hint_xserver_args">X Server Arguments</string>
+    <string name="tc4_hint_container_code">Container Code</string>
+    <string name="tc4_hint_env_vars">Environment Variables</string>
+    <string name="tc4_hint_path_extra">Additional PATH</string>
+    <string name="tc4_hint_ld_path_extra">Additional LD_LIBRARY_PATH</string>
+    <string name="tc4_hint_ld_preload">LD_PRELOAD Libraries</string>
+    <string name="tc4_hint_proot_args">Proot Arguments</string>
+    <string name="tc4_hint_pre_host_cmd">Pre-start Host Command</string>
+    <string name="tc4_hint_post_container_cmd">Post-start Container Command</string>
+    <string name="tc4_hint_post_end_host_cmd">Post-exit Host Command</string>
+
+    <!-- ==================== Input Helper Texts ==================== -->
+    <string name="tc4_helper_one_per_line">One per line</string>
+    <string name="tc4_helper_one_path_per_line">One path per line</string>
+    <string name="tc4_helper_key_value_per_line">One per line, format KEY=VALUE</string>
+    <string name="tc4_helper_exec_on_host">Executes on Android host</string>
+    <string name="tc4_helper_exec_in_container">Executes inside the container</string>
+    <string name="tc4_helper_exec_on_host_after_exit">Executes on Android host, after container exit</string>
+    <string name="tc4_helper_exec_in_container_note">Command executed inside the container</string>
+    <string name="tc4_helper_code_rules">1-32 alphanumeric chars, must not conflict with reserved system names</string>
+
+    <!-- ==================== Feature Labels ==================== -->
+    <string name="tc4_feature_label_settings">Settings</string>
+    <string name="tc4_feature_label_about">About</string>
+
+    <!-- ==================== Quicks Toolbar Content Descriptions ==================== -->
+    <string name="tc4_quicks_cd_paste">Paste</string>
+    <string name="tc4_quicks_cd_add_folder">Add Folder</string>
+    <string name="tc4_quicks_cd_add">Add</string>
+    <string name="tc4_quicks_cd_delete">Delete</string>
+    <string name="tc4_quicks_cd_copy">Copy</string>
+    <string name="tc4_quicks_cd_edit">Edit</string>
+    <string name="tc4_quicks_cd_close">Close</string>
+
+    <!-- ==================== Feature Labels ==================== -->
+    <string name="tc4_feature_label_set_avnc">AVNC Settings</string>
+    <string name="tc4_feature_label_about_avnc">About AVNC</string>
+    <string name="tc4_feature_label_set_x11">Termux:X11 Settings</string>
+
+    <!-- ==================== Container Card Tooltips ==================== -->
+    <string name="tc4_tooltip_export">Export</string>
+    <string name="tc4_tooltip_launch">Launch</string>
+    <string name="tc4_tooltip_remove_error">Remove error entry</string>
+
+    <!-- ==================== Features Page ==================== -->
+    <string name="tc4_features_title">Features</string>
+    <string name="tc4_features_description">Configure container software features here!</string>
+    <string name="tc4_features_empty">No features available for this container</string>
+
+    <!-- ==================== Help Page (title/desc) ==================== -->
+    <string name="tc4_help_title">Help</string>
+    <string name="tc4_help_description">View project info, get help and updates</string>
+
+    <!-- ==================== Container Main ==================== -->
+    <string name="tc4_container_initializing">Initializing container…</string>
+    <string name="tc4_container_loading">Loading container list…</string>
+    <string name="tc4_container_empty_with_link">No containers installed.\nDownload containers from the official page and import:\nhttps://www.github.com/tiny-computer/images/releases</string>
+    <string name="tc4_update_available">New version %1$s is available! Please update.</string>
+
+    <!-- ==================== More Helper Texts ==================== -->
+    <string name="tc4_helper_cache_vars">One per line, supports $CACHE_DIR and $CONTAINER_DIR</string>
+
+    <!-- ==================== YAML Import Validation ==================== -->
+    <string name="tc4_validate_yaml_line_error">Line %1$d: %2$s</string>
+    <string name="tc4_validate_yaml_child_null">Child node %1$d is null</string>
+    <string name="tc4_validate_yaml_child_error">Child node %1$d: %2$s</string>
+
+    <!-- ==================== Documents Provider ==================== -->
+    <string name="tc4_documents_root_containers">Installed container root filesystems</string>
+    <string name="tc4_documents_root_public">Shared folder across containers</string>
+    <string name="tc4_documents_error_create">Cannot create files at this location</string>
+    <string name="tc4_documents_error_rename_root">Cannot rename this file</string>
+    <string name="tc4_documents_error_target_exists">Target file already exists: %1$s</string>
+    <string name="tc4_documents_error_rename_failed">Rename failed: %1$s</string>
+    <string name="tc4_documents_error_delete">Cannot delete this file</string>
+    <string name="tc4_documents_root_containers_label">Containers</string>
+    <string name="tc4_documents_root_public_label">Public</string>
+
+    <!-- ==================== Menu ==================== -->
+    <string name="tc4_menu_toggle_terminal">Toggle Terminal</string>
+    <string name="tc4_menu_enter_gui">Enter GUI</string>
+    <string name="tc4_menu_import_container">Import Container</string>
+    <string name="tc4_menu_file_permission">Request File Access</string>
+    <string name="tc4_menu_battery_optimization">Disable Battery Optimization</string>
+    <string name="tc4_menu_shortcuts">Shortcuts</string>
+
+    <!-- ==================== Non-translatable ==================== -->
+    <string-array name="tc4_container_code_denylist" translatable="false">
+        <item>^app.*$</item>
+        <item>^cache$</item>
+        <item>^code_cache$</item>
+        <item>^com.*$</item>
+        <item>^databases$</item>
+        <item>^files$</item>
+        <item>^lib$</item>
+        <item>^no_backup$</item>
+    </string-array>
+</resources>

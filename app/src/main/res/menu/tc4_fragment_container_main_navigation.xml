@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <item
+        android:id="@+id/shortcuts"
+        android:title="@string/tc4_menu_shortcuts"
+        android:icon="@drawable/quick_phrases_24dp_1f1f1f_fill0_wght400_grad0_opsz24"
+        app:iconTint="?attr/colorControlNormal"
+        app:showAsAction="ifRoom|withText" />
+
+    <item
+        android:id="@+id/features"
+        android:title="@string/tc4_features_title"
+        android:icon="@drawable/api_24dp_1f1f1f_fill0_wght400_grad0_opsz24"
+        app:iconTint="?attr/colorControlNormal"
+        app:showAsAction="ifRoom|withText" />
+
+    <item
+        android:id="@+id/settings"
+        android:title="@string/tc4_settings_title"
+        android:icon="@drawable/settings_24dp_1f1f1f_fill0_wght400_grad0_opsz24"
+        app:iconTint="?attr/colorControlNormal"
+        app:showAsAction="ifRoom|withText" />
+
+    <item
+        android:id="@+id/help"
+        android:title="@string/tc4_help_title"
+        android:icon="@drawable/help_24dp_1f1f1f_fill0_wght400_grad0_opsz24"
+        app:iconTint="?attr/colorControlNormal"
+        app:showAsAction="ifRoom|withText" />
+</menu>

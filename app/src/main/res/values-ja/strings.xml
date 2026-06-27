@@ -1,0 +1,264 @@
+<resources>
+    <string name="tc4_app_name">小さなコンテナ</string>
+
+    <string name="tc4_btn_ok">OK</string>
+    <string name="tc4_btn_cancel">キャンセル</string>
+    <string name="tc4_btn_delete">削除</string>
+    <string name="tc4_btn_continue">続行</string>
+    <string name="tc4_btn_save_exit">保存して終了</string>
+    <string name="tc4_btn_save_send">保存してコマンド送信</string>
+    <string name="tc4_btn_back">戻る</string>
+    <string name="tc4_btn_generate">生成</string>
+    <string name="tc4_btn_quick_fill">クイック入力</string>
+    <string name="tc4_btn_confirm_install">インストール確認</string>
+    <string name="tc4_btn_details">詳細</string>
+    <string name="tc4_btn_edit">編集</string>
+    <string name="tc4_btn_share">共有</string>
+    <string name="tc4_btn_update">更新へ</string>
+
+    <string name="tc4_label_enable">有効</string>
+    <string name="tc4_label_default_gui">デフォルトGUIに設定</string>
+    <string name="tc4_label_adapt_screen">画面サイズに適応</string>
+    <string name="tc4_label_effective_next_launch">次回のコンテナ起動時に有効</string>
+    <string name="tc4_label_effective_this_session">このセッションのみ有効。終了前に無効にする必要があります。</string>
+    <string name="tc4_label_version">バージョン %1$s</string>
+
+    <string name="tc4_container_title">コンテナ管理</string>
+    <string name="tc4_container_empty_hint">コンテナがありません。右上をタップしてインポートしてください</string>
+    <string name="tc4_container_calculating_space">使用量を計算中…</string>
+    <string name="tc4_container_delete_success">削除しました</string>
+    <string name="tc4_container_delete_failed">削除に失敗しました: %1$s</string>
+    <string name="tc4_container_loading_failed">\"%1$s\" の読み込みに失敗しました</string>
+    <string name="tc4_container_list_load_failed">コンテナ一覧の読み込みに失敗しました: %1$s</string>
+    <string name="tc4_container_config_missing">コンテナ設定が見つかりません</string>
+    <string name="tc4_container_missing_boot_cmd">コンテナ \"%1$s\" に boot_command 設定がありません</string>
+    <string name="tc4_container_config_lost">コンテナ \"%1$s\" の設定が失われました。再インストールしてください</string>
+
+    <string name="tc4_dialog_delete_title">削除の確認</string>
+    <string name="tc4_dialog_delete_message">\"%1$s\" を完全に削除してもよろしいですか？\nこの操作は取り消せません。</string>
+    <string name="tc4_dialog_deleting_title">コンテナファイルを削除中です。お待ちください…</string>
+
+    <string name="tc4_dialog_edit_container_title">コンテナ情報の編集</string>
+
+    <string name="tc4_dialog_exit_title">コンテナを終了</string>
+    <string name="tc4_dialog_exit_message">コンテナを停止して管理ページに戻りますか？</string>
+
+    <string name="tc4_import_title">コンテナをインポート</string>
+    <string name="tc4_import_warning">1. 信頼できるソースからのみコンテナをインポートしてください。\n悪意のあるコンテナは他のコンテナやアプリ自体を破壊する可能性があります。\nストレージ権限を付与すると、デバイス上の重要なデータ（写真など）を変更、送信、削除することもできます。\n\n2. 免責事項：このソフトウェアはGPLの下でオープンソースであり、いかなる保証もありません。\n作者はいかなる状況下でも一切の責任を負いません。\nユーザーはソースコードを確認し、すべてのリスクを負う必要があります。</string>
+    <string name="tc4_import_builtin_btn">内蔵コンテナをインストール</string>
+    <string name="tc4_import_copying_title">コンテナファイルをキャッシュにコピー中…</string>
+    <string name="tc4_import_extracting_title">設定を抽出中…</string>
+    <string name="tc4_import_installing_title">コンテナをインストール中…</string>
+    <string name="tc4_import_deleting_old_title">古いコンテナファイルを削除中…</string>
+    <string name="tc4_import_cleaning_title">一時ファイルをクリーンアップ中…</string>
+    <string name="tc4_import_completed">\"%1$s\" のインストールが完了しました</string>
+    <string name="tc4_import_failed">インストールに失敗しました: %1$s</string>
+    <string name="tc4_import_builtin_failed">内蔵コンテナのインストールに失敗しました: %1$s</string>
+    <string name="tc4_import_auto_failed">内蔵コンテナの自動インストールに失敗しました: %1$s</string>
+    <string name="tc4_install_state_error">インストール状態エラー、再試行してください</string>
+    <string name="tc4_import_missing_code">設定に \'code\' フィールドがありません</string>
+    <string name="tc4_import_missing_code_builtin">内蔵コンテナ設定に \'code\' フィールドがありません</string>
+    <string name="tc4_import_no_config">コンテナファイルに .tiny.yaml 設定が見つかりません</string>
+    <string name="tc4_import_config_parse_failed">設定の解析に失敗しました: %1$s</string>
+    <string name="tc4_import_completed_title">インストール完了</string>
+    <string name="tc4_import_failed_title">インストール失敗</string>
+
+    <string name="tc4_install_launch_after">インストール後に起動</string>
+    <string name="tc4_install_warning_data">%1$s の内容は完全に消去されます。この操作は取り消せません</string>
+    <string name="tc4_install_warning_overwrite">\"%1$s\" は既にインストールされています。上書きされ復元できません</string>
+
+    <string name="tc4_export_title">コンテナをエクスポート</string>
+    <string name="tc4_export_warning">1. 「エクスポート」コマンドはコンテナ作成者によって提供されます。\n通常、エクスポートはバックアップではなく、共有可能なコンテナを生成し、プライベートデータをクリアするコマンドが含まれる場合があります。\nLinuxは柔軟であり、エクスポート結果は期待と異なる可能性があります。\n最初に /.tiny.yaml の export_command を確認してください。\n\n2. 免責事項：このソフトウェアはGPLの下でオープンソースであり、いかなる保証もありません。\n作者はいかなる状況下でも一切の責任を負いません。\nユーザーはソースコードを確認し、すべてのリスクを負う必要があります。</string>
+    <string name="tc4_export_success">エクスポート成功</string>
+    <string name="tc4_export_failed">エクスポートに失敗しました: %1$s</string>
+    <string name="tc4_export_missing_cmd">設定に export_command がありません</string>
+    <string name="tc4_export_no_output">エクスポートはファイルを生成しませんでした</string>
+    <string name="tc4_export_cannot_write">選択されたパスに書き込めません</string>
+    <string name="tc4_export_progress_title">コンテナファイルをエクスポート中…</string>
+
+    <string name="tc4_settings_title">設定</string>
+    <string name="tc4_settings_description">ここでアプリ設定を行います！\nコンテナ固有の設定については、「機能」または「ショートカット - オプション」を参照してください。</string>
+    <string name="tc4_settings_shortcut_title">ランチャーショートカットジェネレーター</string>
+    <string name="tc4_settings_shortcut_desc">現在のコンテナのデスクトップショートカットを作成し、コマンドを直接実行</string>
+    <string name="tc4_settings_auto_launch_title">コンテナを自動起動</string>
+    <string name="tc4_settings_auto_launch_desc">次回のコンテナ起動時に有効</string>
+    <string name="tc4_settings_auto_launch_gui_title">GUIを自動起動</string>
+    <string name="tc4_settings_legacy_proot_title">レガシーProotを使用</string>
+    <string name="tc4_settings_legacy_proot_desc">最新のprootは刺激的なbwrapとnetlinkエミュレーションをもたらします。\n互換性が向上しますが、一部のシナリオでは読み込みが遅くなります（例：ネットワーク動画の再生がカクつく）。\n*この設定はグローバルです。コンテナごとの設定には、/.tiny.yaml の起動コマンド内のprootバイナリを proot-classic または proot-latest に変更してください。\n次回のコンテナ起動時に有効</string>
+    <string name="tc4_settings_reset_bootstrap_title">Bootstrapを再インストール</string>
+    <string name="tc4_settings_reset_bootstrap_desc">次回のコンテナ起動時に有効</string>
+    <string name="tc4_settings_auto_check_update_title">自動更新チェック</string>
+    <string name="tc4_settings_auto_check_update_desc">コンテナ起動時に新バージョンを自動チェック</string>
+    <string name="tc4_settings_manage_files_title">すべてのファイルへのアクセス</string>
+    <string name="tc4_settings_manage_files_desc">コンテナがAndroidファイルにアクセスすることを許可\n公式コンテナを使用する場合、Androidストレージは通常/mnt/sdcardにあります</string>
+    <string name="tc4_settings_battery_title">バッテリー制限なし</string>
+    <string name="tc4_settings_battery_desc">システムによってアプリが強制終了されるのを防ぐため、バッテリー最適化を無効にする</string>
+
+    <string name="tc4_help_source_code_title">ソースコードリポジトリ</string>
+    <string name="tc4_help_source_code_desc">コードのすべての行を確認できます。ドキュメントの取得、フィードバックなどもこちら。</string>
+    <string name="tc4_help_releases_title">リリースページ</string>
+    <string name="tc4_help_releases_desc">Tiny Containerの最新バージョンを入手</string>
+    <string name="tc4_help_oss_title">オープンソースライブラリ</string>
+    <string name="tc4_help_oss_desc">開発をシンプルにしてくれたこれらのライブラリに感謝します。</string>
+    <string name="tc4_help_license_title">ライセンス</string>
+    <string name="tc4_help_license_desc">Linuxの実行に不可欠なコンポーネントであるPRootはGPLでライセンスされているため、私もコードをオープンソースにする必要があります :D</string>
+    <string name="tc4_help_wechat_title">WeChat公式アカウント: 装机宝典</string>
+    <string name="tc4_help_wechat_desc">ここにTiny Containerのチュートリアルを投稿するかもしれません。GitHubにアクセスできない場合に役立つかもしれません。</string>
+    <string name="tc4_help_bilibili_title">CatenのBilibili</string>
+    <string name="tc4_help_bilibili_desc">Tiny Containerに関する動画や、Plants vs. Zombiesなど他のものも投稿するかもしれません :P</string>
+    <string name="tc4_help_spark_store_title">リンク: Spark App Store</string>
+    <string name="tc4_help_spark_store_desc">一つの火花が草原の火を起こすことができる</string>
+    <string name="tc4_help_gxde_title">リンク: GXDE OS</string>
+    <string name="tc4_help_gxde_desc">美しく、軽量で、すぐに使えるLinuxディストリビューション。\n更新されたベース上に構築され、GXDEはDDE 15を再び脚光を浴びせる</string>
+
+    <string name="tc4_quick_commands_tab">クイックコマンド</string>
+    <string name="tc4_quick_options_tab">オプション</string>
+    <string name="tc4_quick_commands_default_desc">コマンドをタップして端末に自動入力します。</string>
+    <string name="tc4_quick_options_default_desc">オプションの切り替え、次回起動時に有効になります。</string>
+    <string name="tc4_quick_commands_empty">クイックコマンドがありません。追加するか貼り付けてインポートしてください。</string>
+    <string name="tc4_quick_options_empty">オプションが設定されていません。追加するか貼り付けてインポートしてください。</string>
+    <string name="tc4_quick_folder_added">フォルダを追加しました</string>
+    <string name="tc4_quick_command_added">コマンドを追加しました</string>
+    <string name="tc4_quick_option_added">オプションを追加しました</string>
+    <string name="tc4_quick_updated">更新しました</string>
+    <string name="tc4_quick_deleted">削除しました</string>
+    <string name="tc4_quick_delete_title">ノードを削除</string>
+    <string name="tc4_quick_delete_selected">選択したノードを削除しますか？</string>
+    <string name="tc4_quick_delete_named">以下のノードを削除しますか？\n%1$s</string>
+    <string name="tc4_quick_import_success">%1$d 個のノードを正常にインポートしました</string>
+    <string name="tc4_quick_import_partial">%1$d 個インポート成功、%2$d 個失敗</string>
+    <string name="tc4_quick_import_failed">インポートに失敗しました: %1$s</string>
+    <string name="tc4_quick_copied">%1$d 個のノードをクリップボードにコピーしました</string>
+
+    <string name="tc4_validate_name_empty">名前は空にできません</string>
+    <string name="tc4_validate_command_empty">コマンドは空にできません</string>
+    <string name="tc4_validate_code_length">長さは1〜32文字である必要があります</string>
+    <string name="tc4_validate_code_chars">英数字のみ使用可能です</string>
+    <string name="tc4_validate_code_reserved">この名前はシステムによって予約されています。別の名前を使用してください</string>
+    <string name="tc4_validate_clipboard_empty">クリップボードが空です</string>
+    <string name="tc4_validate_clipboard_read">クリップボードの内容を読み取れません</string>
+    <string name="tc4_validate_clipboard_content_empty">クリップボードの内容が空です</string>
+    <string name="tc4_validate_yaml_not_object">有効なYAMLオブジェクトではありません</string>
+    <string name="tc4_validate_yaml_missing_type">\'type\' フィールドがないか、typeが文字列ではありません</string>
+    <string name="tc4_validate_yaml_invalid_type">タイプ \'%1$s\' は無効です。許可されているタイプ: %2$s</string>
+    <string name="tc4_validate_yaml_format_error">YAML形式エラー: %1$s</string>
+    <string name="tc4_validate_list_unavailable">現在のリストにアクセスできません</string>
+
+    <string name="tc4_feature_mic_permission">マイク権限が必要です</string>
+    <string name="tc4_feature_cmd_sent">コマンドを端末に送信しました</string>
+    <string name="tc4_feature_link_copied">%1$s をコピーしました</string>
+    <string name="tc4_feature_screen_scale">画面スケール %1$sx</string>
+
+    <string name="tc4_shortcut_dialog_title">ランチャーショートカットジェネレーター</string>
+    <string name="tc4_shortcut_pin_unsupported">現在のランチャーはショートカットのピン留めをサポートしていません</string>
+
+    <string name="tc4_desktop_picker_title">.desktop ファイルを選択</string>
+    <string name="tc4_desktop_picker_empty">.desktop ファイルが見つかりません</string>
+
+    <string name="tc4_terminal_no_session">セッションなし</string>
+
+    <string name="tc4_import_file_label">パブリックフォルダにインポート</string>
+    <string name="tc4_import_file_result">%1$d/%2$d 個のファイルをパブリックフォルダにインポートしました</string>
+
+    <string name="tc4_shortcut_container_not_found">コンテナ \"%1$s\" が見つかりません。ショートカットを再作成してください</string>
+    <string name="tc4_shortcut_another_running">別のコンテナが実行中です。コマンドは無視されました</string>
+
+    <string name="tc4_permission_file_granted">ファイル管理権限が付与されました</string>
+    <string name="tc4_permission_file_denied">ファイル管理権限が拒否されました</string>
+
+    <string name="tc4_signal9_title">何が起きましたか？</string>
+    <string name="tc4_signal9_description">端末がエラーコード9で異常終了しました。これはAndroid 12+が子プロセスを制限していることが原因です。この制限を手動で無効にする必要があります。</string>
+    <string name="tc4_signal9_tool_hint">以下のツールを使用して修正できます：</string>
+    <string name="tc4_signal9_tool_btn">修正ツール</string>
+    <string name="tc4_signal9_tutorial_hint">上記のツールが機能しない場合、またはお使いのデバイスが非AOSPのHarmonyOSデバイスである場合は、このチュートリアルに従ってください（PCとUSBケーブルが必要です）：</string>
+    <string name="tc4_signal9_tutorial_btn">チュートリアルリンク</string>
+    <string name="tc4_signal9_dev_options_note">設定で開発者向けオプションを有効にし（通常はデバイス情報 → ビルド番号を7回タップ）、開発者向けオプションで「子プロセス制限を無効にする」を見つけてオンにします。手順はデバイスによって異なる場合があります — 詳細はオンラインで検索してください。</string>
+
+    <string name="tc4_license_title">GNU General Public License v3.0</string>
+    <string name="tc4_license_description">Tiny ContainerはGPLv3ライセンスの下でオープンソースです</string>
+
+    <string name="tc4_oss_title">オープンソースライブラリ</string>
+    <string name="tc4_oss_description">このアプリは以下のオープンソースライブラリを使用しています。開発をシンプルにしてくれたこれらのプロジェクトに感謝します。</string>
+
+    <string name="tc4_hint_name">名前</string>
+    <string name="tc4_hint_description">説明</string>
+    <string name="tc4_hint_command">コマンド</string>
+    <string name="tc4_hint_link">リンク</string>
+    <string name="tc4_hint_shortcut_name">ショートカット名</string>
+    <string name="tc4_hint_cache_path">キャッシュパス</string>
+    <string name="tc4_hint_xserver_args">X Server引数</string>
+    <string name="tc4_hint_container_code">コンテナコード</string>
+    <string name="tc4_hint_env_vars">環境変数</string>
+    <string name="tc4_hint_path_extra">追加PATH</string>
+    <string name="tc4_hint_ld_path_extra">追加LD_LIBRARY_PATH</string>
+    <string name="tc4_hint_ld_preload">LD_PRELOADライブラリ</string>
+    <string name="tc4_hint_proot_args">Proot引数</string>
+    <string name="tc4_hint_pre_host_cmd">起動前ホストコマンド</string>
+    <string name="tc4_hint_post_container_cmd">起動後コンテナコマンド</string>
+    <string name="tc4_hint_post_end_host_cmd">終了後ホストコマンド</string>
+
+    <string name="tc4_helper_one_per_line">1行に1つ</string>
+    <string name="tc4_helper_one_path_per_line">1行に1つのパス</string>
+    <string name="tc4_helper_key_value_per_line">1行に1つ、形式 KEY=VALUE</string>
+    <string name="tc4_helper_exec_on_host">Androidホストで実行</string>
+    <string name="tc4_helper_exec_in_container">コンテナ内で実行</string>
+    <string name="tc4_helper_exec_on_host_after_exit">Androidホストで実行、コンテナ終了後に送信</string>
+    <string name="tc4_helper_exec_in_container_note">コンテナ内で実行されるコマンド</string>
+    <string name="tc4_helper_code_rules">1〜32文字の英数字、予約されたシステム名と競合しないこと</string>
+
+    <string name="tc4_feature_label_settings">設定</string>
+    <string name="tc4_feature_label_about">について</string>
+
+    <string name="tc4_quicks_cd_paste">貼り付け</string>
+    <string name="tc4_quicks_cd_add_folder">フォルダを追加</string>
+    <string name="tc4_quicks_cd_add">追加</string>
+    <string name="tc4_quicks_cd_delete">削除</string>
+    <string name="tc4_quicks_cd_copy">コピー</string>
+    <string name="tc4_quicks_cd_edit">編集</string>
+    <string name="tc4_quicks_cd_close">閉じる</string>
+
+    <string name="tc4_feature_label_set_avnc">AVNC設定</string>
+    <string name="tc4_feature_label_about_avnc">AVNCについて</string>
+    <string name="tc4_feature_label_set_x11">Termux:X11設定</string>
+
+    <string name="tc4_tooltip_export">エクスポート</string>
+    <string name="tc4_tooltip_launch">起動</string>
+    <string name="tc4_tooltip_remove_error">エラーエントリを削除</string>
+
+    <string name="tc4_features_title">機能</string>
+    <string name="tc4_features_description">ここでコンテナのソフトウェア機能を設定します！</string>
+    <string name="tc4_features_empty">このコンテナに利用可能な機能はありません</string>
+
+    <string name="tc4_help_title">ヘルプ</string>
+    <string name="tc4_help_description">プロジェクト情報を表示、ヘルプとアップデートを取得</string>
+
+    <string name="tc4_container_initializing">コンテナを初期化中…</string>
+    <string name="tc4_container_loading">コンテナ一覧を読み込み中…</string>
+    <string name="tc4_container_empty_with_link">コンテナがインストールされていません。\n公式ページからコンテナをダウンロードしてインポートしてください：\nhttps://www.github.com/tiny-computer/images/releases</string>
+    <string name="tc4_update_available">新バージョン %1$s が利用可能です！更新してください。</string>
+
+    <string name="tc4_helper_cache_vars">1行に1つ、$CACHE_DIR と $CONTAINER_DIR をサポート</string>
+
+    <string name="tc4_validate_yaml_line_error">%1$d 行目: %2$s</string>
+    <string name="tc4_validate_yaml_child_null">子ノード %1$d がnullです</string>
+    <string name="tc4_validate_yaml_child_error">子ノード %1$d: %2$s</string>
+
+    <string name="tc4_documents_root_containers">インストール済みコンテナのルートファイルシステム</string>
+    <string name="tc4_documents_root_public">コンテナ間共有フォルダ</string>
+    <string name="tc4_documents_error_create">この場所にファイルを作成できません</string>
+    <string name="tc4_documents_error_rename_root">このファイルの名前を変更できません</string>
+    <string name="tc4_documents_error_target_exists">対象ファイルが既に存在します: %1$s</string>
+    <string name="tc4_documents_error_rename_failed">名前変更に失敗しました: %1$s</string>
+    <string name="tc4_documents_error_delete">このファイルを削除できません</string>
+    <string name="tc4_documents_root_containers_label">コンテナ</string>
+    <string name="tc4_documents_root_public_label">パブリック</string>
+
+    <string name="tc4_menu_toggle_terminal">端末の切り替え</string>
+    <string name="tc4_menu_enter_gui">GUIに入る</string>
+    <string name="tc4_menu_import_container">コンテナをインポート</string>
+    <string name="tc4_menu_file_permission">ファイルアクセスをリクエスト</string>
+    <string name="tc4_menu_battery_optimization">バッテリー最適化を無効にする</string>
+    <string name="tc4_menu_shortcuts">ショートカット</string>
+
+
+</resources>

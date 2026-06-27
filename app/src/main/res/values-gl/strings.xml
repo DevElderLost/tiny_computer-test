@@ -1,0 +1,264 @@
+<resources>
+    <string name="tc4_app_name">Pequeno contedor</string>
+
+    <string name="tc4_btn_ok">OK</string>
+    <string name="tc4_btn_cancel">Cancelar</string>
+    <string name="tc4_btn_delete">Eliminar</string>
+    <string name="tc4_btn_continue">Continuar</string>
+    <string name="tc4_btn_save_exit">Gardar e saír</string>
+    <string name="tc4_btn_save_send">Gardar e enviar comando</string>
+    <string name="tc4_btn_back">Atrás</string>
+    <string name="tc4_btn_generate">Xerar</string>
+    <string name="tc4_btn_quick_fill">Enchemento rápido</string>
+    <string name="tc4_btn_confirm_install">Confirmar instalación</string>
+    <string name="tc4_btn_details">Detalles</string>
+    <string name="tc4_btn_edit">Editar</string>
+    <string name="tc4_btn_share">Compartir</string>
+    <string name="tc4_btn_update">Actualizar</string>
+
+    <string name="tc4_label_enable">Activar</string>
+    <string name="tc4_label_default_gui">Establecer como GUI predeterminada</string>
+    <string name="tc4_label_adapt_screen">Adaptar ao tamaño da pantalla</string>
+    <string name="tc4_label_effective_next_launch">Terá efecto no seguinte lanzamento do contedor</string>
+    <string name="tc4_label_effective_this_session">Só ten efecto nesta sesión. Debe desactivarse antes de saír.</string>
+    <string name="tc4_label_version">Versión %1$s</string>
+
+    <string name="tc4_container_title">Xestión de contedores</string>
+    <string name="tc4_container_empty_hint">Sen contedores, toca arriba á dereita para importar</string>
+    <string name="tc4_container_calculating_space">Calculando o uso…</string>
+    <string name="tc4_container_delete_success">Eliminado con éxito</string>
+    <string name="tc4_container_delete_failed">Erro ao eliminar: %1$s</string>
+    <string name="tc4_container_loading_failed">\"%1$s\" non se puido cargar</string>
+    <string name="tc4_container_list_load_failed">Erro ao cargar a lista de contedores: %1$s</string>
+    <string name="tc4_container_config_missing">Configuración do contedor non atopada</string>
+    <string name="tc4_container_missing_boot_cmd">Ao contedor \"%1$s\" fáltalle a configuración boot_command</string>
+    <string name="tc4_container_config_lost">Perdeuse a configuración do contedor \"%1$s\", reinstálao</string>
+
+    <string name="tc4_dialog_delete_title">Confirmar eliminación</string>
+    <string name="tc4_dialog_delete_message">Estás seguro de que queres eliminar permanentemente \"%1$s\"?\nEsta acción non se pode desfacer.</string>
+    <string name="tc4_dialog_deleting_title">Eliminando ficheiros do contedor, agarda…</string>
+
+    <string name="tc4_dialog_edit_container_title">Editar información do contedor</string>
+
+    <string name="tc4_dialog_exit_title">Saír do contedor</string>
+    <string name="tc4_dialog_exit_message">Queres deter o contedor e volver á páxina de xestión?</string>
+
+    <string name="tc4_import_title">Importar contedor</string>
+    <string name="tc4_import_warning">1. Importa só contedores de fontes de confianza.\nUn contedor malicioso pode destruír outros contedores e mesmo a propia aplicación.\nSe concedes permiso de almacenamento, tamén pode modificar, enviar ou eliminar datos importantes do teu dispositivo (como fotos).\n\n2. Aviso legal: Este software é de código aberto baixo GPL, proporcionado SEN GARANTÍA DE NINGÚN TIPO.\nO autor non asume ningunha responsabilidade baixo ningunha circunstancia.\nOs usuarios deben revisar o código fonte e asumir todos os riscos.</string>
+    <string name="tc4_import_builtin_btn">Instalar contedor integrado</string>
+    <string name="tc4_import_copying_title">Copiando ficheiros do contedor á caché…</string>
+    <string name="tc4_import_extracting_title">Extraendo configuración…</string>
+    <string name="tc4_import_installing_title">Instalando contedor…</string>
+    <string name="tc4_import_deleting_old_title">Eliminando ficheiros antigos do contedor…</string>
+    <string name="tc4_import_cleaning_title">Limpando ficheiros temporais…</string>
+    <string name="tc4_import_completed">\"%1$s\" instalado con éxito</string>
+    <string name="tc4_import_failed">Erro na instalación: %1$s</string>
+    <string name="tc4_import_builtin_failed">Erro ao instalar o contedor integrado: %1$s</string>
+    <string name="tc4_import_auto_failed">Erro na instalación automática do contedor integrado: %1$s</string>
+    <string name="tc4_install_state_error">Erro de estado de instalación, téntao de novo</string>
+    <string name="tc4_import_missing_code">Falta o campo \'code\' na configuración</string>
+    <string name="tc4_import_missing_code_builtin">Falta o campo \'code\' na configuración do contedor integrado</string>
+    <string name="tc4_import_no_config">Configuración .tiny.yaml non atopada no ficheiro do contedor</string>
+    <string name="tc4_import_config_parse_failed">Erro ao analizar a configuración: %1$s</string>
+    <string name="tc4_import_completed_title">Instalación completada</string>
+    <string name="tc4_import_failed_title">Instalación fallida</string>
+
+    <string name="tc4_install_launch_after">Iniciar despois de instalar</string>
+    <string name="tc4_install_warning_data">O contido de %1$s será borrado, esta acción non se pode desfacer</string>
+    <string name="tc4_install_warning_overwrite">\"%1$s\" xa está instalado, sobrescribirase e non se poderá recuperar</string>
+
+    <string name="tc4_export_title">Exportar contedor</string>
+    <string name="tc4_export_warning">1. O comando \"exportar\" é proporcionado polo creador do contedor.\nNormalmente exportar non é unha copia de seguridade — xera un contedor compartible e pode incluír comandos para limpar datos privados.\nLinux é flexible e o resultado da exportación pode diferir das expectativas.\nRevisa primeiro export_command en /.tiny.yaml.\n\n2. Aviso legal: Este software é de código aberto baixo GPL, proporcionado SEN GARANTÍA DE NINGÚN TIPO.\nO autor non asume ningunha responsabilidade baixo ningunha circunstancia.\nOs usuarios deben revisar o código fonte e asumir todos os riscos.</string>
+    <string name="tc4_export_success">Exportación exitosa</string>
+    <string name="tc4_export_failed">Erro na exportación: %1$s</string>
+    <string name="tc4_export_missing_cmd">Falta export_command na configuración</string>
+    <string name="tc4_export_no_output">A exportación non produciu ningún ficheiro</string>
+    <string name="tc4_export_cannot_write">Non se pode escribir na ruta seleccionada</string>
+    <string name="tc4_export_progress_title">Exportando ficheiros do contedor…</string>
+
+    <string name="tc4_settings_title">Configuración</string>
+    <string name="tc4_settings_description">Configura aquí os axustes da aplicación!\nPara axustes específicos do contedor, consulta \"Funcións\" ou \"Atallos - Opcións\".</string>
+    <string name="tc4_settings_shortcut_title">Xerador de atallos do lanzador</string>
+    <string name="tc4_settings_shortcut_desc">Crea un atallo no escritorio para o contedor actual e executa comandos directamente</string>
+    <string name="tc4_settings_auto_launch_title">Iniciar contedor automaticamente</string>
+    <string name="tc4_settings_auto_launch_desc">Terá efecto no seguinte lanzamento do contedor</string>
+    <string name="tc4_settings_auto_launch_gui_title">Iniciar GUI automaticamente</string>
+    <string name="tc4_settings_legacy_proot_title">Usar Proot antigo</string>
+    <string name="tc4_settings_legacy_proot_desc">O proot máis recente trae a emocionante emulación bwrap e netlink.\nMellora a compatibilidade, pero tamén ralentiza a carga nalgúns escenarios (como a reprodución de vídeo en rede vólvese lenta).\n*Esta configuración é global. Para configuracións por contedor, cambia o binario proot no comando de arranque de /.tiny.yaml a proot-classic ou proot-latest.\nTerá efecto no seguinte lanzamento do contedor</string>
+    <string name="tc4_settings_reset_bootstrap_title">Reinstalar Bootstrap</string>
+    <string name="tc4_settings_reset_bootstrap_desc">Terá efecto no seguinte lanzamento do contedor</string>
+    <string name="tc4_settings_auto_check_update_title">Comprobación automática de actualizacións</string>
+    <string name="tc4_settings_auto_check_update_desc">Comprobar novas versións ao iniciar un contedor</string>
+    <string name="tc4_settings_manage_files_title">Acceso a todos os ficheiros</string>
+    <string name="tc4_settings_manage_files_desc">Permitir que o contedor acceda aos ficheiros de Android\nCos contedores oficiais, o almacenamento de Android adoita estar en /mnt/sdcard</string>
+    <string name="tc4_settings_battery_title">Batería sen restricións</string>
+    <string name="tc4_settings_battery_desc">Desactivar a optimización da batería para evitar que o sistema peche a aplicación</string>
+
+    <string name="tc4_help_source_code_title">Repositorio de código fonte</string>
+    <string name="tc4_help_source_code_desc">Mira cada liña de código. Obtén documentación, dá comentarios e máis.</string>
+    <string name="tc4_help_releases_title">Páxina de versións</string>
+    <string name="tc4_help_releases_desc">Obtén a última versión de Tiny Container</string>
+    <string name="tc4_help_oss_title">Bibliotecas de código aberto</string>
+    <string name="tc4_help_oss_desc">Grazas a estas bibliotecas por facer o desenvolvemento máis sinxelo.</string>
+    <string name="tc4_help_license_title">Licenza</string>
+    <string name="tc4_help_license_desc">PRoot — un compoñente esencial para executar Linux — está baixo licenza GPL, así que eu tamén teño que abrir o meu código fonte :D</string>
+    <string name="tc4_help_wechat_title">Conta oficial de WeChat: 装机宝典</string>
+    <string name="tc4_help_wechat_desc">Podo publicar algúns tutoriais de Tiny Container aquí. Se non podes acceder a GitHub, isto pode axudar.</string>
+    <string name="tc4_help_bilibili_title">Bilibili de Caten</string>
+    <string name="tc4_help_bilibili_desc">Podo publicar vídeos sobre Tiny Container, e tamén outras cousas, como Plants vs. Zombies :P</string>
+    <string name="tc4_help_spark_store_title">Ligazón: Spark App Store</string>
+    <string name="tc4_help_spark_store_desc">Unha faísca pode iniciar un lume na pradaría</string>
+    <string name="tc4_help_gxde_title">Ligazón: GXDE OS</string>
+    <string name="tc4_help_gxde_desc">Distribución Linux fermosa, lixeira e lista para usar.\nConstruída sobre unha base actualizada, GXDE trae DDE 15 de volta ao centro de atención</string>
+
+    <string name="tc4_quick_commands_tab">Comandos rápidos</string>
+    <string name="tc4_quick_options_tab">Opcións</string>
+    <string name="tc4_quick_commands_default_desc">Toca un comando para introducilo automaticamente no terminal.</string>
+    <string name="tc4_quick_options_default_desc">Alternar opcións, terá efecto no seguinte lanzamento.</string>
+    <string name="tc4_quick_commands_empty">Sen comandos rápidos. Engade ou pega para importar.</string>
+    <string name="tc4_quick_options_empty">Sen opcións configuradas. Engade ou pega para importar.</string>
+    <string name="tc4_quick_folder_added">Cartafol engadido</string>
+    <string name="tc4_quick_command_added">Comando engadido</string>
+    <string name="tc4_quick_option_added">Opción engadida</string>
+    <string name="tc4_quick_updated">Actualizado</string>
+    <string name="tc4_quick_deleted">Eliminado</string>
+    <string name="tc4_quick_delete_title">Eliminar nodo</string>
+    <string name="tc4_quick_delete_selected">Confirmar a eliminación dos nodos seleccionados?</string>
+    <string name="tc4_quick_delete_named">Confirmar a eliminación dos seguintes nodos?\n%1$s</string>
+    <string name="tc4_quick_import_success">%1$d nodo(s) importado(s) con éxito</string>
+    <string name="tc4_quick_import_partial">%1$d importado(s), %2$d fallo(s)</string>
+    <string name="tc4_quick_import_failed">Erro na importación: %1$s</string>
+    <string name="tc4_quick_copied">%1$d nodo(s) copiado(s) ao portapapeis</string>
+
+    <string name="tc4_validate_name_empty">O nome non pode estar baleiro</string>
+    <string name="tc4_validate_command_empty">O comando non pode estar baleiro</string>
+    <string name="tc4_validate_code_length">A lonxitude debe ser de 1-32 caracteres</string>
+    <string name="tc4_validate_code_chars">Só se permiten letras e números</string>
+    <string name="tc4_validate_code_reserved">Este nome está reservado polo sistema, usa outro</string>
+    <string name="tc4_validate_clipboard_empty">O portapapeis está baleiro</string>
+    <string name="tc4_validate_clipboard_read">Non se pode ler o contido do portapapeis</string>
+    <string name="tc4_validate_clipboard_content_empty">O contido do portapapeis está baleiro</string>
+    <string name="tc4_validate_yaml_not_object">Non é un obxecto YAML válido</string>
+    <string name="tc4_validate_yaml_missing_type">Falta o campo \'type\' ou type non é unha cadea</string>
+    <string name="tc4_validate_yaml_invalid_type">O tipo \'%1$s\' non é válido, permitido: %2$s</string>
+    <string name="tc4_validate_yaml_format_error">Erro de formato YAML: %1$s</string>
+    <string name="tc4_validate_list_unavailable">Non se pode acceder á lista actual</string>
+
+    <string name="tc4_feature_mic_permission">Requírese permiso de micrófono</string>
+    <string name="tc4_feature_cmd_sent">Comando enviado ao terminal</string>
+    <string name="tc4_feature_link_copied">%1$s copiado</string>
+    <string name="tc4_feature_screen_scale">Escala de pantalla %1$sx</string>
+
+    <string name="tc4_shortcut_dialog_title">Xerador de atallos do lanzador</string>
+    <string name="tc4_shortcut_pin_unsupported">O lanzador actual non admite fixar atallos</string>
+
+    <string name="tc4_desktop_picker_title">Seleccionar ficheiro .desktop</string>
+    <string name="tc4_desktop_picker_empty">Non se atoparon ficheiros .desktop</string>
+
+    <string name="tc4_terminal_no_session">Sen sesión</string>
+
+    <string name="tc4_import_file_label">Importar ao cartafol público</string>
+    <string name="tc4_import_file_result">%1$d/%2$d ficheiro(s) importado(s) ao cartafol público</string>
+
+    <string name="tc4_shortcut_container_not_found">Contedor \"%1$s\" non atopado, recrea o atallo</string>
+    <string name="tc4_shortcut_another_running">Outro contedor está en execución, comando ignorado</string>
+
+    <string name="tc4_permission_file_granted">Permiso de xestión de ficheiros concedido</string>
+    <string name="tc4_permission_file_denied">Permiso de xestión de ficheiros denegado</string>
+
+    <string name="tc4_signal9_title">Que pasou?</string>
+    <string name="tc4_signal9_description">O terminal terminou de forma anormal co código de erro 9. Isto é causado pola limitación de procesos fillos en Android 12+. Debes desactivar manualmente esta limitación.</string>
+    <string name="tc4_signal9_tool_hint">Podes usar estas ferramentas para solucionalo:</string>
+    <string name="tc4_signal9_tool_btn">Ferramenta de solución</string>
+    <string name="tc4_signal9_tutorial_hint">Se as ferramentas anteriores non funcionan, ou o teu dispositivo é un HarmonyOS non AOSP, segue este tutorial (require PC e cable USB):</string>
+    <string name="tc4_signal9_tutorial_btn">Ligazón do tutorial</string>
+    <string name="tc4_signal9_dev_options_note">Activa as Opcións de Desenvolvemento en Configuración (normalmente busca Sobre o dispositivo → toca 7 veces Número de compilación), despois busca \"Desactivar restricións de procesos fillos\" nas Opcións de Desenvolvemento e actívao. Os pasos poden variar segundo o dispositivo — busca en liña para máis detalles.</string>
+
+    <string name="tc4_license_title">Licenza Pública Xeral GNU v3.0</string>
+    <string name="tc4_license_description">Tiny Container é de código aberto baixo a licenza GPLv3</string>
+
+    <string name="tc4_oss_title">Bibliotecas de código aberto</string>
+    <string name="tc4_oss_description">Esta aplicación usa as seguintes bibliotecas de código aberto. Grazas a estes proxectos por facer o desenvolvemento máis sinxelo.</string>
+
+    <string name="tc4_hint_name">Nome</string>
+    <string name="tc4_hint_description">Descrición</string>
+    <string name="tc4_hint_command">Comando</string>
+    <string name="tc4_hint_link">Ligazón</string>
+    <string name="tc4_hint_shortcut_name">Nome do atallo</string>
+    <string name="tc4_hint_cache_path">Ruta da caché</string>
+    <string name="tc4_hint_xserver_args">Argumentos de X Server</string>
+    <string name="tc4_hint_container_code">Código do contedor</string>
+    <string name="tc4_hint_env_vars">Variables de contorno</string>
+    <string name="tc4_hint_path_extra">PATH adicional</string>
+    <string name="tc4_hint_ld_path_extra">LD_LIBRARY_PATH adicional</string>
+    <string name="tc4_hint_ld_preload">Bibliotecas LD_PRELOAD</string>
+    <string name="tc4_hint_proot_args">Argumentos de Proot</string>
+    <string name="tc4_hint_pre_host_cmd">Comando do host antes do inicio</string>
+    <string name="tc4_hint_post_container_cmd">Comando do contedor despois do inicio</string>
+    <string name="tc4_hint_post_end_host_cmd">Comando do host despois da saída</string>
+
+    <string name="tc4_helper_one_per_line">Un por liña</string>
+    <string name="tc4_helper_one_path_per_line">Unha ruta por liña</string>
+    <string name="tc4_helper_key_value_per_line">Un por liña, formato CLAVE=VALOR</string>
+    <string name="tc4_helper_exec_on_host">Execútase no host Android</string>
+    <string name="tc4_helper_exec_in_container">Execútase dentro do contedor</string>
+    <string name="tc4_helper_exec_on_host_after_exit">Execútase no host Android, despois de saír do contedor</string>
+    <string name="tc4_helper_exec_in_container_note">Comando executado dentro do contedor</string>
+    <string name="tc4_helper_code_rules">1-32 caracteres alfanuméricos, non debe entrar en conflito cos nomes reservados do sistema</string>
+
+    <string name="tc4_feature_label_settings">Configuración</string>
+    <string name="tc4_feature_label_about">Acerca de</string>
+
+    <string name="tc4_quicks_cd_paste">Pegar</string>
+    <string name="tc4_quicks_cd_add_folder">Engadir cartafol</string>
+    <string name="tc4_quicks_cd_add">Engadir</string>
+    <string name="tc4_quicks_cd_delete">Eliminar</string>
+    <string name="tc4_quicks_cd_copy">Copiar</string>
+    <string name="tc4_quicks_cd_edit">Editar</string>
+    <string name="tc4_quicks_cd_close">Pechar</string>
+
+    <string name="tc4_feature_label_set_avnc">Configuración de AVNC</string>
+    <string name="tc4_feature_label_about_avnc">Acerca de AVNC</string>
+    <string name="tc4_feature_label_set_x11">Configuración de Termux:X11</string>
+
+    <string name="tc4_tooltip_export">Exportar</string>
+    <string name="tc4_tooltip_launch">Iniciar</string>
+    <string name="tc4_tooltip_remove_error">Eliminar entrada de erro</string>
+
+    <string name="tc4_features_title">Funcións</string>
+    <string name="tc4_features_description">Configura aquí as funcións do software do contedor!</string>
+    <string name="tc4_features_empty">Non hai funcións dispoñibles para este contedor</string>
+
+    <string name="tc4_help_title">Axuda</string>
+    <string name="tc4_help_description">Ver información do proxecto, obter axuda e actualizacións</string>
+
+    <string name="tc4_container_initializing">Inicializando o contedor…</string>
+    <string name="tc4_container_loading">Cargando a lista de contedores…</string>
+    <string name="tc4_container_empty_with_link">Non hai contedores instalados.\nDescarga contedores da páxina oficial e impórtaos:\nhttps://www.github.com/tiny-computer/images/releases</string>
+    <string name="tc4_update_available">Nova versión %1$s dispoñible! Actualice por favor.</string>
+
+    <string name="tc4_helper_cache_vars">Un por liña, admite $CACHE_DIR e $CONTAINER_DIR</string>
+
+    <string name="tc4_validate_yaml_line_error">Liña %1$d: %2$s</string>
+    <string name="tc4_validate_yaml_child_null">O nodo fillo %1$d é nulo</string>
+    <string name="tc4_validate_yaml_child_error">Nodo fillo %1$d: %2$s</string>
+
+    <string name="tc4_documents_root_containers">Sistemas de ficheiros raíz dos contedores instalados</string>
+    <string name="tc4_documents_root_public">Cartafol compartido entre contedores</string>
+    <string name="tc4_documents_error_create">Non se poden crear ficheiros nesta localización</string>
+    <string name="tc4_documents_error_rename_root">Non se pode renomear este ficheiro</string>
+    <string name="tc4_documents_error_target_exists">O ficheiro de destino xa existe: %1$s</string>
+    <string name="tc4_documents_error_rename_failed">Erro ao renomear: %1$s</string>
+    <string name="tc4_documents_error_delete">Non se pode eliminar este ficheiro</string>
+    <string name="tc4_documents_root_containers_label">Contedores</string>
+    <string name="tc4_documents_root_public_label">Público</string>
+
+    <string name="tc4_menu_toggle_terminal">Alternar terminal</string>
+    <string name="tc4_menu_enter_gui">Entrar na GUI</string>
+    <string name="tc4_menu_import_container">Importar contedor</string>
+    <string name="tc4_menu_file_permission">Solicitar acceso a ficheiros</string>
+    <string name="tc4_menu_battery_optimization">Desactivar optimización da batería</string>
+    <string name="tc4_menu_shortcuts">Atallos</string>
+
+
+</resources>

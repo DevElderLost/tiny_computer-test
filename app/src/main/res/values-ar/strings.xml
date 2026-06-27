@@ -1,0 +1,301 @@
+<resources>
+    <string name="tc4_app_name">الحاوية الصغيرة</string>
+
+    <!-- ==================== Common Buttons ==================== -->
+    <string name="tc4_btn_ok">موافق</string>
+    <string name="tc4_btn_cancel">إلغاء</string>
+    <string name="tc4_btn_delete">حذف</string>
+    <string name="tc4_btn_continue">متابعة</string>
+    <string name="tc4_btn_save_exit">حفظ وخروج</string>
+    <string name="tc4_btn_save_send">حفظ وإرسال الأمر</string>
+    <string name="tc4_btn_back">رجوع</string>
+    <string name="tc4_btn_generate">إنشاء</string>
+    <string name="tc4_btn_quick_fill">تعبئة سريعة</string>
+    <string name="tc4_btn_confirm_install">تأكيد التثبيت</string>
+    <string name="tc4_btn_details">تفاصيل</string>
+    <string name="tc4_btn_edit">تحرير</string>
+    <string name="tc4_btn_share">مشاركة</string>
+    <string name="tc4_btn_update">تحديث</string>
+
+
+    <!-- ==================== Common Labels ==================== -->
+    <string name="tc4_label_enable">تمكين</string>
+    <string name="tc4_label_default_gui">تعيين كواجهة رسومية افتراضية</string>
+    <string name="tc4_label_adapt_screen">التكيف مع حجم الشاشة</string>
+    <string name="tc4_label_effective_next_launch">يسري عند تشغيل الحاوية التالي</string>
+    <string name="tc4_label_effective_this_session">يسري لهذه الجلسة فقط. يجب التعطيل قبل الخروج.</string>
+    <string name="tc4_label_version">الإصدار %1$s</string>
+
+    <!-- ==================== Container Management ==================== -->
+    <string name="tc4_container_title">إدارة الحاويات</string>
+    <string name="tc4_container_empty_hint">لا توجد حاويات، انقر أعلى اليمين للاستيراد</string>
+    <string name="tc4_container_calculating_space">جاري حساب المساحة…</string>
+    <string name="tc4_container_delete_success">تم الحذف بنجاح</string>
+    <string name="tc4_container_delete_failed">فشل الحذف: %1$s</string>
+    <string name="tc4_container_loading_failed">فشل تحميل \"%1$s\"</string>
+    <string name="tc4_container_list_load_failed">فشل تحميل قائمة الحاويات: %1$s</string>
+    <string name="tc4_container_config_missing">إعدادات الحاوية غير موجودة</string>
+    <string name="tc4_container_missing_boot_cmd">الحاوية \"%1$s\" تفتقد إعدادات boot_command</string>
+    <string name="tc4_container_config_lost">فقدت إعدادات الحاوية \"%1$s\"، يرجى إعادة التثبيت</string>
+
+    <!-- Delete dialog -->
+    <string name="tc4_dialog_delete_title">تأكيد الحذف</string>
+    <string name="tc4_dialog_delete_message">هل أنت متأكد أنك تريد حذف \"%1$s\" بشكل دائم؟\nلا يمكن التراجع عن هذا الإجراء.</string>
+    <string name="tc4_dialog_deleting_title">جاري حذف ملفات الحاوية، يرجى الانتظار…</string>
+
+    <!-- Edit dialog -->
+    <string name="tc4_dialog_edit_container_title">تحرير معلومات الحاوية</string>
+
+    <!-- Exit dialog -->
+    <string name="tc4_dialog_exit_title">الخروج من الحاوية</string>
+    <string name="tc4_dialog_exit_message">هل تريد إيقاف الحاوية والعودة إلى صفحة الإدارة؟</string>
+
+    <!-- ==================== Import Flow ==================== -->
+    <string name="tc4_import_title">استيراد حاوية</string>
+    <string name="tc4_import_warning">1. استورد فقط الحاويات من مصادر موثوقة.\nيمكن للحاوية الخبيثة تدمير الحاويات الأخرى وحتى التطبيق نفسه.\nإذا منحت إذن التخزين، يمكنها أيضًا تعديل أو إرسال أو حذف البيانات المهمة على جهازك (مثل الصور).\n\n2. إخلاء المسؤولية: هذا البرنامج مفتوح المصدر بموجب GPL، ومقدم بدون أي ضمان.\nلا يتحمل المؤلف أي مسؤولية تحت أي ظرف من الظروف.\nيجب على المستخدمين مراجعة الكود المصدري وتحمل جميع المخاطر.</string>
+    <string name="tc4_import_builtin_btn">تثبيت الحاوية المضمنة</string>
+    <string name="tc4_import_copying_title">جاري نسخ ملفات الحاوية إلى الذاكرة المؤقتة…</string>
+    <string name="tc4_import_extracting_title">جاري استخراج الإعدادات…</string>
+    <string name="tc4_import_installing_title">جاري تثبيت الحاوية…</string>
+    <string name="tc4_import_deleting_old_title">جاري حذف ملفات الحاوية القديمة…</string>
+    <string name="tc4_import_cleaning_title">جاري تنظيف الملفات المؤقتة…</string>
+    <string name="tc4_import_completed">تم تثبيت \"%1$s\" بنجاح</string>
+    <string name="tc4_import_failed">فشل التثبيت: %1$s</string>
+    <string name="tc4_import_builtin_failed">فشل تثبيت الحاوية المضمنة: %1$s</string>
+    <string name="tc4_import_auto_failed">فشل التثبيت التلقائي للحاوية المضمنة: %1$s</string>
+    <string name="tc4_install_state_error">خطأ في حالة التثبيت، يرجى إعادة المحاولة</string>
+    <string name="tc4_import_missing_code">حقل \'code\' مفقود في الإعدادات</string>
+    <string name="tc4_import_missing_code_builtin">حقل \'code\' مفقود في إعدادات الحاوية المضمنة</string>
+    <string name="tc4_import_no_config">لم يتم العثور على إعدادات .tiny.yaml في ملف الحاوية</string>
+    <string name="tc4_import_config_parse_failed">فشل تحليل الإعدادات: %1$s</string>
+    <string name="tc4_import_completed_title">اكتمل التثبيت</string>
+    <string name="tc4_import_failed_title">فشل التثبيت</string>
+
+    <!-- Install confirm dialog -->
+    <string name="tc4_install_launch_after">تشغيل بعد التثبيت</string>
+    <string name="tc4_install_warning_data">سيتم مسح محتويات %1$s، لا يمكن التراجع عن هذا الإجراء</string>
+    <string name="tc4_install_warning_overwrite">\"%1$s\" مثبت بالفعل، سيتم استبداله ولا يمكن استعادته</string>
+
+    <!-- ==================== Export Flow ==================== -->
+    <string name="tc4_export_title">تصدير الحاوية</string>
+    <string name="tc4_export_warning">1. أمر \"التصدير\" مقدم من منشئ الحاوية.\nعادةً لا يكون التصدير نسخة احتياطية - إنه ينشئ حاوية قابلة للمشاركة وقد يتضمن أوامر لتنظيف البيانات الخاصة.\nلينكس مرن وقد تختلف نتيجة التصدير عن التوقعات.\nيرجى مراجعة export_command في /.tiny.yaml أولاً.\n\n2. إخلاء المسؤولية: هذا البرنامج مفتوح المصدر بموجب GPL، ومقدم بدون أي ضمان.\nلا يتحمل المؤلف أي مسؤولية تحت أي ظرف من الظروف.\nيجب على المستخدمين مراجعة الكود المصدري وتحمل جميع المخاطر.</string>
+    <string name="tc4_export_success">تم التصدير بنجاح</string>
+    <string name="tc4_export_failed">فشل التصدير: %1$s</string>
+    <string name="tc4_export_missing_cmd">export_command مفقود في الإعدادات</string>
+    <string name="tc4_export_no_output">لم ينتج عن التصدير ملف</string>
+    <string name="tc4_export_cannot_write">لا يمكن الكتابة إلى المسار المحدد</string>
+    <string name="tc4_export_progress_title">جاري تصدير ملفات الحاوية…</string>
+
+    <!-- ==================== Settings Page ==================== -->
+    <string name="tc4_settings_title">الإعدادات</string>
+    <string name="tc4_settings_description">قم بتكوين إعدادات التطبيق هنا!\nللإعدادات الخاصة بالحاوية، انظر \"الميزات\" أو \"الاختصارات - الخيارات\".</string>
+    <string name="tc4_settings_shortcut_title">منشئ اختصارات المشغل</string>
+    <string name="tc4_settings_shortcut_desc">إنشاء اختصار سطح مكتب للحاوية الحالية لتشغيل الأوامر مباشرة</string>
+    <string name="tc4_settings_auto_launch_title">تشغيل الحاوية تلقائياً</string>
+    <string name="tc4_settings_auto_launch_desc">يسري عند تشغيل الحاوية التالي</string>
+    <string name="tc4_settings_auto_launch_gui_title">تشغيل الواجهة الرسومية تلقائياً</string>
+    <string name="tc4_settings_legacy_proot_title">استخدام Proot القديم</string>
+    <string name="tc4_settings_legacy_proot_desc">يجلب أحدث proot محاكاة bwrap وnetlink المثيرة.\nإنه يحسن التوافق، لكنه يبطئ التحميل في بعض السيناريوهات (مثل تشغيل الفيديو عبر الشبكة يصبح بطيئاً).\n*هذا الإعداد شامل. للإعدادات لكل حاوية، غير proot binary في أمر التمهيد بـ /.tiny.yaml إلى proot-classic أو proot-latest.\nيسري عند تشغيل الحاوية التالي</string>
+    <string name="tc4_settings_reset_bootstrap_title">إعادة تثبيت Bootstrap</string>
+    <string name="tc4_settings_reset_bootstrap_desc">يسري عند تشغيل الحاوية التالي</string>
+    <string name="tc4_settings_auto_check_update_title">التحقق التلقائي من التحديثات</string>
+    <string name="tc4_settings_auto_check_update_desc">التحقق من الإصدارات الجديدة عند تشغيل الحاوية</string>
+    <string name="tc4_settings_manage_files_title">الوصول إلى جميع الملفات</string>
+    <string name="tc4_settings_manage_files_desc">السماح للحاوية بالوصول إلى ملفات أندرويد\nعند استخدام الحاويات الرسمية، يكون تخزين Android عادةً في /mnt/sdcard</string>
+    <string name="tc4_settings_battery_title">البطارية غير مقيدة</string>
+    <string name="tc4_settings_battery_desc">تعطيل تحسين البطارية لمنع النظام من قتل التطبيق</string>
+
+    <!-- ==================== Help Page ==================== -->
+    <string name="tc4_help_source_code_title">مستودع الكود المصدري</string>
+    <string name="tc4_help_source_code_desc">شاهد كل سطر من الكود. احصل على الوثائق، قدم ملاحظات والمزيد.</string>
+    <string name="tc4_help_releases_title">صفحة الإصدارات</string>
+    <string name="tc4_help_releases_desc">احصل على أحدث إصدار من Tiny Container</string>
+    <string name="tc4_help_oss_title">المكتبات مفتوحة المصدر</string>
+    <string name="tc4_help_oss_desc">شكراً لهذه المكتبات لجعل التطوير أبسط.</string>
+    <string name="tc4_help_license_title">الترخيص</string>
+    <string name="tc4_help_license_desc">PRoot — مكون أساسي لتشغيل لينكس — مرخص بموجب GPL، لذا يجب أن أفتح مصدر الكود أيضاً :D</string>
+    <string name="tc4_help_wechat_title">حساب WeChat الرسمي: 装机宝典</string>
+    <string name="tc4_help_wechat_desc">قد أنشر بعض دروس Tiny Container هنا. إذا لم تستطع الوصول إلى GitHub، قد يساعدك هذا.</string>
+    <string name="tc4_help_bilibili_title">Bilibili الخاص بـ Caten</string>
+    <string name="tc4_help_bilibili_desc">قد أنشر فيديوهات عن Tiny Container، وأشياء أخرى أيضاً، مثل Plants vs. Zombies :P</string>
+    <string name="tc4_help_spark_store_title">رابط: متجر تطبيقات Spark</string>
+    <string name="tc4_help_spark_store_desc">شرارة واحدة يمكن أن تشعل حريقاً في البراري</string>
+    <string name="tc4_help_gxde_title">رابط: GXDE OS</string>
+    <string name="tc4_help_gxde_desc">توزيعة لينكس جميلة وخفيفة وجاهزة للاستخدام.\nمبنية على قاعدة محدثة، تعيد GXDE DDE 15 إلى دائرة الضوء</string>
+
+    <!-- ==================== Quick Commands / Options ==================== -->
+    <string name="tc4_quick_commands_tab">أوامر سريعة</string>
+    <string name="tc4_quick_options_tab">خيارات</string>
+    <string name="tc4_quick_commands_default_desc">انقر على أمر لإدخاله تلقائياً في الطرفية.</string>
+    <string name="tc4_quick_options_default_desc">تبديل الخيارات، يسري عند التشغيل التالي.</string>
+    <string name="tc4_quick_commands_empty">لا توجد أوامر سريعة. أضف أو الصق للاستيراد.</string>
+    <string name="tc4_quick_options_empty">لا توجد خيارات مكونة. أضف أو الصق للاستيراد.</string>
+    <string name="tc4_quick_folder_added">تمت إضافة المجلد</string>
+    <string name="tc4_quick_command_added">تمت إضافة الأمر</string>
+    <string name="tc4_quick_option_added">تمت إضافة الخيار</string>
+    <string name="tc4_quick_updated">تم التحديث</string>
+    <string name="tc4_quick_deleted">تم الحذف</string>
+    <string name="tc4_quick_delete_title">حذف العقدة</string>
+    <string name="tc4_quick_delete_selected">تأكيد حذف العقد المحددة؟</string>
+    <string name="tc4_quick_delete_named">تأكيد حذف العقد التالية؟\n%1$s</string>
+    <string name="tc4_quick_import_success">تم استيراد %1$d عقدة بنجاح</string>
+    <string name="tc4_quick_import_partial">تم استيراد %1$d، فشل %2$d</string>
+    <string name="tc4_quick_import_failed">فشل الاستيراد: %1$s</string>
+    <string name="tc4_quick_copied">تم نسخ %1$d عقدة إلى الحافظة</string>
+
+    <!-- ==================== Validation ==================== -->
+    <string name="tc4_validate_name_empty">لا يمكن أن يكون الاسم فارغاً</string>
+    <string name="tc4_validate_command_empty">لا يمكن أن يكون الأمر فارغاً</string>
+    <string name="tc4_validate_code_length">يجب أن يكون الطول 1-32 حرفاً</string>
+    <string name="tc4_validate_code_chars">مسموح فقط بالأحرف والأرقام</string>
+    <string name="tc4_validate_code_reserved">هذا الاسم محجوز من قبل النظام، يرجى استخدام آخر</string>
+    <string name="tc4_validate_clipboard_empty">الحافظة فارغة</string>
+    <string name="tc4_validate_clipboard_read">لا يمكن قراءة محتوى الحافظة</string>
+    <string name="tc4_validate_clipboard_content_empty">محتوى الحافظة فارغ</string>
+    <string name="tc4_validate_yaml_not_object">ليس كائن YAML صالحاً</string>
+    <string name="tc4_validate_yaml_missing_type">حقل \'type\' مفقود أو type ليس نصاً</string>
+    <string name="tc4_validate_yaml_invalid_type">النوع \'%1$s\' غير صالح، المسموح: %2$s</string>
+    <string name="tc4_validate_yaml_format_error">خطأ في تنسيق YAML: %1$s</string>
+    <string name="tc4_validate_list_unavailable">لا يمكن الوصول إلى القائمة الحالية</string>
+
+    <!-- ==================== Features ==================== -->
+    <string name="tc4_feature_mic_permission">مطلوب إذن الميكروفون</string>
+    <string name="tc4_feature_cmd_sent">تم إرسال الأمر إلى الطرفية</string>
+    <string name="tc4_feature_link_copied">تم نسخ %1$s</string>
+    <string name="tc4_feature_screen_scale">مقياس الشاشة %1$sx</string>
+
+    <!-- ==================== Launcher Shortcut ==================== -->
+    <string name="tc4_shortcut_dialog_title">منشئ اختصارات المشغل</string>
+    <string name="tc4_shortcut_pin_unsupported">المشغل الحالي لا يدعم تثبيت الاختصارات</string>
+
+    <!-- ==================== Desktop File Picker ==================== -->
+    <string name="tc4_desktop_picker_title">اختيار ملف .desktop</string>
+    <string name="tc4_desktop_picker_empty">لم يتم العثور على ملفات .desktop</string>
+
+    <!-- ==================== Terminal ==================== -->
+    <string name="tc4_terminal_no_session">لا توجد جلسة</string>
+
+    <!-- ==================== Import Files ==================== -->
+    <string name="tc4_import_file_label">استيراد إلى المجلد العام</string>
+    <string name="tc4_import_file_result">تم استيراد %1$d/%2$d ملف إلى المجلد العام</string>
+
+    <!-- ==================== Shortcut Launch ==================== -->
+    <string name="tc4_shortcut_container_not_found">الحاوية \"%1$s\" غير موجودة، يرجى إعادة إنشاء الاختصار</string>
+    <string name="tc4_shortcut_another_running">حاوية أخرى قيد التشغيل، تم تجاهل الأمر</string>
+
+    <!-- ==================== Permissions ==================== -->
+    <string name="tc4_permission_file_granted">تم منح إذن إدارة الملفات</string>
+    <string name="tc4_permission_file_denied">تم رفض إذن إدارة الملفات</string>
+
+    <!-- ==================== Signal 9 Page ==================== -->
+    <string name="tc4_signal9_title">ماذا حدث؟</string>
+    <string name="tc4_signal9_description">انتهت الطرفية بشكل غير طبيعي برمز الخطأ 9. هذا ناتج عن تقييد Android 12+ للعمليات الفرعية. تحتاج إلى تعطيل هذا التقييد يدوياً.</string>
+    <string name="tc4_signal9_tool_hint">يمكنك استخدام هذه الأدوات للإصلاح:</string>
+    <string name="tc4_signal9_tool_btn">أداة الإصلاح</string>
+    <string name="tc4_signal9_tutorial_hint">إذا لم تعمل الأدوات أعلاه، أو كان جهازك جهاز HarmonyOS غير AOSP، اتبع هذا البرنامج التعليمي (يتطلب كمبيوتر وكابل USB):</string>
+    <string name="tc4_signal9_tutorial_btn">رابط البرنامج التعليمي</string>
+    <string name="tc4_signal9_dev_options_note">قم بتمكين خيارات المطور في الإعدادات (عادةً ابحث عن حول الجهاز → انقر على رقم الإصدار 7 مرات)، ثم ابحث عن \"تعطيل تقييد العمليات الفرعية\" في خيارات المطور وقم بتشغيله. قد تختلف الخطوات حسب الجهاز — ابحث عبر الإنترنت للتفاصيل.</string>
+
+    <!-- ==================== License Page ==================== -->
+    <string name="tc4_license_title">رخصة GNU العامة v3.0</string>
+    <string name="tc4_license_description">Tiny Container مفتوح المصدر بموجب رخصة GPLv3</string>
+
+    <!-- ==================== Open Source Libs Page ==================== -->
+    <string name="tc4_oss_title">المكتبات مفتوحة المصدر</string>
+    <string name="tc4_oss_description">يستخدم هذا التطبيق المكتبات مفتوحة المصدر التالية. شكراً لهذه المشاريع لجعل التطوير أبسط.</string>
+
+    <!-- ==================== Input Hints ==================== -->
+    <string name="tc4_hint_name">الاسم</string>
+    <string name="tc4_hint_description">الوصف</string>
+    <string name="tc4_hint_command">الأمر</string>
+    <string name="tc4_hint_link">الرابط</string>
+    <string name="tc4_hint_shortcut_name">اسم الاختصار</string>
+    <string name="tc4_hint_cache_path">مسار التخزين المؤقت</string>
+    <string name="tc4_hint_xserver_args">وسائط X Server</string>
+    <string name="tc4_hint_container_code">رمز الحاوية</string>
+    <string name="tc4_hint_env_vars">متغيرات البيئة</string>
+    <string name="tc4_hint_path_extra">PATH إضافي</string>
+    <string name="tc4_hint_ld_path_extra">LD_LIBRARY_PATH إضافي</string>
+    <string name="tc4_hint_ld_preload">مكتبات LD_PRELOAD</string>
+    <string name="tc4_hint_proot_args">وسائط Proot</string>
+    <string name="tc4_hint_pre_host_cmd">أمر المضيف قبل البدء</string>
+    <string name="tc4_hint_post_container_cmd">أمر الحاوية بعد البدء</string>
+    <string name="tc4_hint_post_end_host_cmd">أمر المضيف بعد الخروج</string>
+
+    <!-- ==================== Input Helper Texts ==================== -->
+    <string name="tc4_helper_one_per_line">واحد لكل سطر</string>
+    <string name="tc4_helper_one_path_per_line">مسار واحد لكل سطر</string>
+    <string name="tc4_helper_key_value_per_line">واحد لكل سطر، بالتنسيق KEY=VALUE</string>
+    <string name="tc4_helper_exec_on_host">ينفذ على مضيف أندرويد</string>
+    <string name="tc4_helper_exec_in_container">ينفذ داخل الحاوية</string>
+    <string name="tc4_helper_exec_on_host_after_exit">ينفذ على مضيف أندرويد، بعد خروج الحاوية</string>
+    <string name="tc4_helper_exec_in_container_note">أمر ينفذ داخل الحاوية</string>
+    <string name="tc4_helper_code_rules">1-32 حرفاً أبجدياً رقمياً، يجب ألا يتعارض مع أسماء النظام المحجوزة</string>
+
+    <!-- ==================== Feature Labels ==================== -->
+    <string name="tc4_feature_label_settings">الإعدادات</string>
+    <string name="tc4_feature_label_about">حول</string>
+
+    <!-- ==================== Quicks Toolbar Content Descriptions ==================== -->
+    <string name="tc4_quicks_cd_paste">لصق</string>
+    <string name="tc4_quicks_cd_add_folder">إضافة مجلد</string>
+    <string name="tc4_quicks_cd_add">إضافة</string>
+    <string name="tc4_quicks_cd_delete">حذف</string>
+    <string name="tc4_quicks_cd_copy">نسخ</string>
+    <string name="tc4_quicks_cd_edit">تحرير</string>
+    <string name="tc4_quicks_cd_close">إغلاق</string>
+
+    <!-- ==================== Feature Labels ==================== -->
+    <string name="tc4_feature_label_set_avnc">إعدادات AVNC</string>
+    <string name="tc4_feature_label_about_avnc">حول AVNC</string>
+    <string name="tc4_feature_label_set_x11">إعدادات Termux:X11</string>
+
+    <!-- ==================== Container Card Tooltips ==================== -->
+    <string name="tc4_tooltip_export">تصدير</string>
+    <string name="tc4_tooltip_launch">تشغيل</string>
+    <string name="tc4_tooltip_remove_error">إزالة إدخال الخطأ</string>
+
+    <!-- ==================== Features Page ==================== -->
+    <string name="tc4_features_title">الميزات</string>
+    <string name="tc4_features_description">قم بتكوين ميزات برامج الحاوية هنا!</string>
+    <string name="tc4_features_empty">لا توجد ميزات متاحة لهذه الحاوية</string>
+
+    <!-- ==================== Help Page (title/desc) ==================== -->
+    <string name="tc4_help_title">المساعدة</string>
+    <string name="tc4_help_description">عرض معلومات المشروع، الحصول على المساعدة والتحديثات</string>
+
+    <!-- ==================== Container Main ==================== -->
+    <string name="tc4_container_initializing">جاري تهيئة الحاوية…</string>
+    <string name="tc4_container_loading">جاري تحميل قائمة الحاويات…</string>
+    <string name="tc4_container_empty_with_link">لا توجد حاويات مثبتة.\nقم بتنزيل الحاويات من الصفحة الرسمية واستوردها:\nhttps://www.github.com/tiny-computer/images/releases</string>
+    <string name="tc4_update_available">الإصدار الجديد %1$s متاح! يرجى التحديث.</string>
+
+    <!-- ==================== More Helper Texts ==================== -->
+    <string name="tc4_helper_cache_vars">واحد لكل سطر، يدعم $CACHE_DIR و $CONTAINER_DIR</string>
+
+    <!-- ==================== YAML Import Validation ==================== -->
+    <string name="tc4_validate_yaml_line_error">السطر %1$d: %2$s</string>
+    <string name="tc4_validate_yaml_child_null">العقدة الفرعية %1$d فارغة</string>
+    <string name="tc4_validate_yaml_child_error">العقدة الفرعية %1$d: %2$s</string>
+
+    <!-- ==================== Documents Provider ==================== -->
+    <string name="tc4_documents_root_containers">أنظمة ملفات جذر الحاويات المثبتة</string>
+    <string name="tc4_documents_root_public">مجلد مشترك عبر الحاويات</string>
+    <string name="tc4_documents_error_create">لا يمكن إنشاء ملفات في هذا الموقع</string>
+    <string name="tc4_documents_error_rename_root">لا يمكن إعادة تسمية هذا الملف</string>
+    <string name="tc4_documents_error_target_exists">الملف الهدف موجود بالفعل: %1$s</string>
+    <string name="tc4_documents_error_rename_failed">فشلت إعادة التسمية: %1$s</string>
+    <string name="tc4_documents_error_delete">لا يمكن حذف هذا الملف</string>
+    <string name="tc4_documents_root_containers_label">الحاويات</string>
+    <string name="tc4_documents_root_public_label">عام</string>
+
+    <!-- ==================== Menu ==================== -->
+    <string name="tc4_menu_toggle_terminal">تبديل الطرفية</string>
+    <string name="tc4_menu_enter_gui">الدخول إلى الواجهة الرسومية</string>
+    <string name="tc4_menu_import_container">استيراد حاوية</string>
+    <string name="tc4_menu_file_permission">طلب الوصول إلى الملفات</string>
+    <string name="tc4_menu_battery_optimization">تعطيل تحسين البطارية</string>
+    <string name="tc4_menu_shortcuts">الاختصارات</string>
+
+
+</resources>

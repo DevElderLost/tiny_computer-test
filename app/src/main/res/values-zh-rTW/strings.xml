@@ -1,0 +1,264 @@
+<resources>
+    <string name="tc4_app_name">小小容器</string>
+
+    <string name="tc4_btn_ok">確定</string>
+    <string name="tc4_btn_cancel">取消</string>
+    <string name="tc4_btn_delete">刪除</string>
+    <string name="tc4_btn_continue">繼續</string>
+    <string name="tc4_btn_save_exit">儲存並退出</string>
+    <string name="tc4_btn_save_send">儲存並發送命令</string>
+    <string name="tc4_btn_back">返回</string>
+    <string name="tc4_btn_generate">產生</string>
+    <string name="tc4_btn_quick_fill">快速填充</string>
+    <string name="tc4_btn_confirm_install">確認安裝</string>
+    <string name="tc4_btn_details">詳情</string>
+    <string name="tc4_btn_edit">編輯</string>
+    <string name="tc4_btn_share">分享</string>
+    <string name="tc4_btn_update">前往更新</string>
+
+    <string name="tc4_label_enable">啟用</string>
+    <string name="tc4_label_default_gui">設為預設圖形介面</string>
+    <string name="tc4_label_adapt_screen">自適應螢幕尺寸</string>
+    <string name="tc4_label_effective_next_launch">下次啟動容器時生效</string>
+    <string name="tc4_label_effective_this_session">僅此次生效。須在退出容器前關閉</string>
+    <string name="tc4_label_version">版本 %1$s</string>
+
+    <string name="tc4_container_title">容器管理</string>
+    <string name="tc4_container_empty_hint">暫無容器，請點選右上角匯入</string>
+    <string name="tc4_container_calculating_space">正在計算佔用…</string>
+    <string name="tc4_container_delete_success">刪除成功</string>
+    <string name="tc4_container_delete_failed">刪除失敗: %1$s</string>
+    <string name="tc4_container_loading_failed">「%1$s」載入失敗</string>
+    <string name="tc4_container_list_load_failed">載入容器列表失敗: %1$s</string>
+    <string name="tc4_container_config_missing">找不到容器設定</string>
+    <string name="tc4_container_missing_boot_cmd">容器「%1$s」缺少 boot_command 設定</string>
+    <string name="tc4_container_config_lost">容器「%1$s」設定遺失，請重新安裝</string>
+
+    <string name="tc4_dialog_delete_title">確認刪除</string>
+    <string name="tc4_dialog_delete_message">確定要永久刪除「%1$s」嗎？\n此操作不可撤銷。</string>
+    <string name="tc4_dialog_deleting_title">正在刪除容器檔案，請稍候…</string>
+
+    <string name="tc4_dialog_edit_container_title">編輯容器資訊</string>
+
+    <string name="tc4_dialog_exit_title">退出容器</string>
+    <string name="tc4_dialog_exit_message">你是否要終止容器並返回容器管理頁面？</string>
+
+    <string name="tc4_import_title">匯入容器</string>
+    <string name="tc4_import_warning">1、儘量只匯入官方容器。\n一個精心設計的惡意容器完全有能力摧毀其他已安裝的容器，甚至軟體本身。\n如果你提供了儲存權限，惡意容器還可以修改、傳送、刪除裝置上的重要資料（如照片）。\n\n2、免責宣告：本軟體按 GPL 開放原始碼，無任何擔保。\n任何情況下作者不承擔責任。\n請使用者自行審閱程式碼並承擔使用風險。</string>
+    <string name="tc4_import_builtin_btn">安裝內建容器</string>
+    <string name="tc4_import_copying_title">正在複製容器檔案到快取…</string>
+    <string name="tc4_import_extracting_title">正在解壓設定資訊…</string>
+    <string name="tc4_import_installing_title">正在安裝容器…</string>
+    <string name="tc4_import_deleting_old_title">正在刪除舊容器檔案…</string>
+    <string name="tc4_import_cleaning_title">正在清理暫存檔案…</string>
+    <string name="tc4_import_completed">「%1$s」安裝完成</string>
+    <string name="tc4_import_failed">安裝失敗: %1$s</string>
+    <string name="tc4_import_builtin_failed">安裝內建容器失敗: %1$s</string>
+    <string name="tc4_import_auto_failed">自動安裝內建容器失敗: %1$s</string>
+    <string name="tc4_install_state_error">安裝狀態異常，請重試</string>
+    <string name="tc4_import_missing_code">設定檔中缺少 code 欄位</string>
+    <string name="tc4_import_missing_code_builtin">內建容器設定中缺少 code 欄位</string>
+    <string name="tc4_import_no_config">容器檔案中未找到 .tiny.yaml 設定</string>
+    <string name="tc4_import_config_parse_failed">解析設定檔失敗: %1$s</string>
+    <string name="tc4_import_completed_title">安裝完成</string>
+    <string name="tc4_import_failed_title">安裝失敗</string>
+
+    <string name="tc4_install_launch_after">安裝後啟動容器</string>
+    <string name="tc4_install_warning_data">%1$s 的內容將被徹底清空，操作不可撤銷</string>
+    <string name="tc4_install_warning_overwrite">「%1$s」已安裝，將被覆蓋且無法恢復</string>
+
+    <string name="tc4_export_title">匯出容器</string>
+    <string name="tc4_export_warning">1、「匯出」命令由容器製作者提供。\n通常「匯出」非備份，目的是生成可分享的容器，故會包含清理隱私的命令。\nLinux 環境靈活，匯出結果可能與預期不符。\n請務必先檢查 /.tiny.yaml 中的 export_command，以免意外。\n\n2、免責宣告：本軟體按 GPL 開放原始碼，無任何擔保。\n任何情況下軟體作者不承擔責任。\n請使用者自行審閱程式碼並承擔使用風險。</string>
+    <string name="tc4_export_success">匯出成功</string>
+    <string name="tc4_export_failed">匯出失敗: %1$s</string>
+    <string name="tc4_export_missing_cmd">設定中缺少 export_command</string>
+    <string name="tc4_export_no_output">匯出未生成檔案</string>
+    <string name="tc4_export_cannot_write">無法寫入所選路徑</string>
+    <string name="tc4_export_progress_title">正在匯出容器檔案…</string>
+
+    <string name="tc4_settings_title">設定</string>
+    <string name="tc4_settings_description">這裡可以進行軟體相關設定！\n針對特定容器的設定見「功能」或「捷徑-選項」。</string>
+    <string name="tc4_settings_shortcut_title">啟動器捷徑產生器</string>
+    <string name="tc4_settings_shortcut_desc">為當前容器產生桌面捷徑，直接點選執行命令</string>
+    <string name="tc4_settings_auto_launch_title">自動啟動容器</string>
+    <string name="tc4_settings_auto_launch_desc">下次啟動容器時生效</string>
+    <string name="tc4_settings_auto_launch_gui_title">自動啟動圖形介面</string>
+    <string name="tc4_settings_legacy_proot_title">使用舊版proot</string>
+    <string name="tc4_settings_legacy_proot_desc">最新的proot帶來了令人興奮的bwrap和netlink模擬。它提升了相容性，但同時也影響了一些場景的載入速度（比如網路影片的載入會變得卡頓）。\n*這個設定是全域的，如果希望針對容器進行設定，請按需更改/.tiny.yaml的啟動命令的proot到proot-classic或proot-latest。\n下次啟動容器時生效</string>
+    <string name="tc4_settings_reset_bootstrap_title">重新安裝引導包</string>
+    <string name="tc4_settings_reset_bootstrap_desc">下次啟動容器時生效</string>
+    <string name="tc4_settings_auto_check_update_title">自動檢測更新</string>
+    <string name="tc4_settings_auto_check_update_desc">啟動容器時自動檢測新版本</string>
+    <string name="tc4_settings_manage_files_title">所有檔案管理權限</string>
+    <string name="tc4_settings_manage_files_desc">允許在容器中存取安卓檔案\n使用官方容器時，安卓儲存空間通常在/mnt/sdcard</string>
+    <string name="tc4_settings_battery_title">電池無限制</string>
+    <string name="tc4_settings_battery_desc">關閉電池最佳化，防止軟體被系統殺死</string>
+
+    <string name="tc4_help_source_code_title">前往程式碼倉庫</string>
+    <string name="tc4_help_source_code_desc">看到小小容器的每一行程式碼。獲取文件，進行回饋等等也都在這裡。</string>
+    <string name="tc4_help_releases_title">前往軟體發布頁面</string>
+    <string name="tc4_help_releases_desc">取得最新版小小容器</string>
+    <string name="tc4_help_oss_title">開源庫</string>
+    <string name="tc4_help_oss_desc">感謝這些庫讓開發變得簡單。</string>
+    <string name="tc4_help_license_title">許可證</string>
+    <string name="tc4_help_license_desc">執行Linux必不可少的元件——PRoot——使用了GPL開源，所以我同樣得開放原始碼:D</string>
+    <string name="tc4_help_wechat_title">微信公眾號：裝機寶典</string>
+    <string name="tc4_help_wechat_desc">我可能會把一些小小容器使用教學發到這裡，如果你存取不了Github，這裡可能會有幫助。</string>
+    <string name="tc4_help_bilibili_title">Caten的bilibili</string>
+    <string name="tc4_help_bilibili_desc">我可能會發關於小小容器的影片，也會發一些別的，比如植物大戰殭屍:P</string>
+    <string name="tc4_help_spark_store_title">友情連結：星火應用商店</string>
+    <string name="tc4_help_spark_store_desc">星星之火，可以燎原</string>
+    <string name="tc4_help_gxde_title">友情連結：GXDE OS</string>
+    <string name="tc4_help_gxde_desc">美觀、輕量、開箱即用的 Linux 發行\n基於更新底層的 GXDE，讓 DDE 15 重回人們的視野</string>
+
+    <string name="tc4_quick_commands_tab">快捷命令</string>
+    <string name="tc4_quick_options_tab">選項設定</string>
+    <string name="tc4_quick_commands_default_desc">點選一個命令，快速自動輸入到終端機。</string>
+    <string name="tc4_quick_options_default_desc">開啟或關閉選項，在下一次啟動時生效。</string>
+    <string name="tc4_quick_commands_empty">目前沒有快捷命令，需要先新增或貼上匯入</string>
+    <string name="tc4_quick_options_empty">目前沒有選項設定，需要先新增或貼上匯入</string>
+    <string name="tc4_quick_folder_added">已新增資料夾</string>
+    <string name="tc4_quick_command_added">已新增命令</string>
+    <string name="tc4_quick_option_added">已新增選項</string>
+    <string name="tc4_quick_updated">已更新</string>
+    <string name="tc4_quick_deleted">已刪除</string>
+    <string name="tc4_quick_delete_title">刪除節點</string>
+    <string name="tc4_quick_delete_selected">確認刪除選中的節點？</string>
+    <string name="tc4_quick_delete_named">確認刪除以下節點？\n%1$s</string>
+    <string name="tc4_quick_import_success">成功匯入 %1$d 個節點</string>
+    <string name="tc4_quick_import_partial">成功匯入 %1$d 個，失敗 %2$d 個</string>
+    <string name="tc4_quick_import_failed">匯入失敗：%1$s</string>
+    <string name="tc4_quick_copied">已複製 %1$d 個節點到剪貼簿</string>
+
+    <string name="tc4_validate_name_empty">名稱不能為空</string>
+    <string name="tc4_validate_command_empty">命令不能為空</string>
+    <string name="tc4_validate_code_length">長度需在 1-32 位之間</string>
+    <string name="tc4_validate_code_chars">只允許字母和數字</string>
+    <string name="tc4_validate_code_reserved">該名稱已被系統保留，請使用其他名稱</string>
+    <string name="tc4_validate_clipboard_empty">剪貼簿為空</string>
+    <string name="tc4_validate_clipboard_read">剪貼簿內容無法讀取</string>
+    <string name="tc4_validate_clipboard_content_empty">剪貼簿內容為空</string>
+    <string name="tc4_validate_yaml_not_object">不是有效的 YAML 物件</string>
+    <string name="tc4_validate_yaml_missing_type">缺少 type 欄位或 type 不是字串</string>
+    <string name="tc4_validate_yaml_invalid_type">類型 \'%1$s\' 不合法，允許的類型：%2$s</string>
+    <string name="tc4_validate_yaml_format_error">YAML 格式錯誤：%1$s</string>
+    <string name="tc4_validate_list_unavailable">無法取得當前列表</string>
+
+    <string name="tc4_feature_mic_permission">需要麥克風權限</string>
+    <string name="tc4_feature_cmd_sent">已發送命令到終端機</string>
+    <string name="tc4_feature_link_copied">已複製 %1$s</string>
+    <string name="tc4_feature_screen_scale">螢幕縮放比 %1$sx</string>
+
+    <string name="tc4_shortcut_dialog_title">啟動器捷徑產生器</string>
+    <string name="tc4_shortcut_pin_unsupported">當前桌面不支援固定快捷方式</string>
+
+    <string name="tc4_desktop_picker_title">選取 .desktop 檔案</string>
+    <string name="tc4_desktop_picker_empty">沒有找到 .desktop 檔案</string>
+
+    <string name="tc4_terminal_no_session">無工作階段</string>
+
+    <string name="tc4_import_file_label">匯入到公共資料夾</string>
+    <string name="tc4_import_file_result">已匯入 %1$d/%2$d 個檔案到公共資料夾</string>
+
+    <string name="tc4_shortcut_container_not_found">容器「%1$s」不存在，請重新建立捷徑</string>
+    <string name="tc4_shortcut_another_running">已啟動其他容器，命令被忽略</string>
+
+    <string name="tc4_permission_file_granted">已取得檔案管理權限</string>
+    <string name="tc4_permission_file_denied">檔案管理權限被拒絕</string>
+
+    <string name="tc4_signal9_title">發生了什麼？</string>
+    <string name="tc4_signal9_description">終端機異常終止，返回錯誤碼9。此錯誤是安卓12+系統限制子程序數量造成的，需要手動關閉限制。</string>
+    <string name="tc4_signal9_tool_hint">可以使用以下工具修復：</string>
+    <string name="tc4_signal9_tool_btn">修復工具</string>
+    <string name="tc4_signal9_tutorial_hint">如果以上工具無法修復，或裝置為非純血的鴻蒙裝置，請按照以下教學解決（需要電腦和傳輸線）：</string>
+    <string name="tc4_signal9_tutorial_btn">教學連結</string>
+    <string name="tc4_signal9_dev_options_note">請在設定應用中啟用開發者選項（通常步驟是找到關於裝置-&gt;系統版本-&gt;連續點選系統版本5次），然後在開發者選項中找到「停止限制子程序」，開啟開關即可。不同機型開啟開發者選項的步驟可能略有不同，具體方法可在網路搜尋。</string>
+
+    <string name="tc4_license_title">GNU General Public License v3.0</string>
+    <string name="tc4_license_description">小小容器使用 GPLv3 許可證開源</string>
+
+    <string name="tc4_oss_title">開源庫</string>
+    <string name="tc4_oss_description">本軟體使用了以下開源庫，感謝這些專案讓開發變得簡單</string>
+
+    <string name="tc4_hint_name">名稱</string>
+    <string name="tc4_hint_description">描述</string>
+    <string name="tc4_hint_command">命令</string>
+    <string name="tc4_hint_link">連結</string>
+    <string name="tc4_hint_shortcut_name">捷徑名稱</string>
+    <string name="tc4_hint_cache_path">快取路徑</string>
+    <string name="tc4_hint_xserver_args">X Server 參數</string>
+    <string name="tc4_hint_container_code">容器識別碼 (code)</string>
+    <string name="tc4_hint_env_vars">環境變數</string>
+    <string name="tc4_hint_path_extra">PATH 附加路徑</string>
+    <string name="tc4_hint_ld_path_extra">LD_LIBRARY_PATH 附加路徑</string>
+    <string name="tc4_hint_ld_preload">LD_PRELOAD 預載入庫</string>
+    <string name="tc4_hint_proot_args">proot 參數</string>
+    <string name="tc4_hint_pre_host_cmd">啟動前主機命令</string>
+    <string name="tc4_hint_post_container_cmd">啟動後容器命令</string>
+    <string name="tc4_hint_post_end_host_cmd">退出後主機命令</string>
+
+    <string name="tc4_helper_one_per_line">每行一條</string>
+    <string name="tc4_helper_one_path_per_line">每行一條路徑</string>
+    <string name="tc4_helper_key_value_per_line">每行一條，格式 KEY=VALUE</string>
+    <string name="tc4_helper_exec_on_host">在安卓端執行</string>
+    <string name="tc4_helper_exec_in_container">在容器內執行</string>
+    <string name="tc4_helper_exec_on_host_after_exit">在安卓端執行，容器退出後傳送</string>
+    <string name="tc4_helper_exec_in_container_note">在容器內執行的命令</string>
+    <string name="tc4_helper_code_rules">1-32 位字母/數字，不可與系統保留名衝突</string>
+
+    <string name="tc4_feature_label_settings">設定</string>
+    <string name="tc4_feature_label_about">關於</string>
+
+    <string name="tc4_quicks_cd_paste">貼上</string>
+    <string name="tc4_quicks_cd_add_folder">新增資料夾</string>
+    <string name="tc4_quicks_cd_add">新增</string>
+    <string name="tc4_quicks_cd_delete">刪除</string>
+    <string name="tc4_quicks_cd_copy">複製</string>
+    <string name="tc4_quicks_cd_edit">編輯</string>
+    <string name="tc4_quicks_cd_close">關閉</string>
+
+    <string name="tc4_feature_label_set_avnc">設定AVNC</string>
+    <string name="tc4_feature_label_about_avnc">關於AVNC</string>
+    <string name="tc4_feature_label_set_x11">設定Termux:X11</string>
+
+    <string name="tc4_tooltip_export">匯出</string>
+    <string name="tc4_tooltip_launch">啟動</string>
+    <string name="tc4_tooltip_remove_error">移除出錯條目</string>
+
+    <string name="tc4_features_title">功能</string>
+    <string name="tc4_features_description">這裡可以對容器使用的軟體功能進行設定！</string>
+    <string name="tc4_features_empty">目前容器沒有可用功能</string>
+
+    <string name="tc4_help_title">幫助</string>
+    <string name="tc4_help_description">檢視專案資訊、取得幫助和更新</string>
+
+    <string name="tc4_container_initializing">正在初始化容器...</string>
+    <string name="tc4_container_loading">正在載入容器列表...</string>
+    <string name="tc4_container_empty_with_link">目前沒有安裝容器。\n請在官方容器頁面下載容器並匯入\nhttps://www.github.com/tiny-computer/images/releases</string>
+    <string name="tc4_update_available">發現新版本 %1$s，建議更新</string>
+
+    <string name="tc4_helper_cache_vars">每行一條，支援 $CACHE_DIR 和 $CONTAINER_DIR</string>
+
+    <string name="tc4_validate_yaml_line_error">第 %1$d 條：%2$s</string>
+    <string name="tc4_validate_yaml_child_null">子節點 %1$d 為空</string>
+    <string name="tc4_validate_yaml_child_error">子節點 %1$d：%2$s</string>
+
+    <string name="tc4_documents_root_containers">已安裝容器的根檔案系統</string>
+    <string name="tc4_documents_root_public">跨容器共享資料夾</string>
+    <string name="tc4_documents_error_create">無法在此位置建立檔案</string>
+    <string name="tc4_documents_error_rename_root">無法重新命名此檔案</string>
+    <string name="tc4_documents_error_target_exists">目標檔案已存在: %1$s</string>
+    <string name="tc4_documents_error_rename_failed">重新命名失敗: %1$s</string>
+    <string name="tc4_documents_error_delete">無法刪除此檔案</string>
+    <string name="tc4_documents_root_containers_label">容器</string>
+    <string name="tc4_documents_root_public_label">公共</string>
+
+    <string name="tc4_menu_toggle_terminal">切換終端機</string>
+    <string name="tc4_menu_enter_gui">進入圖形介面</string>
+    <string name="tc4_menu_import_container">匯入新容器</string>
+    <string name="tc4_menu_file_permission">申請檔案存取權限</string>
+    <string name="tc4_menu_battery_optimization">關閉電池最佳化</string>
+    <string name="tc4_menu_shortcuts">捷徑</string>
+
+
+</resources>

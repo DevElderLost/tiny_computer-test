@@ -1,0 +1,210 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="horizontal">
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <com.google.android.material.button.MaterialButtonGroup
+                android:id="@+id/buttonGroup"
+                style="@style/Widget.Material3.MaterialButtonGroup.Connected"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:paddingVertical="24dp"
+                app:singleSelection="true">
+                <Button
+                    style="?attr/materialButtonTonalStyle"
+                    android:id="@+id/commands"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:height="72dp"
+                    android:text="@string/tc4_quick_commands_tab"
+                    app:icon="@drawable/electric_bolt_24dp_eaddff_fill0_wght400_grad0_opsz24" />
+                <Button
+                    style="?attr/materialButtonTonalStyle"
+                    android:id="@+id/options"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:height="72dp"
+                    android:text="@string/tc4_quick_options_tab"
+                    app:icon="@drawable/instant_mix_24dp_eaddff_fill0_wght400_grad0_opsz24" />
+            </com.google.android.material.button.MaterialButtonGroup>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingHorizontal="24dp"
+                android:gravity="center"
+                android:orientation="horizontal">
+                <TextView
+                    android:id="@+id/name"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/tc4_quick_commands_tab"
+                    android:textAppearance="?attr/textAppearanceHeadlineSmall"/>
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+                    <Button
+                        android:id="@+id/import_from_clipboard"
+                        style="?attr/materialIconButtonStyle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:tooltipText="@string/tc4_quicks_cd_paste"
+                        app:icon="@drawable/content_paste_24dp_eaddff_fill0_wght400_grad0_opsz24" />
+                    <Button
+                        android:id="@+id/add_folder"
+                        style="?attr/materialIconButtonStyle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:tooltipText="@string/tc4_quicks_cd_add_folder"
+                        app:icon="@drawable/create_new_folder_24dp_eaddff_fill0_wght400_grad0_opsz24" />
+                    <Button
+                        android:id="@+id/add"
+                        style="?attr/materialIconButtonStyle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:tooltipText="@string/tc4_quicks_cd_add"
+                        app:icon="@drawable/add_24dp_1f1f1f_fill0_wght400_grad0_opsz24" />
+                </LinearLayout>
+            </LinearLayout>
+            <ScrollView
+                android:layout_width="match_parent"
+                android:layout_height="match_parent">
+                <TextView
+                    android:id="@+id/description"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingHorizontal="24dp"
+                    android:paddingBottom="8dp"
+                    android:autoLink="web"
+                    android:linksClickable="true"
+                    android:text="@string/tc4_quick_commands_default_desc"
+                    android:textAppearance="?attr/textAppearanceBodyMedium"/>
+            </ScrollView>
+        </LinearLayout>
+        <View
+            android:layout_width="1dp"
+            android:layout_height="match_parent"
+            android:layout_weight="0"
+            android:background="?attr/colorOutlineVariant"
+            android:layout_marginTop="108dp"
+            android:layout_marginBottom="12dp" />
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:paddingTop="48dp">
+
+            <HorizontalScrollView
+                android:id="@+id/breadcrumb"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingHorizontal="24dp"
+                android:scrollbars="horizontal">
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/chipGroup"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    app:chipSpacing="4dp"
+                    app:singleLine="true" />
+            </HorizontalScrollView>
+            <TextView
+                android:id="@+id/empty_hint"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:padding="32dp"
+                android:textAppearance="?attr/textAppearanceBodyLarge"
+                android:visibility="gone" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/recycler_view"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:clipToPadding="false"
+                android:paddingHorizontal="12dp"
+                android:paddingBottom="8dp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:gravity="center"
+        android:orientation="horizontal">
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:layout_marginVertical="24dp"
+            android:layout_gravity="center"
+            app:cardCornerRadius="48dp"
+            app:cardElevation="6dp"
+            app:strokeWidth="0dp"
+            app:cardBackgroundColor="?attr/colorPrimaryContainer">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="18dp"
+                android:gravity="center">
+
+                <Button
+                    android:id="@+id/delete"
+                    style="?attr/materialIconButtonStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_margin="0dp"
+                    android:tooltipText="@string/tc4_quicks_cd_delete"
+                    app:icon="@drawable/delete_forever_24dp_1f1f1f_fill0_wght400_grad0_opsz24"
+                    app:iconSize="30dp"
+                    app:iconTint="?attr/colorError" />
+
+                <Button
+                    android:id="@+id/copy"
+                    style="?attr/materialIconButtonStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_margin="0dp"
+                    android:tooltipText="@string/tc4_quicks_cd_copy"
+                    app:icon="@drawable/content_copy_24dp_eaddff_fill0_wght400_grad0_opsz24"
+                    app:iconSize="30dp" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            style="?attr/floatingActionButtonLargeTertiaryStyle"
+            android:id="@+id/edit"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:contentDescription="@string/tc4_quicks_cd_edit"
+            android:layout_marginVertical="24dp"
+            app:srcCompat="@drawable/edit_24dp_eaddff_fill0_wght400_grad0_opsz24"/>
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            style="?attr/floatingActionButtonLargeSecondaryStyle"
+            android:id="@+id/close"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:contentDescription="@string/tc4_quicks_cd_close"
+            android:layout_marginVertical="24dp"
+            app:srcCompat="@drawable/close_24dp_eaddff_fill0_wght400_grad0_opsz24"/>
+    </LinearLayout>
+</FrameLayout>
