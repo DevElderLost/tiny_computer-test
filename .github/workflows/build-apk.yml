@@ -1,15 +1,9 @@
 name: Build APK
 
-# Otomatis jalan tiap ada push ke branch yang didaftarkan di bawah (selalu build DEBUG, desktop_env default xfce).
+# Otomatis jalan tiap ada push ke branch APAPUN (selalu build DEBUG, desktop_env default xfce).
 # Bisa juga dijalankan manual lewat tab Actions -> "Run workflow" buat pilih desktop_env/build_type/release_tag sendiri (termasuk build release).
 on:
   push:
-    branches:
-      - main
-      - master
-      # tambahin branch lain di sini kalau perlu, contoh:
-      # - dev
-      # - feature/*
   workflow_dispatch:
     inputs:
       desktop_env:
