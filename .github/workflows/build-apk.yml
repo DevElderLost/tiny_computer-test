@@ -1,0 +1,175 @@
+name: Build APK
+
+# Otomatis jalan tiap ada push ke branch yang didaftarkan di bawah (selalu build DEBUG, desktop_env default xfce).
+# Bisa juga dijalankan manual lewat tab Actions -> "Run workflow" buat pilih desktop_env/build_type/release_tag sendiri (termasuk build release).
+on:
+  push:
+    branches:
+      - main
+      - master
+      # tambahin branch lain di sini kalau perlu, contoh:
+      # - dev
+      # - feature/*
+  workflow_dispatch:
+    inputs:
+      desktop_env:
+        description: "Desktop environment"
+        required: true
+        type: choice
+        default: xfce
+        options:
+          - xfce
+          - lxqt
+          - gxde
+      build_type:
+        description: "Build type"
+        required: true
+        type: choice
+        default: release
+        options:
+          - release
+          - debug
+      name_suffix:
+        description: "Suffix opsional untuk nama APK (contoh: targetSdk35)"
+        required: false
+        default: ""
+      release_tag:
+        description: "Tag release di Cateners/tiny_computer untuk ambil jniLibs.zip & patch.tar.gz (isi 'latest' kalau mau yang terbaru)"
+        required: true
+        default: "latest"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # Kalau trigger-nya push -> selalu debug & desktop_env xfce.
+    # Kalau trigger-nya manual (workflow_dispatch) -> pakai input yang diisi user, fallback ke default kalau kosong.
+    env:
+      DESKTOP_ENV: ${{ github.event_name == 'push' && 'xfce' || (inputs.desktop_env || 'xfce') }}
+      BUILD_TYPE: ${{ github.event_name == 'push' && 'debug' || (inputs.build_type || 'release') }}
+      NAME_SUFFIX: ${{ github.event_name == 'push' && '' || (inputs.name_suffix || '') }}
+      RELEASE_TAG: ${{ inputs.release_tag || 'latest' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Android SDK (NDK + CMake)
+        uses: android-actions/setup-android@v3
+
+      - name: Install NDK & CMake versi yang dipakai project
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager --install "ndk;27.0.12077973" "cmake;3.22.1"
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          # Pin ke versi tertentu kalau build mulai pecah karena update flutter:
+          # flutter-version: "3.x.x"
+
+      - name: flutter pub get
+        run: flutter pub get
+
+      - name: Generate localization (lib/l10n)
+        run: flutter gen-l10n
+
+      # ---- Ambil jniLibs.zip & patch.tar.gz dari Releases (rootfs SENGAJA TIDAK didownload di sini) ----
+      - name: Download jniLibs.zip & patch.tar.gz
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p /tmp/dl
+          if [ "$RELEASE_TAG" = "latest" ]; then
+            gh release download --repo Cateners/tiny_computer \
+              --pattern "jniLibs.zip" --pattern "patch.tar.gz" -D /tmp/dl
+          else
+            gh release download "$RELEASE_TAG" --repo Cateners/tiny_computer \
+              --pattern "jniLibs.zip" --pattern "patch.tar.gz" -D /tmp/dl
+          fi
+
+      - name: Extract jniLibs ke android/app/src/main/jniLibs/arm64-v8a
+        run: |
+          mkdir -p android/app/src/main/jniLibs/arm64-v8a
+          unzip -o /tmp/dl/jniLibs.zip -d android/app/src/main/jniLibs/arm64-v8a
+
+      - name: Copy patch.tar.gz ke assets
+        run: cp /tmp/dl/patch.tar.gz assets/patch.tar.gz
+
+      # Rootfs (assets/xa*) sengaja di-skip biar build cepat.
+      # APK hasil build ini BELUM ada rootfs di dalamnya -- perlu ditambahkan manual
+      # (unzip APK -> taruh xa* di assets/flutter_assets/assets/ -> re-sign) sebelum dipakai jalan.
+
+      # ---- Setup keystore (cuma kalau BUILD_TYPE = release) ----
+      - name: Setup keystore untuk release signing
+        if: ${{ env.BUILD_TYPE == 'release' }}
+        run: |
+          if [ -z "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]; then
+            echo "::error::Secret ANDROID_KEYSTORE_BASE64 belum diisi, isi dulu di Settings > Secrets and variables > Actions"
+            exit 1
+          fi
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/upload-keystore.jks
+          cat > android/keystore.properties <<EOF
+          storePassword=${{ secrets.ANDROID_STORE_PASSWORD }}
+          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
+          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
+          storeFile=../upload-keystore.jks
+          EOF
+
+      # ---- Build ----
+      - name: flutter build apk (release)
+        if: ${{ env.BUILD_TYPE == 'release' }}
+        run: |
+          flutter build apk --release \
+            --target-platform android-arm64 \
+            --split-per-abi \
+            --obfuscate \
+            --split-debug-info=tiny_computer/sdi
+
+      - name: flutter build apk (debug)
+        if: ${{ env.BUILD_TYPE == 'debug' }}
+        run: |
+          flutter build apk --debug \
+            --target-platform android-arm64 \
+            --split-per-abi
+
+      # ---- Rename output sesuai konvensi build.ps1 (tiny-computer-<env>[-<suffix>].apk) ----
+      - name: Rename APK
+        run: |
+          SRC="build/app/outputs/flutter-apk/app-arm64-v8a-${BUILD_TYPE}.apk"
+          if [ ! -f "$SRC" ]; then
+            echo "::error::APK tidak ditemukan di $SRC"
+            ls -la build/app/outputs/flutter-apk/ || true
+            exit 1
+          fi
+
+          NAME="tiny-computer-${DESKTOP_ENV}-norootfs"
+          if [ -n "$NAME_SUFFIX" ]; then
+            NAME="${NAME}-${NAME_SUFFIX}"
+          fi
+          # Tandai build dari auto-push biar gampang dibedain di artifact list
+          if [ "${{ github.event_name }}" = "push" ]; then
+            NAME="${NAME}-${BUILD_TYPE}-$(echo ${{ github.sha }} | cut -c1-7)"
+          fi
+
+          mkdir -p out
+          cp "$SRC" "out/${NAME}.apk"
+          if [ -f "${SRC}.sha1" ]; then
+            cp "${SRC}.sha1" "out/${NAME}.apk.sha1"
+          else
+            sha1sum "out/${NAME}.apk" | awk '{print $1}' > "out/${NAME}.apk.sha1"
+          fi
+
+          echo "APK_NAME=${NAME}" >> "$GITHUB_ENV"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APK_NAME }}
+          path: out/*
+          retention-days: 14
