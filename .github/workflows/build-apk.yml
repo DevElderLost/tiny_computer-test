@@ -28,9 +28,9 @@ on:
         required: false
         default: ""
       release_tag:
-        description: "Tag release di Cateners/tiny_computer untuk ambil jniLibs.zip & patch.tar.gz (isi 'latest' kalau mau yang terbaru)"
+        description: "Tag release di Cateners/tiny_container untuk ambil jniLibs.zip & patch.tar.gz. Default v1.1.0 -- JANGAN pakai 'latest', upstream sudah rename repo & rilis v4.0.0 sudah tidak menyertakan patch.tar.gz lagi."
         required: true
-        default: "latest"
+        default: "v1.1.0"
 
 jobs:
   build:
@@ -41,7 +41,7 @@ jobs:
       DESKTOP_ENV: ${{ github.event_name == 'push' && 'xfce' || (inputs.desktop_env || 'xfce') }}
       BUILD_TYPE: ${{ github.event_name == 'push' && 'debug' || (inputs.build_type || 'release') }}
       NAME_SUFFIX: ${{ github.event_name == 'push' && '' || (inputs.name_suffix || '') }}
-      RELEASE_TAG: ${{ inputs.release_tag || 'latest' }}
+      RELEASE_TAG: ${{ inputs.release_tag || 'v1.1.0' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -74,16 +74,19 @@ jobs:
         run: flutter gen-l10n
 
       # ---- Ambil jniLibs.zip & patch.tar.gz dari Releases (rootfs SENGAJA TIDAK didownload di sini) ----
+      # CATATAN: upstream sudah rename Cateners/tiny_computer -> Cateners/tiny_container,
+      # dan release "latest" mereka (v4.0.0+) SUDAH TIDAK menyertakan patch.tar.gz lagi.
+      # Makanya release_tag di-pin ke v1.1.0 (rilis terakhir yang strukturnya masih cocok sama fork ini).
       - name: Download jniLibs.zip & patch.tar.gz
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p /tmp/dl
           if [ "$RELEASE_TAG" = "latest" ]; then
-            gh release download --repo Cateners/tiny_computer \
+            gh release download --repo Cateners/tiny_container \
               --pattern "jniLibs.zip" --pattern "patch.tar.gz" -D /tmp/dl
           else
-            gh release download "$RELEASE_TAG" --repo Cateners/tiny_computer \
+            gh release download "$RELEASE_TAG" --repo Cateners/tiny_container \
               --pattern "jniLibs.zip" --pattern "patch.tar.gz" -D /tmp/dl
           fi
 
