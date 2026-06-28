@@ -159,7 +159,6 @@
 
     <!-- ==================== Features ==================== -->
     <string name="tc4_feature_mic_permission">Microphone permission required</string>
-    <string name="tc4_label_mic_monitor">Realtime Audio Monitoring</string>
     <string name="tc4_feature_cmd_sent">Command sent to terminal</string>
     <string name="tc4_feature_link_copied">Copied %1$s</string>
     <string name="tc4_feature_screen_scale">Screen Scale %1$sx</string>

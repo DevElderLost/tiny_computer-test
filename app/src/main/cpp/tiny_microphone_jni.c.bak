@@ -138,10 +138,6 @@ typedef struct {
 
     /* ---- AAudio (owned by capture callback context) ---- */
     AAudioStream  *stream;
-
-    /* ---- realtime monitor (mic -> speaker loopback) ---- */
-    atomic_bool    monitor_enabled;
-    AAudioStream  *monitor_stream;
 } state_t;
 
 static state_t g;
@@ -214,51 +210,6 @@ static void error_callback(AAudioStream *s, void *user, aaudio_result_t err)
  * Runs on a high-priority AAudio-internal thread.
  * Must NOT block or allocate.
  */
-/* ================================================================= */
-/*  Realtime monitor (mic -> speaker), opened lazily, lives for the  */
-/*  whole capture session -- toggling on/off just flips a flag so    */
-/*  there is no open/close race with the realtime data_callback.     */
-/* ================================================================= */
-static int monitor_open(int32_t rate, int32_t channels)
-{
-    AAudioStreamBuilder *b = NULL;
-    AAudioStream *s = NULL;
-    aaudio_result_t res;
-
-    res = AAudio_createStreamBuilder(&b);
-    if (res != AAUDIO_OK) { LOGE("monitor createBuilder: %d", (int)res); return -1; }
-
-    AAudioStreamBuilder_setDirection(b, AAUDIO_DIRECTION_OUTPUT);
-    AAudioStreamBuilder_setPerformanceMode(b, AAUDIO_PERFORMANCE_MODE_LOW_LATENCY);
-    AAudioStreamBuilder_setSharingMode(b, AAUDIO_SHARING_MODE_SHARED);
-    AAudioStreamBuilder_setFormat(b, AAUDIO_FORMAT_PCM_FLOAT);
-    AAudioStreamBuilder_setSampleRate(b, rate);
-    AAudioStreamBuilder_setChannelCount(b, channels);
-
-    res = AAudioStreamBuilder_openStream(b, &s);
-    AAudioStreamBuilder_delete(b);
-    if (res != AAUDIO_OK) { LOGE("monitor openStream: %d", (int)res); return -1; }
-
-    res = AAudioStream_requestStart(s);
-    if (res != AAUDIO_OK) {
-        LOGE("monitor requestStart: %d", (int)res);
-        AAudioStream_close(s);
-        return -1;
-    }
-
-    g.monitor_stream = s;
-    LOGI("monitor stream opened: rate=%d ch=%d", (int)rate, (int)channels);
-    return 0;
-}
-
-static void monitor_close(void)
-{
-    if (g.monitor_stream) {
-        AAudioStream_close(g.monitor_stream);
-        g.monitor_stream = NULL;
-    }
-}
-
 static aaudio_data_callback_result_t data_callback(
         AAudioStream *stream,
         void *user_data,
@@ -273,11 +224,6 @@ static aaudio_data_callback_result_t data_callback(
 
     uint32_t bytes = (uint32_t)num_frames * (uint32_t)g.bytes_per_frame;
     ring_write(&g.ring, (const uint8_t *)audio_data, bytes);
-
-    /* Realtime monitor (mic -> speaker): best-effort, non-blocking write. */
-    if (atomic_load_explicit(&g.monitor_enabled, memory_order_acquire) && g.monitor_stream) {
-        AAudioStream_write(g.monitor_stream, audio_data, num_frames, 0);
-    }
 
     return AAUDIO_CALLBACK_RESULT_CONTINUE;
 }
@@ -490,7 +436,6 @@ Java_com_fct_tc4_TinyMicrophone_nativeStart(JNIEnv *env, jclass cls,
     atomic_init(&g.stream_setup, false);
     atomic_init(&g.aaudio_restart, false);
     atomic_init(&g.stream_ready, false);
-    atomic_init(&g.monitor_enabled, false);
 
     /* Hard-coded capture format: 48000 Hz mono F32 */
     g.sample_rate   = 48000;
@@ -535,30 +480,5 @@ g.sock_fd = -1;
 
 pthread_join(g.sock_thread, NULL);
 
-atomic_store_explicit(&g.monitor_enabled, false, memory_order_release);
-monitor_close();
-
 LOGI("nativeStop complete");
-}
-
-JNIEXPORT void JNICALL
-Java_com_fct_tc4_TinyMicrophone_nativeSetMonitorEnabled(JNIEnv *env, jclass cls, jboolean enabled)
-{
-(void)env; (void)cls;
-
-if (enabled) {
-    if (!g.monitor_stream) {
-        int32_t rate = g.sample_rate > 0 ? g.sample_rate : 48000;
-        int32_t ch   = g.channel_count > 0 ? g.channel_count : 1;
-        if (monitor_open(rate, ch) != 0) {
-            LOGE("failed to enable monitor");
-            return;
-        }
-    }
-    atomic_store_explicit(&g.monitor_enabled, true, memory_order_release);
-    LOGI("monitor enabled");
-} else {
-    atomic_store_explicit(&g.monitor_enabled, false, memory_order_release);
-    LOGI("monitor disabled");
-}
 }
