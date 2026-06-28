@@ -4,6 +4,11 @@ allprojects {
         mavenCentral()
         maven { url 'https://jitpack.io' }
     }
+    configurations.all {
+        resolutionStrategy.dependencySubstitution {
+            substitute module('com.github.tiny-computer:avnc') using module('com.github.DevElderLost:avnc-test:f784d92')
+        }
+    }
 }
 
 rootProject.buildDir = '../build'
