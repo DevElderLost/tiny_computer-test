@@ -1,0 +1,106 @@
+name: Build APK
+
+# Project ini sudah disync ke basis tiny_container v4.0.0 (native Kotlin/Gradle, BUKAN Flutter lagi).
+# Logika trigger SAMA seperti workflow versi Flutter sebelumnya:
+#   - Push ke branch APAPUN -> otomatis build DEBUG.
+#   - Manual lewat tab Actions -> "Run workflow" -> bisa pilih build_type & release_tag sendiri.
+on:
+  push:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: "Build type"
+        required: true
+        type: choice
+        default: debug
+        options:
+          - debug
+          - release
+      release_tag:
+        description: "Tag release di Cateners/tiny_container untuk ambil jniLibs.zip (isi 'latest' kalau mau yang terbaru)"
+        required: true
+        default: "latest"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      # Push -> selalu debug. Manual -> ikut pilihan user, fallback debug kalau kosong.
+      BUILD_TYPE: ${{ github.event_name == 'push' && 'debug' || (inputs.build_type || 'debug') }}
+      RELEASE_TAG: ${{ inputs.release_tag || 'latest' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        # Gradle 9.4.1 (dipakai project ini lewat gradlew) butuh minimal JDK 17 buat jalan,
+        # walaupun app-nya sendiri target Java 11 (sourceCompatibility di app/build.gradle.kts).
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Gradle (dengan caching otomatis)
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      # ---- Ambil jniLibs.zip dari Releases (rootfs.tar.zst SENGAJA TIDAK didownload di sini) ----
+      # Beda dari versi lama: patch.tar.gz & debian-*.tar.xz sudah tidak ada lagi di struktur baru ini.
+      # Rootfs sekarang cukup 1 file (app/src/main/assets/rootfs.tar.zst, gitignored) -- ditambahkan manual nanti.
+      - name: Download jniLibs.zip
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p /tmp/dl
+          if [ "$RELEASE_TAG" = "latest" ]; then
+            gh release download --repo Cateners/tiny_container --pattern "jniLibs.zip" -D /tmp/dl
+          else
+            gh release download "$RELEASE_TAG" --repo Cateners/tiny_container --pattern "jniLibs.zip" -D /tmp/dl
+          fi
+
+      - name: Extract jniLibs ke app/src/main/jniLibs/arm64-v8a
+        run: |
+          mkdir -p app/src/main/jniLibs/arm64-v8a
+          unzip -o /tmp/dl/jniLibs.zip -d app/src/main/jniLibs/arm64-v8a
+
+      # ---- Build ----
+      # Tidak perlu setup keystore sama sekali: project ini sekarang TIDAK punya signingConfig
+      # untuk release buildType (lihat app/build.gradle.kts -- release cuma proguard, tanpa signing),
+      # dan debug otomatis pakai debug keystore bawaan Android. NDK/CMake juga tidak di-pin versinya,
+      # jadi Gradle bakal auto-resolve/download sendiri saat build (tidak perlu sdkmanager manual lagi).
+      - name: Build APK (debug)
+        if: ${{ env.BUILD_TYPE == 'debug' }}
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Build APK (release, unsigned)
+        if: ${{ env.BUILD_TYPE == 'release' }}
+        run: ./gradlew assembleRelease --no-daemon
+
+      # ---- Rename & siapkan output ----
+      - name: Rename APK
+        run: |
+          SRC="app/build/outputs/apk/${BUILD_TYPE}/app-${BUILD_TYPE}.apk"
+          if [ ! -f "$SRC" ]; then
+            echo "::error::APK tidak ditemukan di $SRC"
+            find app/build/outputs/apk -type f 2>/dev/null
+            exit 1
+          fi
+
+          NAME="tiny-container-norootfs-${BUILD_TYPE}"
+          if [ "${{ github.event_name }}" = "push" ]; then
+            NAME="${NAME}-$(echo ${{ github.sha }} | cut -c1-7)"
+          fi
+
+          mkdir -p out
+          cp "$SRC" "out/${NAME}.apk"
+          echo "APK_NAME=${NAME}" >> "$GITHUB_ENV"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APK_NAME }}
+          path: out/*
+          retention-days: 14
+          
