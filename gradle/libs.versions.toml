@@ -15,7 +15,7 @@ viewpagerindicator = "1.2.3"
 blurview = "version-3.2.0"
 snakeyaml = "2.6"
 coil = "2.7.0"
-avnc = "030e6c032e"
+avnc = "f784d92d56"
 termuxX11 = "21159a1405"
 coreAnimation = "1.0.0"
 terminalLib = "48327189ab"
@@ -39,7 +39,7 @@ snakeyaml = { group = "org.yaml", name = "snakeyaml", version.ref = "snakeyaml" 
 coil = { group = "io.coil-kt", name = "coil", version.ref = "coil" }
 coil-gif = { group = "io.coil-kt", name = "coil-gif", version.ref = "coil" }
 coil-svg = { group = "io.coil-kt", name = "coil-svg", version.ref = "coil" }
-avnc = { group = "com.github.tiny-computer", name = "avnc", version.ref = "avnc" }
+avnc = { group = "com.github.DevElderLost", name = "avnc-test", version.ref = "avnc" }
 termux-x11 = { group = "com.github.tiny-computer", name = "termux-x11", version.ref = "termuxX11" }
 androidx-core-animation = { group = "androidx.core", name = "core-animation", version.ref = "coreAnimation" }
 terminal-lib = { group = "com.github.tiny-computer", name = "terminal-lib", version.ref = "terminalLib" }
