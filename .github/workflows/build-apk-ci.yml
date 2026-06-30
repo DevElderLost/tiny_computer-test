@@ -46,50 +46,59 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      # ---- Tunggu JitPack selesai build dependency avnc SEBELUM lanjut ----
-      # Hash/group/artifact dibaca otomatis dari gradle/libs.versions.toml, jadi step ini
-      # tetap jalan walau hash-nya nanti diganti lagi (gak perlu diedit manual di sini).
-      # Request pertama ke URL .pom otomatis MEMICU build di JitPack kalau belum pernah
-      # di-build; selanjutnya kita poll sampai HTTP 200 (artifact siap) atau gagal/timeout.
-      - name: Tunggu build JitPack (avnc) selesai
+      # ---- Tunggu semua dependency JitPack (avnc, termux-x11) selesai build SEBELUM lanjut ----
+      # Daftar alias di ALIASES dibaca dari gradle/libs.versions.toml, jadi kalau nanti nambah
+      # dependency JitPack lain, cukup tambah nama alias-nya ke daftar -- gak perlu nulis step baru.
+      # Tiap dependency dicek SATU PER SATU: request .pom otomatis MEMICU build di JitPack kalau
+      # belum pernah di-build, lalu di-poll sampai HTTP 200 (siap) atau gagal/timeout.
+      - name: Tunggu build JitPack (avnc, termux-x11) selesai
         run: |
           set +e
           TOML="gradle/libs.versions.toml"
+          ALIASES="avnc termuxX11"
+          MAX_TRIES=100   # 100 x 15s = ~25 menit maksimal nunggu PER dependency
 
-          VERSION=$(grep -E '^avnc[[:space:]]*=[[:space:]]*"' "$TOML" | sed -E 's/.*=[[:space:]]*"([^"]+)".*/\1/')
-          GROUP=$(grep -E '^avnc[[:space:]]*=.*group' "$TOML" | sed -E 's/.*group[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/')
-          ARTIFACT=$(grep -E '^avnc[[:space:]]*=.*group' "$TOML" | sed -E 's/.*name[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/')
-          GROUP_PATH=$(echo "$GROUP" | tr '.' '/')
+          for ALIAS in $ALIASES; do
+            VERSION=$(grep -E "^${ALIAS}[[:space:]]*=[[:space:]]*\"" "$TOML" | sed -E 's/.*=[[:space:]]*"([^"]+)".*/\1/')
+            GROUP=$(grep -E "^[a-zA-Z0-9_-]+[[:space:]]*=.*version\.ref[[:space:]]*=[[:space:]]*\"${ALIAS}\"" "$TOML" | sed -E 's/.*group[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/')
+            ARTIFACT=$(grep -E "^[a-zA-Z0-9_-]+[[:space:]]*=.*version\.ref[[:space:]]*=[[:space:]]*\"${ALIAS}\"" "$TOML" | sed -E 's/.*name[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/')
+            GROUP_PATH=$(echo "$GROUP" | tr '.' '/')
 
-          POM_URL="https://jitpack.io/$GROUP_PATH/$ARTIFACT/$VERSION/$ARTIFACT-$VERSION.pom"
-          API_URL="https://jitpack.io/api/builds/$GROUP/$ARTIFACT/$VERSION"
-          LOG_URL="https://jitpack.io/$GROUP_PATH/$ARTIFACT/$VERSION/build.log"
+            POM_URL="https://jitpack.io/$GROUP_PATH/$ARTIFACT/$VERSION/$ARTIFACT-$VERSION.pom"
+            API_URL="https://jitpack.io/api/builds/$GROUP/$ARTIFACT/$VERSION"
+            LOG_URL="https://jitpack.io/$GROUP_PATH/$ARTIFACT/$VERSION/build.log"
 
-          echo "avnc -> $GROUP:$ARTIFACT:$VERSION"
-          echo "POM  : $POM_URL"
-          echo "Log  : $LOG_URL"
+            echo "== $ALIAS -> $GROUP:$ARTIFACT:$VERSION =="
+            echo "POM : $POM_URL"
+            echo "Log : $LOG_URL"
 
-          MAX_TRIES=100   # 100 x 15s = ~25 menit maksimal nunggu
-          for i in $(seq 1 "$MAX_TRIES"); do
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "$POM_URL")
+            READY=0
+            for i in $(seq 1 "$MAX_TRIES"); do
+              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "$POM_URL")
 
-            if [ "$HTTP_CODE" = "200" ]; then
-              echo "[$i/$MAX_TRIES] Artifact sudah siap di JitPack (HTTP 200). Lanjut build."
-              exit 0
-            fi
+              if [ "$HTTP_CODE" = "200" ]; then
+                echo "[$i/$MAX_TRIES] $ALIAS siap di JitPack (HTTP 200)."
+                READY=1
+                break
+              fi
 
-            API_RESPONSE=$(curl -s --max-time 20 "$API_URL")
-            if echo "$API_RESPONSE" | grep -qi '"error"'; then
-              echo "::error::Build JitPack untuk $ARTIFACT:$VERSION GAGAL. Cek log: $LOG_URL"
+              API_RESPONSE=$(curl -s --max-time 20 "$API_URL")
+              if echo "$API_RESPONSE" | grep -qi '"error"'; then
+                echo "::error::Build JitPack untuk $ALIAS ($ARTIFACT:$VERSION) GAGAL. Cek log: $LOG_URL"
+                exit 1
+              fi
+
+              echo "[$i/$MAX_TRIES] Masih nunggu JitPack build $ALIAS... (HTTP $HTTP_CODE)"
+              sleep 15
+            done
+
+            if [ "$READY" != "1" ]; then
+              echo "::error::Timeout nunggu JitPack build $ALIAS (~25 menit). Cek manual: $LOG_URL"
               exit 1
             fi
-
-            echo "[$i/$MAX_TRIES] Masih nunggu JitPack build... (HTTP $HTTP_CODE)"
-            sleep 15
           done
 
-          echo "::error::Timeout nunggu JitPack build avnc (~25 menit). Cek manual: $LOG_URL"
-          exit 1
+          echo "Semua dependency JitPack sudah siap."
 
       # ---- Ambil jniLibs.zip dari Releases (rootfs.tar.zst SENGAJA TIDAK didownload di sini) ----
       # Beda dari versi lama: patch.tar.gz & debian-*.tar.xz sudah tidak ada lagi di struktur baru ini.
@@ -107,8 +116,32 @@ jobs:
 
       - name: Extract jniLibs ke app/src/main/jniLibs/arm64-v8a
         run: |
-          mkdir -p app/src/main/jniLibs/arm64-v8a
-          unzip -o /tmp/dl/jniLibs.zip -d app/src/main/jniLibs/arm64-v8a
+          set -e
+          DEST="app/src/main/jniLibs/arm64-v8a"
+          TMP="/tmp/dl/jniLibs_extracted"
+
+          mkdir -p "$DEST" "$TMP"
+          unzip -o /tmp/dl/jniLibs.zip -d "$TMP"
+
+          # Sebagian rilis jniLibs.zip punya struktur folder bersarang (mis. arm64-v8a/*.so
+          # di dalam zip, bukan *.so langsung di root). Supaya gak nyangkut di folder
+          # bersarang yang gak ke-scan Gradle, semua .so di-flatten dulu via find -> mv.
+          FOUND=$(find "$TMP" -type f -name "*.so" | wc -l)
+          if [ "$FOUND" -eq 0 ]; then
+            echo "::error::Tidak ada file .so ditemukan di dalam jniLibs.zip. Cek isi zip-nya."
+            find "$TMP" -maxdepth 3
+            exit 1
+          fi
+
+          find "$TMP" -type f -name "*.so" -exec mv -f {} "$DEST"/ \;
+
+          COUNT=$(find "$DEST" -maxdepth 1 -type f -name "*.so" | wc -l)
+          echo "Berhasil ekstrak $COUNT file .so ke $DEST"
+          ls -la "$DEST"
+
+          if [ "$COUNT" -lt 15 ]; then
+            echo "::warning::Hanya $COUNT file .so yang ke-ekstrak dari jniLibs.zip, biasanya rilis resmi punya 20+ file. Cek apakah isi zip lengkap."
+          fi
 
       # ---- Build ----
       # Tidak perlu setup keystore sama sekali: project ini sekarang TIDAK punya signingConfig
