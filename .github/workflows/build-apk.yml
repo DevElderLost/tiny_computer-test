@@ -118,6 +118,84 @@ jobs:
           storeFile=../upload-keystore.jks
           EOF
 
+      # ---- Tunggu semua dependency JitPack di build.gradle selesai build SEBELUM lanjut ----
+      # Berbeda dari project yang pakai gradle/libs.versions.toml, di sini dependency JitPack
+      # didefinisikan langsung di android/build.gradle lewat dependencySubstitution, contoh:
+      #   substitute module('com.github.tiny-computer:avnc') using module('com.github.DevElderLost:avnc-test:b9cfba667d')
+      # Step ini otomatis nge-scan SEMUA baris "using module('com.github...')" di build.gradle,
+      # jadi kalau nanti nambah substitusi JitPack lain, cukup tambah baris di build.gradle --
+      # gak perlu ubah workflow ini. Tiap dependency dicek SATU PER SATU: request .pom otomatis
+      # MEMICU build di JitPack kalau belum pernah di-build, lalu di-poll sampai HTTP 200 (siap)
+      # atau gagal/timeout.
+      - name: Tunggu build JitPack selesai
+        run: |
+          set +e
+          GRADLE_FILE="android/build.gradle"
+          MAX_TRIES=100   # 100 x 15s = ~25 menit maksimal nunggu PER dependency
+
+          if [ ! -f "$GRADLE_FILE" ]; then
+            echo "::error::File $GRADLE_FILE tidak ditemukan, cek path-nya."
+            exit 1
+          fi
+
+          # Ambil semua target "using module('group:artifact:version')" yang groupnya com.github (JitPack)
+          MODULES=$(grep -oE "using module\('com\.github\.[^']+'\)" "$GRADLE_FILE" \
+            | sed -E "s/using module\('(.+)'\)/\1/")
+
+          if [ -z "$MODULES" ]; then
+            echo "Tidak ada dependency JitPack (com.github...) yang perlu ditunggu."
+            exit 0
+          fi
+
+          echo "Dependency JitPack yang terdeteksi:"
+          echo "$MODULES"
+          echo "---"
+
+          FAILED=0
+          echo "$MODULES" | while IFS= read -r MODULE; do
+            [ -z "$MODULE" ] && continue
+
+            GROUP=$(echo "$MODULE" | cut -d: -f1)
+            ARTIFACT=$(echo "$MODULE" | cut -d: -f2)
+            VERSION=$(echo "$MODULE" | cut -d: -f3)
+            GROUP_PATH=$(echo "$GROUP" | tr '.' '/')
+
+            POM_URL="https://jitpack.io/$GROUP_PATH/$ARTIFACT/$VERSION/$ARTIFACT-$VERSION.pom"
+            API_URL="https://jitpack.io/api/builds/$GROUP/$ARTIFACT/$VERSION"
+            LOG_URL="https://jitpack.io/$GROUP_PATH/$ARTIFACT/$VERSION/build.log"
+
+            echo "== $GROUP:$ARTIFACT:$VERSION =="
+            echo "POM : $POM_URL"
+            echo "Log : $LOG_URL"
+
+            READY=0
+            for i in $(seq 1 "$MAX_TRIES"); do
+              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "$POM_URL")
+
+              if [ "$HTTP_CODE" = "200" ]; then
+                echo "[$i/$MAX_TRIES] $ARTIFACT siap di JitPack (HTTP 200)."
+                READY=1
+                break
+              fi
+
+              API_RESPONSE=$(curl -s --max-time 20 "$API_URL")
+              if echo "$API_RESPONSE" | grep -qi '"error"'; then
+                echo "::error::Build JitPack untuk $ARTIFACT:$VERSION GAGAL. Cek log: $LOG_URL"
+                exit 1
+              fi
+
+              echo "[$i/$MAX_TRIES] Masih nunggu JitPack build $ARTIFACT... (HTTP $HTTP_CODE)"
+              sleep 15
+            done
+
+            if [ "$READY" != "1" ]; then
+              echo "::error::Timeout nunggu JitPack build $ARTIFACT (~25 menit). Cek manual: $LOG_URL"
+              exit 1
+            fi
+          done || exit 1
+
+          echo "Semua dependency JitPack sudah siap."
+
       # ---- Build ----
       - name: flutter build apk (release)
         if: ${{ env.BUILD_TYPE == 'release' }}
