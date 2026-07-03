@@ -14,6 +14,12 @@ object AudioStream {
     private var isStreaming = false
     private var recordingThread: Thread? = null
 
+    // Batas waktu tunggu thread berhenti sebelum kita lepaskan referensinya (ms).
+    // Mencegah caller (misal MethodChannel handler di main thread) nge-hang
+    // selamanya kalau nativeClose() gagal meng-unblock nativeAccept()/nativeSend()
+    // yang sedang blocking di sisi native (native-socket).
+    private const val JOIN_TIMEOUT_MS = 1500L
+
     // Native functions
     private external fun nativeInit(path: String): Int
     private external fun nativeAccept(): Int
@@ -87,13 +93,27 @@ object AudioStream {
             recorder.release()
             nativeClose()
         }
+        recordingThread?.isDaemon = true
         recordingThread?.start()
     }
 
     fun stopStreaming() {
         isStreaming = false
-        nativeClose() // Unblocks the native Accept/Send if hung
-        recordingThread?.join()
+        nativeClose() // Coba unblock native Accept/Send yang sedang blocking
+
+        val thread = recordingThread
+        if (thread != null && thread.isAlive) {
+            thread.join(JOIN_TIMEOUT_MS)
+            if (thread.isAlive) {
+                // nativeClose() gagal meng-unblock native thread dalam batas
+                // waktu. Daripada nge-hang selamanya (yang berujung ANR dan
+                // proses di-kill signal 9 oleh Android, memutus koneksi
+                // socket X11/termux-x11 di container), kita lepaskan
+                // referensi dan biarkan thread itu mati sendiri di
+                // background begitu native call akhirnya return.
+                Log.w("AudioStream", "recordingThread tidak berhenti dalam ${JOIN_TIMEOUT_MS}ms, dilepas paksa (kemungkinan native accept/send masih blocking)")
+            }
+        }
         recordingThread = null
     }
 }
