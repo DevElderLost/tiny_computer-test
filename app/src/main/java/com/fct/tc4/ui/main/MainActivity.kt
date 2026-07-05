@@ -117,8 +117,7 @@ class MainActivity : AppCompatActivity() {
         val existing = supportFragmentManager.findFragmentById(R.id.terminal_overlay)
         if (existing != null && existing.view != null) {
             binding.root.post {
-                (existing as? TerminalFragment)?.getBlurView()?.setupWith(binding.blurTarget)
-                    ?.setBlurRadius(2f)
+                // blur removed for performance
             }
             return
         }
@@ -131,7 +130,7 @@ class MainActivity : AppCompatActivity() {
         binding.root.post {
             val addedFragment = supportFragmentManager.findFragmentByTag("Terminal") as? TerminalFragment
             addedFragment?.let {
-                it.getBlurView()?.setupWith(binding.blurTarget)?.setBlurRadius(2f)
+                // blur removed for performance
                 binding.wiper.startWipeAnimation(
                     isIn = true,
                     direction = WipeLayout.Direction.TOP_TO_BOTTOM,

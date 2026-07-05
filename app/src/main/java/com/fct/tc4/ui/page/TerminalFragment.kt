@@ -32,7 +32,6 @@ import com.fct.tc4.ui.misc.Global
 import com.google.android.material.snackbar.Snackbar
 import com.offsec.nhterm.backend.TextStyle
 import com.offsec.nhterm.frontend.session.terminal.BasicViewClient
-import eightbitlab.com.blurview.BlurView
 import kotlinx.coroutines.launch
 
 class TerminalFragment : Fragment() {
@@ -108,7 +107,7 @@ class TerminalFragment : Fragment() {
         _binding = null
     }
 
-    fun getBlurView(): BlurView? {
+    fun getBlurView(): android.view.View? {
         return _binding?.blurView
     }
 }
