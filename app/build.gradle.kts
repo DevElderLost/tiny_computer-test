@@ -79,6 +79,7 @@ dependencies {
     implementation(libs.androidx.navigation.fragment.ktx)
     implementation(libs.material)
     implementation(libs.viewpagerindicator)
+    implementation(libs.blurview)
     implementation(libs.snakeyaml)
     implementation(libs.coil)
     implementation(libs.coil.gif)
