@@ -6,7 +6,7 @@ allprojects {
     }
     configurations.all {
         resolutionStrategy.dependencySubstitution {
-            substitute module('com.github.tiny-computer:avnc') using module('com.github.DevElderLost:avnc-test:b651f90ec7')
+            substitute module('com.github.tiny-computer:avnc') using module('com.github.DevElderLost:avnc-test:361b425d7e')
             substitute module('com.github.tiny-computer:termux-x11') using module('com.github.DevElderLost:termux-x11-test:13ff0deb7d')
         }
     }
