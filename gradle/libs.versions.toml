@@ -16,7 +16,7 @@ blurview = "version-3.2.0"
 snakeyaml = "2.6"
 coil = "2.7.0"
 avnc = "361b425d7e"
-termuxX11 = "ee2dd8afe0"
+termuxX11 = "69417224c7"
 coreAnimation = "1.0.0"
 terminalLib = "48327189ab"
 
@@ -40,7 +40,7 @@ coil = { group = "io.coil-kt", name = "coil", version.ref = "coil" }
 coil-gif = { group = "io.coil-kt", name = "coil-gif", version.ref = "coil" }
 coil-svg = { group = "io.coil-kt", name = "coil-svg", version.ref = "coil" }
 avnc = { group = "com.github.DevElderLost", name = "avnc-test", version.ref = "avnc" }
-termux-x11 = { group = "com.github.DevElderLost", name = "termux-x11-test", version.ref = "termuxX11" }
+termux-x11 = { group = "com.github.DevElderLost", name = "termux-x11-xodmod-test", version.ref = "termuxX11" }
 androidx-core-animation = { group = "androidx.core", name = "core-animation", version.ref = "coreAnimation" }
 terminal-lib = { group = "com.github.tiny-computer", name = "terminal-lib", version.ref = "terminalLib" }
 
