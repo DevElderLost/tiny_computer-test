@@ -16,7 +16,7 @@ blurview = "version-3.2.0"
 snakeyaml = "2.6"
 coil = "2.7.0"
 avnc = "361b425d7e"
-termuxX11 = "9323254832"
+termuxX11 = "edd09ff731"
 coreAnimation = "1.0.0"
 terminalLib = "48327189ab"
 
