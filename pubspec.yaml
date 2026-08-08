@@ -49,8 +49,9 @@ dependencies:
   intl: any
   x11_flutter:
     git:
-      url: https://github.com/tiny-computer/x11_flutter.git
-      ref: 3b92b515b1ebc32c93e18e8b3a2983656713e4dd
+      url: https://github.com/DevElderLost/x11_flutter-test.git
+#      ref: 3b92b515b1ebc32c93e18e8b3a2983656713e4dd
+      ref: 073d5bb59c21e11d1491aba12681d7b840e257d5
   avnc_flutter:
     git:
       url: https://github.com/tiny-computer/avnc_flutter.git
