@@ -1,7 +1,7 @@
 name: Build APK
 
-# Otomatis jalan tiap ada push ke branch APAPUN (selalu build DEBUG, desktop_env default xfce).
-# Bisa juga dijalankan manual lewat tab Actions -> "Run workflow" buat pilih desktop_env/build_type/release_tag sendiri (termasuk build release).
+# Otomatis jalan tiap ada push ke branch APAPUN (selalu build RELEASE tanpa signing asli / unsigned, desktop_env default xfce).
+# Bisa juga dijalankan manual lewat tab Actions -> "Run workflow" buat pilih desktop_env/build_type/release_tag sendiri.
 on:
   push:
   workflow_dispatch:
@@ -35,11 +35,11 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # Kalau trigger-nya push -> selalu debug & desktop_env xfce.
+    # Kalau trigger-nya push -> selalu build RELEASE (unsigned kalau secret keystore kosong) & desktop_env xfce.
     # Kalau trigger-nya manual (workflow_dispatch) -> pakai input yang diisi user, fallback ke default kalau kosong.
     env:
       DESKTOP_ENV: ${{ github.event_name == 'push' && 'xfce' || (inputs.desktop_env || 'xfce') }}
-      BUILD_TYPE: ${{ github.event_name == 'push' && 'debug' || (inputs.build_type || 'release') }}
+      BUILD_TYPE: ${{ github.event_name == 'push' && 'release' || (inputs.build_type || 'release') }}
       NAME_SUFFIX: ${{ github.event_name == 'push' && '' || (inputs.name_suffix || '') }}
       RELEASE_TAG: ${{ inputs.release_tag || 'v1.1.0' }}
     steps:
