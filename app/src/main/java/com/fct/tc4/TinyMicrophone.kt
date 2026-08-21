@@ -45,6 +45,9 @@ object TinyMicrophone {
     @JvmStatic
     private external fun nativeStop()
 
+    @JvmStatic
+    private external fun nativeSetMonitorEnabled(enabled: Boolean)
+
     /* ---------- public API ---------- */
 
     /**
@@ -91,6 +94,21 @@ object TinyMicrophone {
         }
     }
 
+    @Volatile
+    var isMonitoring: Boolean = false
+        private set
+
+    /**
+     * Enable/disable realtime monitoring (mic -> speaker loopback).
+     * Only meaningful while capture is running; no-op otherwise.
+     */
+    @Synchronized
+    fun setMonitorEnabled(enabled: Boolean) {
+        if (!running) return
+        isMonitoring = enabled
+        nativeSetMonitorEnabled(enabled)
+    }
+
     /**
      * Stop microphone forwarding. Closes AAudio capture and socket.
      */
@@ -98,6 +116,7 @@ object TinyMicrophone {
     fun stop() {
         if (!running) return
         running = false
+        isMonitoring = false
         workerThread?.interrupt()
         workerThread = null
         nativeStop()

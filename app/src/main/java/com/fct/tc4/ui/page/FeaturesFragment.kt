@@ -150,6 +150,11 @@ class FeaturesFragment : Fragment() {
                     viewModel.onEnabledToggle(index, false)
                 }
             }
+            
+            override fun onMicMonitorToggle(enabled: Boolean) {
+                TinyMicrophone.setMonitorEnabled(enabled)
+            }
+            
             override fun onUseUnixSocketToggle(index: Int, useUnixSocket: Boolean) {
                 viewModel.onUseUnixSocketToggle(index, useUnixSocket)
             }
@@ -222,6 +227,7 @@ interface FeatureCallbacks {
     fun onEditFeature(index: Int, type: String)
     fun onShareWebView(index: Int)
     fun onMicEnabledToggle(index: Int, enabled: Boolean) {}
+    fun onMicMonitorToggle(enabled: Boolean) {}
     fun onUseUnixSocketToggle(index: Int, useUnixSocket: Boolean) {}
 }
 
@@ -430,6 +436,14 @@ private class MicrophoneVH(
         binding.enabled.isChecked = item.enabled
         binding.enabled.setOnCheckedChangeListener { _, isChecked ->
             callbacks.onMicEnabledToggle(item.index, isChecked)
+        }
+
+        // Monitoring cuma boleh aktif kalau mic capture (Enable) sedang ON.
+        binding.monitorEnabled.isEnabled = item.enabled
+        binding.monitorEnabled.setOnCheckedChangeListener(null)
+        binding.monitorEnabled.isChecked = com.fct.tc4.TinyMicrophone.isMonitoring
+        binding.monitorEnabled.setOnCheckedChangeListener { _, isChecked ->
+            callbacks.onMicMonitorToggle(isChecked)
         }
     }
 }
