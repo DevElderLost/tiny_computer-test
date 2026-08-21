@@ -64,7 +64,7 @@ object TinyMicrophone {
         if (running) return
         running = true
 
-        val socketPath = File(Global.appContext.cacheDir, "tmp/.tiny.mic").absolutePath
+        val socketPath = File(Global.appContext.filesDir, "tmp/.tiny.mic").absolutePath
 
         workerThread = Thread({
             var success = false

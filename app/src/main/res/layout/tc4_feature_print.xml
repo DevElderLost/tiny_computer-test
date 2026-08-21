@@ -25,11 +25,9 @@
         <ImageView
             android:layout_width="36dp"
             android:layout_height="36dp"
-            android:src="@drawable/ic_x11_icon"
+            android:src="@drawable/print_24dp_ffffff_fill0_wght400_grad0_opsz24"
             android:importantForAccessibility="no"
             android:layout_marginTop="8dp"
-            android:scaleX="0.875"
-            android:scaleY="0.875"
             app:tint="?attr/colorPrimary" />
         <LinearLayout
             android:layout_width="match_parent"
@@ -45,7 +43,7 @@
                     android:id="@+id/name"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    tools:text="Termux:X11 GUI"/>
+                    tools:text="Print"/>
                 <TextView
                     android:id="@+id/description"
                     android:layout_width="match_parent"
@@ -72,7 +70,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:textAppearance="?attr/textAppearanceBodyLarge"
-                        android:text="@string/tc4_label_default_gui" />
+                        android:text="@string/tc4_label_enable" />
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
@@ -85,26 +83,8 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content" />
             </LinearLayout>
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="end"
-                android:orientation="vertical">
-                <Button
-                    android:id="@+id/x11_settings"
-                    style="?attr/materialButtonTonalStyle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/tc4_feature_label_set_x11" />
-                <Button
-                    android:id="@+id/edit"
-                    style="?attr/materialButtonTonalStyle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/tc4_btn_edit" />
-            </LinearLayout>
-
         </LinearLayout>
+
     </LinearLayout>
 
     </com.google.android.material.listitem.ListItemCardView>

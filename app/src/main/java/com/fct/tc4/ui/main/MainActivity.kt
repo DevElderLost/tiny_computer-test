@@ -49,6 +49,7 @@ import com.google.android.material.snackbar.Snackbar
 import com.termux.x11.CmdEntryPointService
 import java.io.File
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -259,7 +260,7 @@ class MainActivity : AppCompatActivity() {
         // 已完成初始导航，不再重复导航（singleTask 下 onNewIntent 可能再次触发 ACTION_MAIN）
         if (viewModel.screen.value !is MainViewModel.Screen.Init) return
 
-        if (!Global.isFirstLaunchDone && Global.hasBuiltInRootfs()) {
+        if (!Global.isFirstLaunchDone && Global.hasBuiltInRootfs() && Global.installedContainers.isEmpty()) {
             val containerViewModel: ContainerManageViewModel by viewModels()
             containerViewModel.autoInstallBuiltInContainer()
             viewModel.navigateTo(MainViewModel.Screen.ContainerManage)
@@ -366,7 +367,10 @@ class MainActivity : AppCompatActivity() {
             is MainViewModel.Screen.ContainerMain -> {
                 if (screen.code == code) {
                     Global.sendCommand(command)
-                    (supportFragmentManager.findFragmentByTag("ContainerMain") as? ContainerMainFragment)?.onEnterGui()
+                    lifecycleScope.launch {
+                        delay(32)
+                        (supportFragmentManager.findFragmentByTag("ContainerMain") as? ContainerMainFragment)?.onEnterGui()
+                    }
                 } else {
                     Snackbar.make(binding.root, R.string.tc4_shortcut_another_running, Snackbar.LENGTH_SHORT).show()
                 }
@@ -377,9 +381,11 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        startService(Intent(
-            this, CmdEntryPointService::class.java
-        ).apply { action = CmdEntryPointService.ACTION_STOP })
+        if (!isChangingConfigurations) {
+            startService(Intent(
+                this, CmdEntryPointService::class.java
+            ).apply { action = CmdEntryPointService.ACTION_STOP })
+        }
     }
 
     companion object {

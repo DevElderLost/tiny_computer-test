@@ -19,6 +19,8 @@ package com.fct.tc4.ui.page
 
 import android.app.Application
 import android.content.Intent
+import android.system.Os
+import android.system.OsConstants
 import android.util.Log
 import com.termux.x11.CmdEntryPointService
 import androidx.lifecycle.AndroidViewModel
@@ -28,6 +30,8 @@ import androidx.lifecycle.viewModelScope
 import com.fct.tc4.TinyAudio
 import com.fct.tc4.TinyMicrophone
 import com.fct.tc4.R
+import com.fct.tc4.TinyIpp
+import com.fct.tc4.TinyStorage
 import com.fct.tc4.ui.misc.ConfigManager
 import com.fct.tc4.ui.misc.Global
 import com.fct.tc4.ui.misc.UpdateChecker
@@ -53,7 +57,8 @@ sealed interface GuiNavigationEvent {
     data class OpenAvnc(
         val link: String,
         val adaptToScreenSize: Boolean,
-        val scaleRatio: Double
+        val scaleRatio: Double,
+        val useUnixSocket: Boolean
     ) : GuiNavigationEvent
     data object OpenX11 : GuiNavigationEvent
 }
@@ -117,7 +122,7 @@ class ContainerMainViewModel(
             if (code == com.fct.tc4.ui.main.MainViewModel.pendingCommandCode) {
                 val cmd = com.fct.tc4.ui.main.MainViewModel.pendingCommandText
                 if (cmd != null) {
-                    delay(5000)
+                    delay(2000)
                     Global.sendCommand(cmd)
                 }
                 com.fct.tc4.ui.main.MainViewModel.clearPendingCommand()
@@ -130,8 +135,15 @@ class ContainerMainViewModel(
         killXServer()
         TinyAudio.stop()
         TinyMicrophone.stop()
+        TinyIpp.stop()
+        TinyStorage.stop()
+        val pid = Global.terminalSession?.pid ?: 0
+        if (pid > 0) {
+            Os.kill(-pid, OsConstants.SIGQUIT)
+        }
         Global.newSession()
         Global.setupEnvironment()
+        Global.sendCommand("rm ${getApplication<Application>().filesDir}/boot_${code}.sh")
         val merged = collectEnabledOptions()
         for (cmd in merged.postEndHostCommands) {
             Global.sendCommand(cmd)
@@ -154,7 +166,8 @@ class ContainerMainViewModel(
                         val link = feature["link"] as? String ?: return@launch
                         val adaptToScreenSize = feature["adapt_to_screen_size"] as? Boolean ?: return@launch
                         val scaleRatio = (feature["scale_ratio"] as? Number)?.toDouble() ?: return@launch
-                        _navigationEvents.tryEmit(GuiNavigationEvent.OpenAvnc(link, adaptToScreenSize, scaleRatio))
+                        val useUnixSocket = feature["use_unix_socket"] as? Boolean ?: true
+                        _navigationEvents.tryEmit(GuiNavigationEvent.OpenAvnc(link, adaptToScreenSize, scaleRatio, useUnixSocket))
                     }
                     "x11" -> {
                         _navigationEvents.tryEmit(GuiNavigationEvent.OpenX11)
@@ -166,6 +179,7 @@ class ContainerMainViewModel(
 
     private fun setupEnvironment() {
         val app = getApplication<Application>()
+        Global.terminalSession?.finishIfRunning()
         Global.newSession(onFinished = { exitCode ->
             if (exitCode == -9) {
                 Global.onSessionSignal9?.invoke()
@@ -192,6 +206,8 @@ class ContainerMainViewModel(
         val merged = collectEnabledOptions()
         // 处理 lstat-cache feature：解析路径，生成 --assured-path= 参数
         merged.args.addAll(collectLstatCacheArgs())
+        // 处理 storage feature：生成 --tiny-storage 和初始 --bind= 参数
+        collectStorageArgs(merged.args)
         for (cmd in merged.preStartHostCommands) {
             Global.sendCommand(cmd)
         }
@@ -209,9 +225,9 @@ class ContainerMainViewModel(
             .replace("\$EXTRA_ENV", merged.env.joinToString(" "))
 
         // 写入临时脚本文件，绕过 PTY 单行 4096 字节限制
-        val bootScript = File("${getApplication<Application>().cacheDir}/boot_${code}.sh")
-        bootScript.writeText(resolvedBootCmd)
-        Global.sendCommand("source ${bootScript.absolutePath} && rm ${bootScript.absolutePath}")
+        val bootScript = File("${getApplication<Application>().filesDir}/boot_${code}.sh")
+        bootScript.writeText("exec $resolvedBootCmd")
+        Global.sendCommand("source ${bootScript.absolutePath}")
 
         for (cmd in merged.postStartContainerCommands) {
             Global.sendCommand(cmd)
@@ -232,45 +248,61 @@ class ContainerMainViewModel(
                 "audio" -> {
                     TinyAudio.start()
                 }
+                "print" -> {
+                    TinyIpp.start()
+                }
+                "storage" -> {
+                    TinyStorage.start()
+                }
                 "webview" -> {
                     if (!Global.autoLaunchGui) continue
-                    val link = feature["link"] as? String ?: return
-                    val command = feature["command"] as? String ?: return
+                    val link = feature["link"] as? String ?: continue
+                    val command = feature["command"] as? String ?: continue
                     Global.sendCommand(command)
                     val port = extractPort(link)
-                    if (port != null) {
-                        if (waitForPort(port)) {
-                            return
-                        }
+                    Log.d(TAG, "webview: link=$link port=$port waiting for port...")
+                    if (port == null) continue
+                    if (!waitForPort(port)) {
+                        Log.e(TAG, "webview: port=$port not ready, giving up")
+                        continue
                     }
                     _navigationEvents.tryEmit(GuiNavigationEvent.OpenWebView(link))
                 }
                 "avnc" -> {
                     if (!Global.autoLaunchGui) continue
-                    val link = feature["link"] as? String ?: return
-                    val command = feature["command"] as? String ?: return
-                    val adaptToScreenSize = feature["adapt_to_screen_size"] as? Boolean ?: return
-                    val scaleRatio = (feature["scale_ratio"] as? Number)?.toDouble() ?: return
+                    val link = feature["link"] as? String ?: continue
+                    val command = feature["command"] as? String ?: continue
+                    val adaptToScreenSize = feature["adapt_to_screen_size"] as? Boolean ?: continue
+                    val scaleRatio = (feature["scale_ratio"] as? Number)?.toDouble() ?: continue
+                    val useUnixSocket = feature["use_unix_socket"] as? Boolean ?: true
                     Global.sendCommand(command)
-                    if (!waitForFile("${getApplication<Application>().cacheDir}/tmp/.tiny.vnc")) {
-                        return
+                    if (useUnixSocket) {
+                        if (!waitForFile("${getApplication<Application>().filesDir}/tmp/.tiny.vnc")) {
+                            continue
+                        }
+                    } else {
+                        val port = extractPort(link)
+                        Log.d(TAG, "avnc: link=$link port=$port waiting for port...")
+                        if (port == null) continue
+                        if (!waitForPort(port)) {
+                            Log.e(TAG, "avnc: port=$port not ready, giving up")
+                            continue
+                        }
                     }
-                    _navigationEvents.tryEmit(GuiNavigationEvent.OpenAvnc(link, adaptToScreenSize, scaleRatio))
+                    _navigationEvents.tryEmit(GuiNavigationEvent.OpenAvnc(link, adaptToScreenSize, scaleRatio, useUnixSocket))
                 }
                 "x11" -> {
                     if (!Global.autoLaunchGui) continue
-                    val args = feature["args"] as? List<String> ?: return
-                    val command = feature["command"] as? String ?: return
+                    val args = feature["args"] as? List<String> ?: continue
+                    val command = feature["command"] as? String ?: continue
                     viewModelScope.launch {
                         launchXServer(args)
-                        viewModelScope.launch(Dispatchers.IO) {
-                            if (!waitForFile("${getApplication<Application>().cacheDir}/tmp/.X11-unix/X${extractDisplay(args)}")) {
-                                return@launch
-                            }
-                            Global.sendCommand(command)
-                            _navigationEvents.tryEmit(GuiNavigationEvent.OpenX11)
-                        }
                     }
+                    if (!waitForFile("${getApplication<Application>().filesDir}/tmp/.X11-unix/X${extractDisplay(args)}")) {
+                        continue
+                    }
+                    Global.sendCommand(command)
+                    _navigationEvents.tryEmit(GuiNavigationEvent.OpenX11)
                 }
             }
         }
@@ -284,7 +316,7 @@ class ContainerMainViewModel(
             "TERMUX_X11_DEBUG", "TERMUX_X11_OVERRIDE_PACKAGE"
         )
         val envVals = arrayOf(
-            "${app.cacheDir.absolutePath}/tmp",
+            "${app.filesDir.absolutePath}/tmp",
             "${app.dataDir.absolutePath}/$code/usr/share/X11/xkb",
             "1",
             app.packageName
@@ -327,7 +359,7 @@ class ContainerMainViewModel(
     private fun collectLstatCacheArgs(): List<String> {
         val features = config["feature"] as? List<Map<String, Any>> ?: return emptyList()
         val app = getApplication<Application>()
-        val cacheDir = app.cacheDir.absolutePath
+        val cacheDir = app.filesDir.absolutePath
         val containerDir = "${app.dataDir.absolutePath}/$code"
 
         val result = mutableListOf<String>()
@@ -411,6 +443,27 @@ class ContainerMainViewModel(
         }
     }
 
+    /**
+     * 如果 storage feature 启用，检测已插入的外部存储设备，
+     * 将 --tiny-storage 和初始 --bind= 参数注入 args 列表。
+     */
+    @Suppress("UNCHECKED_CAST")
+    private fun collectStorageArgs(args: MutableList<String>) {
+        val features = config["feature"] as? List<Map<String, Any>> ?: return
+        val storageFeature = features.firstOrNull {
+            (it["type"] as? String) == "storage" && it["enabled"] == true
+        } ?: return
+
+        // 通知 proot 启动 socket listener
+        args.add("--tiny-storage")
+
+        // 检测当前已挂载的外部存储，添加静态 bind
+        val devices = TinyStorage.detectExternalStorage()
+        for ((path, name) in devices) {
+            args.add("--bind=$path:/mnt/$name")
+        }
+    }
+
     /** glob → regex，* 通配任意字符 */
     private fun globToRegex(glob: String): Regex {
         val parts = glob.split("*").map { Regex.escape(it) }
@@ -475,20 +528,20 @@ class ContainerMainViewModel(
     }
 
     private fun extractPort(link: String): Int? {
-        val portRegex = Regex(":(\\d+)/")
+        val portRegex = Regex(":(\\d+)(?:/|$)")
         return portRegex.find(link)?.groupValues?.get(1)?.toIntOrNull()
     }
 
-    private suspend fun waitForPort(port: Int, timeoutMs: Long = 60_000): Boolean {
-        withTimeoutOrNull(timeoutMs) {
+    private suspend fun waitForPort(port: Int, timeoutMs: Long = 15_000): Boolean {
+        return withTimeoutOrNull(timeoutMs) {
             while (true) {
                 if (checkTcpPort(port) || checkUdpPort(port)) {
                     return@withTimeoutOrNull true
                 }
                 delay(500)
             }
-        }
-        return false
+            return@withTimeoutOrNull false
+        } ?: false
     }
 
     private fun checkTcpPort(port: Int): Boolean {
@@ -509,7 +562,7 @@ class ContainerMainViewModel(
         }
     }
 
-    private suspend fun waitForFile(filePath: String, timeoutMs: Long = 60_000): Boolean {
+    private suspend fun waitForFile(filePath: String, timeoutMs: Long = 15_000): Boolean {
         val file = File(filePath)
         var timer = 0
         while (timeoutMs > timer) {

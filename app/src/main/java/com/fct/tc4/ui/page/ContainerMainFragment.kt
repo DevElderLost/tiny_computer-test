@@ -116,7 +116,8 @@ class ContainerMainFragment : Fragment() {
                         getString(R.string.tc4_update_available, version),
                         Snackbar.LENGTH_INDEFINITE
                     ).setAction(R.string.tc4_btn_update) {
-                        activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Cateners/tiny_container/releases")))
+                        activity.startActivity(Intent(Intent.ACTION_VIEW,
+                            "https://github.com/Cateners/tiny_container/releases".toUri()))
                     }.show()
                 }
             }
@@ -134,17 +135,22 @@ class ContainerMainFragment : Fragment() {
                             requireContext().startActivity(intent)
                         }
                         is GuiNavigationEvent.OpenAvnc -> {
-                            val uri = event.link.toUri().buildUpon()
-                                .appendQueryParameter("UnixSocket", "${requireContext().cacheDir.absolutePath}/tmp/.tiny.vnc")
-                                .build()
+                            val uriBuilder = event.link.toUri().buildUpon()
+                            if (event.useUnixSocket) {
+                                uriBuilder.appendQueryParameter("UnixSocket", "${requireContext().filesDir.absolutePath}/tmp/.tiny.vnc")
+                            }
+                            val uri = uriBuilder.build()
                             val profile = VncUri(uri.toString()).toServerProfile().apply {
                                 resizeRemoteDesktop = event.adaptToScreenSize
                                 resizeRemoteDesktopScaleFactor = 4F.pow(event.scaleRatio.toFloat())
                             }
-                            requireContext().startActivity(createVncIntent(requireContext(), profile))
+                            val intent = createVncIntent(requireContext(), profile)
+                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                            requireContext().startActivity(intent)
                         }
                         is GuiNavigationEvent.OpenX11 -> {
                             val intent = Intent(requireContext(), com.termux.x11.MainActivity::class.java)
+                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
                             requireContext().startActivity(intent)
                         }
                     }
