@@ -150,8 +150,11 @@ class FeaturesFragment : Fragment() {
                     viewModel.onEnabledToggle(index, false)
                 }
             }
+            
             override fun onMicMonitorToggle(enabled: Boolean) {
                 TinyMicrophone.setMonitorEnabled(enabled)
+            }
+            
             override fun onUseUnixSocketToggle(index: Int, useUnixSocket: Boolean) {
                 viewModel.onUseUnixSocketToggle(index, useUnixSocket)
             }
