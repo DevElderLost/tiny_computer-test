@@ -38,10 +38,12 @@ import com.fct.tc4.databinding.Tc4FragmentFeaturesBinding
 import com.fct.tc4.databinding.Tc4FeatureAudioBinding
 import com.fct.tc4.databinding.Tc4FeatureAvncBinding
 import com.fct.tc4.databinding.Tc4FeatureMicrophoneBinding
+import com.fct.tc4.databinding.Tc4FeaturePrintBinding
 import com.fct.tc4.databinding.Tc4FeatureWebviewBinding
 import com.fct.tc4.databinding.Tc4FeatureUnknownBinding
 import com.fct.tc4.databinding.Tc4FeatureX11Binding
 import com.fct.tc4.databinding.Tc4FeatureLstatCacheBinding
+import com.fct.tc4.databinding.Tc4FeatureStorageBinding
 import com.fct.tc4.ui.misc.FeatureEditDialogFragment
 import com.fct.tc4.ui.misc.Global
 import com.google.android.material.listitem.ListItemViewHolder
@@ -148,6 +150,9 @@ class FeaturesFragment : Fragment() {
                     viewModel.onEnabledToggle(index, false)
                 }
             }
+            override fun onUseUnixSocketToggle(index: Int, useUnixSocket: Boolean) {
+                viewModel.onUseUnixSocketToggle(index, useUnixSocket)
+            }
         })
         binding.recyclerView.adapter = adapter
         binding.recyclerView.layoutManager = LinearLayoutManager(requireContext())
@@ -217,6 +222,7 @@ interface FeatureCallbacks {
     fun onEditFeature(index: Int, type: String)
     fun onShareWebView(index: Int)
     fun onMicEnabledToggle(index: Int, enabled: Boolean) {}
+    fun onUseUnixSocketToggle(index: Int, useUnixSocket: Boolean) {}
 }
 
 // ===================== 适配器与 ViewHolder =====================
@@ -231,8 +237,10 @@ private class FeaturesAdapter(
         private const val TYPE_WEBVIEW = 2
         private const val TYPE_AVNC = 3
         private const val TYPE_X11 = 4
+        private const val TYPE_PRINT = 7
         private const val TYPE_UNKNOWN = 5
         private const val TYPE_LSTAT_CACHE = 6
+        private const val TYPE_STORAGE = 8
     }
 
     private var items: List<FeatureItem> = emptyList()
@@ -255,6 +263,9 @@ private class FeaturesAdapter(
                     old is AudioFeature && new is AudioFeature -> {
                         if (old.enabled != new.enabled) changes.add("enabled")
                     }
+                    old is PrintFeature && new is PrintFeature -> {
+                        if (old.enabled != new.enabled) changes.add("enabled")
+                    }
                     old is WebViewFeature && new is WebViewFeature -> {
                         if (old.enabled != new.enabled) changes.add("enabled")
                     }
@@ -262,11 +273,15 @@ private class FeaturesAdapter(
                         if (old.enabled != new.enabled) changes.add("enabled")
                         if (old.adaptToScreenSize != new.adaptToScreenSize) changes.add("adapt")
                         if (old.scaleRatio != new.scaleRatio) changes.add("ratio")
+                        if (old.useUnixSocket != new.useUnixSocket) changes.add("unix")
                     }
                     old is X11Feature && new is X11Feature -> {
                         if (old.enabled != new.enabled) changes.add("enabled")
                     }
                     old is LstatCacheFeature && new is LstatCacheFeature -> {
+                        if (old.enabled != new.enabled) changes.add("enabled")
+                    }
+                    old is StorageFeature && new is StorageFeature -> {
                         if (old.enabled != new.enabled) changes.add("enabled")
                     }
                 }
@@ -280,10 +295,12 @@ private class FeaturesAdapter(
     override fun getItemViewType(position: Int): Int = when (items[position]) {
         is AudioFeature -> TYPE_AUDIO
         is MicrophoneFeature -> TYPE_MICROPHONE
+        is PrintFeature -> TYPE_PRINT
         is WebViewFeature -> TYPE_WEBVIEW
         is AvncFeature -> TYPE_AVNC
         is X11Feature -> TYPE_X11
         is LstatCacheFeature -> TYPE_LSTAT_CACHE
+        is StorageFeature -> TYPE_STORAGE
         is UnknownFeature -> TYPE_UNKNOWN
     }
 
@@ -310,6 +327,14 @@ private class FeaturesAdapter(
                 val b = Tc4FeatureX11Binding.inflate(inflater, parent, false)
                 X11VH(b, callbacks)
             }
+            TYPE_PRINT -> {
+                val b = Tc4FeaturePrintBinding.inflate(inflater, parent, false)
+                PrintVH(b, callbacks)
+            }
+            TYPE_STORAGE -> {
+                val b = Tc4FeatureStorageBinding.inflate(inflater, parent, false)
+                StorageVH(b, callbacks)
+            }
             TYPE_UNKNOWN -> {
                 val b = Tc4FeatureUnknownBinding.inflate(inflater, parent, false)
                 UnknownVH(b)
@@ -331,6 +356,8 @@ private class FeaturesAdapter(
             is AvncVH -> holder.bind(items[position] as AvncFeature, position, itemCount)
             is X11VH -> holder.bind(items[position] as X11Feature, position, itemCount)
             is LstatCacheVH -> holder.bind(items[position] as LstatCacheFeature, position, itemCount)
+            is PrintVH -> holder.bind(items[position] as PrintFeature, position, itemCount)
+            is StorageVH -> holder.bind(items[position] as StorageFeature, position, itemCount)
             is UnknownVH -> holder.bind(items[position] as UnknownFeature, position, itemCount)
         }
     }
@@ -351,8 +378,10 @@ private class FeaturesAdapter(
             is AudioVH -> holder.bindPartial(items[position] as AudioFeature, changes)
             is WebViewVH -> holder.bindPartial(items[position] as WebViewFeature, changes)
             is AvncVH -> holder.bindPartial(items[position] as AvncFeature, changes)
+            is PrintVH -> holder.bindPartial(items[position] as PrintFeature, changes)
             is X11VH -> holder.bindPartial(items[position] as X11Feature, changes)
             is LstatCacheVH -> holder.bindPartial(items[position] as LstatCacheFeature, changes)
+            is StorageVH -> holder.bindPartial(items[position] as StorageFeature, changes)
         }
     }
 
@@ -401,6 +430,33 @@ private class MicrophoneVH(
         binding.enabled.isChecked = item.enabled
         binding.enabled.setOnCheckedChangeListener { _, isChecked ->
             callbacks.onMicEnabledToggle(item.index, isChecked)
+        }
+    }
+}
+
+private class PrintVH(
+    private val binding: Tc4FeaturePrintBinding,
+    private val callbacks: FeatureCallbacks
+) : ListItemViewHolder(binding.root) {
+
+    fun bind(item: PrintFeature, position: Int, itemCount: Int) {
+        super.bind(position, itemCount)
+        binding.name.text = item.name
+        binding.description.text = item.description
+        binding.enabled.setOnCheckedChangeListener(null)
+        binding.enabled.isChecked = item.enabled
+        binding.enabled.setOnCheckedChangeListener { _, isChecked ->
+            callbacks.onEnabledToggle(item.index, isChecked)
+        }
+    }
+
+    fun bindPartial(item: PrintFeature, changes: List<String>) {
+        if ("enabled" in changes) {
+            binding.enabled.setOnCheckedChangeListener(null)
+            binding.enabled.isChecked = item.enabled
+            binding.enabled.setOnCheckedChangeListener { _, isChecked ->
+                callbacks.onEnabledToggle(item.index, isChecked)
+            }
         }
     }
 }
@@ -462,6 +518,12 @@ private class AvncVH(
         }
         binding.ratio.isEnabled = item.adaptToScreenSize
 
+        binding.useUnixSocket.setOnCheckedChangeListener(null)
+        binding.useUnixSocket.isChecked = item.useUnixSocket
+        binding.useUnixSocket.setOnCheckedChangeListener { _, isChecked ->
+            callbacks.onUseUnixSocketToggle(item.index, isChecked)
+        }
+
         binding.ratio.value = ((item.scaleRatio * 20).roundToInt() * 0.05).toFloat()
         binding.ratioText.text = formatScaleRatio(binding.ratio.value)
         binding.ratio.tag = item.index
@@ -509,6 +571,13 @@ private class AvncVH(
             binding.ratio.value = ((item.scaleRatio * 20).roundToInt() * 0.05).toFloat()
             binding.ratioText.text = formatScaleRatio(binding.ratio.value)
         }
+        if ("unix" in changes) {
+            binding.useUnixSocket.setOnCheckedChangeListener(null)
+            binding.useUnixSocket.isChecked = item.useUnixSocket
+            binding.useUnixSocket.setOnCheckedChangeListener { _, isChecked ->
+                callbacks.onUseUnixSocketToggle(item.index, isChecked)
+            }
+        }
     }
 
     private fun formatScaleRatio(value: Float): String {
@@ -544,6 +613,33 @@ private class X11VH(
     }
 
     fun bindPartial(item: X11Feature, changes: List<String>) {
+        if ("enabled" in changes) {
+            binding.enabled.setOnCheckedChangeListener(null)
+            binding.enabled.isChecked = item.enabled
+            binding.enabled.setOnCheckedChangeListener { _, isChecked ->
+                callbacks.onEnabledToggle(item.index, isChecked)
+            }
+        }
+    }
+}
+
+private class StorageVH(
+    private val binding: Tc4FeatureStorageBinding,
+    private val callbacks: FeatureCallbacks
+) : ListItemViewHolder(binding.root) {
+
+    fun bind(item: StorageFeature, position: Int, itemCount: Int) {
+        super.bind(position, itemCount)
+        binding.name.text = item.name
+        binding.description.text = item.description
+        binding.enabled.setOnCheckedChangeListener(null)
+        binding.enabled.isChecked = item.enabled
+        binding.enabled.setOnCheckedChangeListener { _, isChecked ->
+            callbacks.onEnabledToggle(item.index, isChecked)
+        }
+    }
+
+    fun bindPartial(item: StorageFeature, changes: List<String>) {
         if ("enabled" in changes) {
             binding.enabled.setOnCheckedChangeListener(null)
             binding.enabled.isChecked = item.enabled

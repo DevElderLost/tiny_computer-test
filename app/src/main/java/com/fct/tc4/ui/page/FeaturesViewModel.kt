@@ -43,6 +43,14 @@ data class AudioFeature(
     val enabled: Boolean
 ) : FeatureItem()
 
+data class PrintFeature(
+    override val index: Int,
+    override val type: String,
+    override val name: String,
+    override val description: String,
+    val enabled: Boolean
+) : FeatureItem()
+
 data class MicrophoneFeature(
     override val index: Int,
     override val type: String,
@@ -66,7 +74,8 @@ data class AvncFeature(
     override val description: String,
     val enabled: Boolean,
     val adaptToScreenSize: Boolean,
-    val scaleRatio: Double
+    val scaleRatio: Double,
+    val useUnixSocket: Boolean
 ) : FeatureItem()
 
 data class X11Feature(
@@ -84,6 +93,14 @@ data class LstatCacheFeature(
     override val description: String,
     val enabled: Boolean,
     val path: List<String>
+) : FeatureItem()
+
+data class StorageFeature(
+    override val index: Int,
+    override val type: String,
+    override val name: String,
+    override val description: String,
+    val enabled: Boolean
 ) : FeatureItem()
 
 /** 未实现的功能类型兜底，避免未知 type 导致崩溃 */
@@ -178,6 +195,15 @@ class FeaturesViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    @Suppress("UNCHECKED_CAST")
+    fun onUseUnixSocketToggle(index: Int, useUnixSocket: Boolean) {
+        featureMaps?.getOrNull(index)?.let { map ->
+            map["use_unix_socket"] = useUnixSocket
+            saveAction?.invoke()
+            refresh()
+        }
+    }
+
     // ===================== 供 Fragment 调用的编辑方法 =====================
 
     @Suppress("UNCHECKED_CAST")
@@ -246,6 +272,8 @@ class FeaturesViewModel(application: Application) : AndroidViewModel(application
         return when (type) {
             "audio" -> AudioFeature(index, type, name, description,
                 enabled = map["enabled"] as? Boolean ?: false)
+            "print" -> PrintFeature(index, type, name, description,
+                enabled = map["enabled"] as? Boolean ?: false)
             "microphone" -> MicrophoneFeature(index, type, name, description,
                 enabled = micEnabled)
             "webview" -> WebViewFeature(index, type, name, description,
@@ -253,12 +281,15 @@ class FeaturesViewModel(application: Application) : AndroidViewModel(application
             "avnc" -> AvncFeature(index, type, name, description,
                 enabled = map["enabled"] as? Boolean ?: false,
                 adaptToScreenSize = map["adapt_to_screen_size"] as? Boolean ?: false,
-                scaleRatio = (map["scale_ratio"] as? Number)?.toDouble() ?: 0.0)
+                scaleRatio = (map["scale_ratio"] as? Number)?.toDouble() ?: 0.0,
+                useUnixSocket = map["use_unix_socket"] as? Boolean ?: true)
             "x11" -> X11Feature(index, type, name, description,
                 enabled = map["enabled"] as? Boolean ?: false)
             "lstat-cache" -> LstatCacheFeature(index, type, name, description,
                 enabled = map["enabled"] as? Boolean ?: false,
                 path = (map["path"] as? List<*>)?.filterIsInstance<String>() ?: emptyList())
+            "storage" -> StorageFeature(index, type, name, description,
+                enabled = map["enabled"] as? Boolean ?: false)
             else -> UnknownFeature(index, type, name, description)
         }
     }
