@@ -60,18 +60,19 @@ jobs:
           yes | sdkmanager --licenses > /dev/null || true
           sdkmanager --install "ndk;27.0.12077973" "cmake;3.22.1"
 
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
         with:
-          channel: stable
-          # Pin ke versi tertentu kalau build mulai pecah karena update flutter:
-          # flutter-version: "3.x.x"
+          gradle-version: "8.11.1"
 
-      - name: flutter pub get
-        run: flutter pub get
-
-      - name: Generate localization (lib/l10n)
-        run: flutter gen-l10n
+      # libfakeinput.so (controller evdev/hidraw dari DroidDeck) dibangun untuk aarch64 glibc,
+      # lalu ikut di assets APK dan disalin ke ~/.local/share/tiny/extra saat peluncuran.
+      - name: Build libfakeinput.so (aarch64 glibc)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++-aarch64-linux-gnu binutils-aarch64-linux-gnu
+          mkdir -p android/app/src/main/assets
+          extra/fakeinput/build.sh android/app/src/main/assets
 
       # ---- Ambil jniLibs.zip & patch.tar.gz dari Releases (rootfs SENGAJA TIDAK didownload di sini) ----
       # CATATAN: upstream sudah rename Cateners/tiny_computer -> Cateners/tiny_container,
@@ -96,11 +97,11 @@ jobs:
           unzip -o /tmp/dl/jniLibs.zip -d android/app/src/main/jniLibs/arm64-v8a
 
       - name: Copy patch.tar.gz ke assets
-        run: cp /tmp/dl/patch.tar.gz assets/patch.tar.gz
+        run: cp /tmp/dl/patch.tar.gz android/app/src/main/assets/patch.tar.gz
 
-      # Rootfs (assets/xa*) sengaja di-skip biar build cepat.
+      # Rootfs (android/app/src/main/assets/xa*) sengaja di-skip biar build cepat.
       # APK hasil build ini BELUM ada rootfs di dalamnya -- perlu ditambahkan manual
-      # (unzip APK -> taruh xa* di assets/flutter_assets/assets/ -> re-sign) sebelum dipakai jalan.
+      # (unzip APK -> taruh xa* di assets/ -> re-sign) sebelum dipakai jalan.
 
       # ---- Setup keystore (cuma kalau BUILD_TYPE = release) ----
       # Kalau secret ANDROID_KEYSTORE_BASE64 SUDAH diisi -> pakai keystore asli, APK signed beneran.
@@ -217,29 +218,21 @@ jobs:
           echo "Semua dependency JitPack sudah siap."
 
       # ---- Build ----
-      - name: flutter build apk (release)
+      - name: Gradle build (release)
         if: ${{ env.BUILD_TYPE == 'release' }}
-        run: |
-          flutter build apk --release \
-            --target-platform android-arm64 \
-            --split-per-abi \
-            --obfuscate \
-            --split-debug-info=tiny_computer/sdi
+        run: gradle -p android assembleRelease --no-daemon
 
-      - name: flutter build apk (debug)
+      - name: Gradle build (debug)
         if: ${{ env.BUILD_TYPE == 'debug' }}
-        run: |
-          flutter build apk --debug \
-            --target-platform android-arm64 \
-            --split-per-abi
+        run: gradle -p android assembleDebug --no-daemon
 
       # ---- Rename output sesuai konvensi build.ps1 (tiny-computer-<env>[-<suffix>].apk) ----
       - name: Rename APK
         run: |
-          SRC="build/app/outputs/flutter-apk/app-arm64-v8a-${BUILD_TYPE}.apk"
+          SRC="android/app/build/outputs/apk/${BUILD_TYPE}/app-${BUILD_TYPE}.apk"
           if [ ! -f "$SRC" ]; then
             echo "::error::APK tidak ditemukan di $SRC"
-            ls -la build/app/outputs/flutter-apk/ || true
+            ls -la android/app/build/outputs/apk/${BUILD_TYPE}/ || true
             exit 1
           fi
 

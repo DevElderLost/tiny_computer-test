@@ -1,15 +1,17 @@
 package com.example.tiny_computer
 
+import android.app.Application
 import android.content.Context
-import com.google.android.material.color.DynamicColors
-import io.flutter.app.FlutterApplication
+import com.example.tiny_computer.core.TinyEnv
+import com.example.tiny_computer.core.TinyPrefs
 import me.weishu.reflection.Reflection
 
-class MainApplication : FlutterApplication() {
+class MainApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        DynamicColors.applyToActivitiesIfAvailable(this@MainApplication)
+        TinyEnv.init(this)
+        TinyPrefs.init(this)
     }
 
     override fun attachBaseContext(base: Context?) {

@@ -1,25 +1,7 @@
 plugins {
     id "com.android.application"
-    id "kotlin-android"
-    id "dev.flutter.flutter-gradle-plugin"
-}
-
-def localProperties = new Properties()
-def localPropertiesFile = rootProject.file('local.properties')
-if (localPropertiesFile.exists()) {
-    localPropertiesFile.withReader('UTF-8') { reader ->
-        localProperties.load(reader)
-    }
-}
-
-def flutterVersionCode = localProperties.getProperty('flutter.versionCode')
-if (flutterVersionCode == null) {
-    flutterVersionCode = '1'
-}
-
-def flutterVersionName = localProperties.getProperty('flutter.versionName')
-if (flutterVersionName == null) {
-    flutterVersionName = '1.0'
+    id "org.jetbrains.kotlin.android"
+    id "org.jetbrains.kotlin.plugin.compose"
 }
 
 def keystoreProperties = new Properties()
@@ -30,7 +12,7 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace "com.example.tiny_computer"
-    compileSdkVersion flutter.compileSdkVersion
+    compileSdk 35
     ndkVersion "27.0.12077973"  // flutter.ndkVersion
 
     compileOptions {
@@ -39,12 +21,15 @@ android {
     }
 
     kotlinOptions {
-        jvmTarget = 17
+        jvmTarget = '17'
     }
 
     sourceSets {
         main.java.srcDirs += 'src/main/kotlin'
         main.java.srcDirs += 'src/main/java'
+        // libwayland-server.so + libffi.so (prebuilt dari DroidDeck), dipisah dari jniLibs
+        // supaya jniLibs.zip dari rilis tiny_container tidak menimpanya.
+        main.jniLibs.srcDirs += 'src/main/wayland-jniLibs'
     }
 
     defaultConfig {
@@ -54,14 +39,18 @@ android {
         // For more information, see: https://docs.flutter.dev/deployment/android#reviewing-the-gradle-build-configuration.
         minSdk 28 // glob() version //proot version //ffmpeg_kit; flutter.minSdkVersion
         targetSdk 28 //https://github.com/termux/termux-app/issues/1072; native; linker; flutter.targetSdkVersion
-        versionCode flutterVersionCode.toInteger()
-        versionName flutterVersionName
+        versionCode 20260205
+        versionName "1.1.0-compose"
 
         buildConfigField "String", "COMMIT", "\"" + ("git rev-parse HEAD\n".execute().getText().trim() ?: (System.getenv('CURRENT_COMMIT') ?: "NO_COMMIT")) + "\""
 
+        // adrenotools (loader Turnip) hanya mendukung arm64-v8a.
+        ndk {
+            abiFilters 'arm64-v8a'
+        }
+
         externalNativeBuild {
             cmake {
-                cppFlags "-std=c++11"
                 arguments "-DANDROID_STL=c++_shared"
             }
         }
@@ -92,6 +81,7 @@ android {
     }
 
     buildFeatures {
+        compose true
         aidl true
         dataBinding true
         viewBinding true
@@ -116,17 +106,30 @@ android {
 
     packagingOptions {
         pickFirst 'lib/arm64-v8a/libc++_shared.so'
-        pickFirst 'lib/x86_64/libc++_shared.so'
-        pickFirst 'lib/armeabi-v7a/libc++_shared.so'
-        pickFirst 'lib/arm64-v8a/libc++_shared.so'
+        pickFirst 'lib/arm64-v8a/libffi.so'
+        pickFirst 'lib/arm64-v8a/libwayland-server.so'
+        pickFirst 'lib/arm64-v8a/libtermux.so'
+        // proot, busybox, dsb. dieksekusi dari nativeLibraryDir -> harus diekstrak.
+        jniLibs {
+            useLegacyPackaging = true
+        }
     }
 }
 
-flutter {
-    source '../..'
-}
-
 dependencies {
+    // UI: seluruhnya Jetpack Compose (sama seperti DroidDeck).
+    implementation platform('androidx.compose:compose-bom:2024.02.00')
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.material3:material3'
+    implementation 'androidx.compose.material:material-icons-extended'
+    implementation 'androidx.activity:activity-compose:1.8.2'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
+    // Terminal: Termux terminal-view menggantikan xterm + flutter_pty (PTY native).
+    implementation 'com.termux.termux-app:terminal-view:0.118.0'
+    // Driver Turnip (bionic, lewat adrenotools) dikirim sebagai .tzst di assets.
+    implementation 'com.github.luben:zstd-jni:1.5.2-3@aar'
+    implementation 'org.apache.commons:commons-compress:1.27.1'
+
     implementation "androidx.core:core-ktx:1.15.0"
     implementation "androidx.appcompat:appcompat:1.7.0"
     implementation "com.google.android.material:material:1.7.0"

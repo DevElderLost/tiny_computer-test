@@ -1,44 +1,28 @@
 package com.example.tiny_computer
 
-import android.system.Os.setenv
+import android.Manifest
+import android.os.Build
+import android.os.Bundle
+import android.view.WindowManager
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import com.example.tiny_computer.core.Cfg
+import com.example.tiny_computer.ui.TinyApp
+import com.example.tiny_computer.ui.TinyTheme
 
-import android.content.Intent
-import androidx.annotation.NonNull
-import androidx.annotation.Keep
-import androidx.appcompat.app.AppCompatDelegate
-import io.flutter.embedding.android.FlutterActivity
-import io.flutter.embedding.engine.FlutterEngine
-import io.flutter.plugin.common.MethodChannel
-
-
-class MainActivity: FlutterActivity() {
-
-    override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
-        super.configureFlutterEngine(flutterEngine)
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "android").setMethodCallHandler {
-            // 注册通道并设置方法调用处理器
-            call, result ->
-            // 判断方法名
-            when (call.method) {
-                "launchSignal9Page" -> {
-                    startActivity(Intent(this, Signal9Activity::class.java))
-                    result.success(0)
-                }
-                "getNativeLibraryPath" -> {
-                    result.success(getApplicationInfo().nativeLibraryDir)
-                }
-                "startStreaming" -> {
-                    AudioStream.startStreaming(call.argument("path")!!)
-                }
-                "stopStreaming" -> {
-                    AudioStream.stopStreaming()
-                }
-                else -> {
-                    // 不支持的方法名
-                    result.notImplemented()
-                }
-            }
+/** Satu-satunya halaman utama; seluruh UI Jetpack Compose (pengganti FlutterActivity). */
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        if (Build.VERSION.SDK_INT < 33) {
+            requestPermissions(arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE), 1)
         }
+        setContent { TinyTheme { TinyApp() } }
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (Cfg.wakelock) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    }
 }

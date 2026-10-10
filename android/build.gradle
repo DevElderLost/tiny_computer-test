@@ -1,24 +1,6 @@
-allprojects {
-    repositories {
-        google()
-        mavenCentral()
-        maven { url 'https://jitpack.io' }
-    }
-    configurations.all {
-        resolutionStrategy.dependencySubstitution {
-            substitute module('com.github.tiny-computer:avnc') using module('com.github.DevElderLost:avnc-test:361b425d7e')
-        }
-    }
-}
-
-rootProject.buildDir = '../build'
-subprojects {
-    project.buildDir = "${rootProject.buildDir}/${project.name}"
-}
-subprojects {
-    project.evaluationDependsOn(':app')
-}
+// Tiny Computer tidak lagi memakai Flutter: UI sepenuhnya Jetpack Compose.
+// Repositori didefinisikan di settings.gradle (dependencyResolutionManagement).
 
 tasks.register("clean", Delete) {
-    delete rootProject.buildDir
+    delete rootProject.layout.buildDirectory
 }
