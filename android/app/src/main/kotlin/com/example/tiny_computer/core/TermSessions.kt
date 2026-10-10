@@ -115,6 +115,13 @@ class TermViewClient(
     override fun readFnKey(): Boolean = false
     override fun onCodePoint(codePoint: Int, ctrlDown: Boolean, session: TerminalSession): Boolean = false
     override fun onEmulatorSet() = Unit
+    override fun logError(tag: String, message: String) { Log.e(tag, message) }
+    override fun logWarn(tag: String, message: String) { Log.w(tag, message) }
+    override fun logInfo(tag: String, message: String) { Log.i(tag, message) }
+    override fun logDebug(tag: String, message: String) { Log.d(tag, message) }
+    override fun logVerbose(tag: String, message: String) { Log.v(tag, message) }
+    override fun logStackTraceWithMessage(tag: String, message: String, e: Exception) { Log.e(tag, message, e) }
+    override fun logStackTrace(tag: String, e: Exception) { Log.e(tag, e.message, e) }
 }
 
 /**
@@ -130,7 +137,7 @@ object TermSessions {
         val idx = TinyEnv.currentContainer
         synchronized(map) { map[idx] }?.let { return it }
         val app = context.applicationContext
-        val create = { TermSession(app).also { it.session.updateSize(80, 24, 8, 16) } }
+        val create = { TermSession(app).also { it.session.updateSize(80, 24) } }
         val made = if (Looper.myLooper() == Looper.getMainLooper()) create() else {
             val box = arrayOfNulls<TermSession>(1)
             val latch = CountDownLatch(1)

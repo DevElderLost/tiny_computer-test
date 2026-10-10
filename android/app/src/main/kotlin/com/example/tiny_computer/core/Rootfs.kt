@@ -13,7 +13,7 @@ import kotlin.math.roundToInt
 /**
  * Port `Workflow.setupBootstrap`, `initForFirstTime` dan `initData` dari workflow.dart.
  * Logika Linux/Debian (proot, rootfs `xa*`, assets.zip, patch.tar.gz) tidak diubah:
- * skrip shell diekstrak langsung dari kode Dart (assets/tiny/*.sh).
+ * skrip shell diekstrak langsung dari kode Dart (berkas .sh di assets/tiny).
  */
 object Rootfs {
     private const val TAG = "TinyRootfs"
