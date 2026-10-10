@@ -54,6 +54,10 @@ jobs:
 
       - name: Setup Android SDK (NDK + CMake)
         uses: android-actions/setup-android@v3
+        with:
+          # Paket bawaan action ('tools') sudah dihapus Google dan membuat sdkmanager gagal.
+          # SDK di runner sudah lengkap; NDK/CMake dipasang di langkah berikutnya.
+          packages: ''
 
       - name: Install NDK & CMake versi yang dipakai project
         run: |
