@@ -2,4 +2,5 @@
 <resources>
     <color name="tc_s9a_blue_screen_blue">#FF6F43C0</color>
     <color name="tc_s9a_white">#FFFFFFFF</color>
+    <color name="tc_background">#FF0A0B0D</color>
 </resources>

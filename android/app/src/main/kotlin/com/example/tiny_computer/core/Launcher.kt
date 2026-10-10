@@ -67,8 +67,10 @@ TMPDIR=${'$'}DATA_DIR/pulseaudio_tmp HOME=${'$'}DATA_DIR/pulseaudio_tmp XDG_CONF
         }
         if (preload.isNotEmpty()) extraOpt.append("LD_PRELOAD=").append(preload.joinToString(":")).append(' ')
 
-        // Wayland: soket compositor ada di folder tmp kontainer = /tmp di guest
-        extraOpt.append("XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0 ")
+        // Sengaja TIDAK mengekspor WAYLAND_DISPLAY ke seluruh guest: aplikasi GTK (mis. xfce4-notifyd)
+        // lalu memakai backend Wayland dan gagal karena compositor tidak punya wlr-layer-shell.
+        // Hanya Xwayland yang diberi variabel Wayland (lihat guiCommand); desktop tetap murni X11.
+        extraOpt.append("GDK_BACKEND=x11 QT_QPA_PLATFORM=xcb SDL_VIDEODRIVER=x11 ")
 
         if (Cfg.isHidpiEnabled) extraOpt.append(Cfg.defaultHidpiOpt).append(' ')
         if (Cfg.virgl) {
@@ -123,10 +125,10 @@ clear""".trimIndent(),
         return """
 mkdir -p "${'$'}HOME/.vnc"
 command -v Xwayland >/dev/null 2>&1 || { echo "Memasang xwayland..."; sudo apt update && sudo apt install -y xwayland; }
-export XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0
+unset WAYLAND_DISPLAY
 rm -f /tmp/.X11-unix/X4 /tmp/.X4-lock
 for i in ${'$'}(seq 1 150); do [ -S /tmp/wayland-0 ] && break; sleep 0.2; done
-(Xwayland :4 -fullscreen -geometry ${w}x$h -noreset -ac +iglx > "${'$'}HOME/.vnc/xwayland.log" 2>&1 &)
+(XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0 Xwayland :4 -fullscreen -geometry ${w}x$h -noreset -ac +iglx > "${'$'}HOME/.vnc/xwayland.log" 2>&1 &)
 for i in ${'$'}(seq 1 150); do [ -S /tmp/.X11-unix/X4 ] && break; sleep 0.2; done
 bash /etc/X11/xinit/Xsession &> "${'$'}HOME/.vnc/x.log" &
 """.trimIndent()

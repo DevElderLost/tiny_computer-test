@@ -1,8 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Tema aplikasi: Compose menggambar semuanya, jadi cukup tema dasar Material3 tanpa action bar. -->
-    <style name="App.Theme" parent="Theme.Material3.DayNight.NoActionBar" />
-    <style name="App.Theme.Display" parent="Theme.Material3.DayNight.NoActionBar">
+    <!-- Selalu gelap seperti DroidDeck; warna sebenarnya dipasang Compose dari palet yang dipilih. -->
+    <style name="App.Theme" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="android:windowBackground">@color/tc_background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+    <style name="App.Theme.Display" parent="Theme.Material3.Dark.NoActionBar">
         <item name="android:windowBackground">@android:color/black</item>
         <item name="android:windowFullscreen">true</item>
     </style>

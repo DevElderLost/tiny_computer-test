@@ -151,6 +151,11 @@ object Cfg {
         get() = TinyPrefs.getInt("upscaler", 1)
         set(v) = TinyPrefs.setInt("upscaler", v)
 
+    /** Id palet: graphite (bawaan), paper, blue, electric. Sama dengan pilihan tema DroidDeck. */
+    var theme: String
+        get() = TinyPrefs.getString("theme", "graphite")
+        set(v) = TinyPrefs.setString("theme", v)
+
     // ---- Baru: controller ----
     /** "xbox360" (evdev) atau "deck" (hidraw Steam Deck + evdev). */
     var padIdentity: String

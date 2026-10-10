@@ -2,6 +2,7 @@ package com.example.tiny_computer.ui
 
 import android.content.Context
 import android.view.inputmethod.InputMethodManager
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -61,7 +62,7 @@ fun TerminalScreen() {
     var showCommands by remember { mutableStateOf(false) }
     var fontPx by remember { mutableStateOf((14f * Cfg.termFontScale.toFloat() * ctx.resources.displayMetrics.density).toInt()) }
 
-    Column(Modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize().background(LocalPalette.current.background)) {
         AndroidView(
             modifier = Modifier.weight(1f).fillMaxWidth(),
             factory = { c ->
@@ -90,16 +91,16 @@ fun TerminalScreen() {
             update = { it.onScreenUpdated() },
         )
         if (Cfg.isTerminalCommandsEnabled) {
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 4.dp),
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                FilterChip(selected = ctrl, onClick = { TermModifiers.ctrl = !TermModifiers.ctrl; ctrl = TermModifiers.ctrl }, label = { Text("Ctrl") })
-                FilterChip(selected = alt, onClick = { TermModifiers.alt = !TermModifiers.alt; alt = TermModifiers.alt }, label = { Text("Alt") })
-                KEYS.forEach { k -> OutlinedButton(onClick = { term.write(k.seq); termView?.requestFocus() }) { Text(k.label) } }
+                KeyChip("Ctrl", ctrl) { TermModifiers.ctrl = !TermModifiers.ctrl; ctrl = TermModifiers.ctrl }
+                KeyChip("Alt", alt) { TermModifiers.alt = !TermModifiers.alt; alt = TermModifiers.alt }
+                KEYS.forEach { k -> KeyChip(k.label) { term.write(k.seq); termView?.requestFocus() } }
             }
         }
-        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { showCommands = true }) { Text(stringResource(R.string.tc_ui_control)) }
-            OutlinedButton(onClick = { term.write("\u0003") }) { Text("Ctrl+C") }
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            KeyChip(stringResource(R.string.tc_ui_control)) { showCommands = true }
+            KeyChip("Ctrl+C") { term.write("\u0003") }
         }
     }
     if (showCommands) CommandsDialog(onDismiss = { showCommands = false }, onRun = { term.writeLine(it); showCommands = false })

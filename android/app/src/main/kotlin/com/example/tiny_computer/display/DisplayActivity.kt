@@ -4,7 +4,6 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Build
 import android.os.Bundle
-import android.text.InputType
 import android.util.Log
 import android.view.InputDevice
 import android.view.KeyEvent
@@ -13,10 +12,6 @@ import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.View
 import android.view.WindowManager
-import android.view.inputmethod.BaseInputConnection
-import android.view.inputmethod.EditorInfo
-import android.view.inputmethod.InputConnection
-import android.view.inputmethod.InputMethodManager
 import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.getValue
@@ -45,6 +40,8 @@ class DisplayUiState {
     var touchpad by mutableStateOf(false)
     var padOverlay by mutableStateOf(Cfg.padOverlay)
     var padIdentity by mutableStateOf(Cfg.padIdentity)
+    /** Keyboard PC di layar (dari DroidDeck): tombol evdev asli, bukan keyboard Android. */
+    var pcKeyboard by mutableStateOf(false)
 }
 
 /**
@@ -66,7 +63,6 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
     private var moved = false
     private var leftHeld = false
     private var scrollAcc = 0f
-    private var shiftInjected = false
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -101,7 +97,7 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
                     DisplayOverlay(
                         state = ui,
                         pad = p,
-                        onKeyboard = { toggleKeyboard() },
+                        sendKey = { code, down -> WaylandCompositor.nativeSendKey(code, if (down) 1 else 0) },
                         onClose = { finish() },
                     )
                 }
@@ -277,7 +273,9 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
         if (p != null && PadBridge.isControllerKey(event) && p.onKeyEvent(event)) return true
         val code = event.keyCode
         if (code == KeyEvent.KEYCODE_BACK) {
-            if (event.action == KeyEvent.ACTION_UP) ui.menuOpen = !ui.menuOpen
+            if (event.action == KeyEvent.ACTION_UP) {
+                if (ui.pcKeyboard) ui.pcKeyboard = false else ui.menuOpen = !ui.menuOpen
+            }
             return true
         }
         val evdev = EvdevKeys.fromKeyCode(code)
@@ -287,32 +285,12 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
             // tekan-tahan: kirim ulang sebagai tombol baru (klien Xwayland mengulang sendiri)
             return true
         }
-        // keyboard layar mengirim huruf kapital/simbol sebagai KEYCODE_x + META_SHIFT_ON tanpa tombol shift sendiri
-        val isShiftKey = code == KeyEvent.KEYCODE_SHIFT_LEFT || code == KeyEvent.KEYCODE_SHIFT_RIGHT
-        if (!isShiftKey && down && event.isShiftPressed && !shiftInjected && event.device?.isVirtual != false) {
-            WaylandCompositor.nativeSendKey(SHIFT_EVDEV, 1); shiftInjected = true
-        }
         WaylandCompositor.nativeSendKey(evdev, if (down) 1 else 0)
-        if (!down && shiftInjected && !isShiftKey) { WaylandCompositor.nativeSendKey(SHIFT_EVDEV, 0); shiftInjected = false }
         return true
     }
 
-    private fun toggleKeyboard() {
-        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-        surfaceView.requestFocus()
-        imm.toggleSoftInput(InputMethodManager.SHOW_FORCED, 0)
-    }
-
-    /** SurfaceView yang menerima sentuhan dan menghasilkan InputConnection TYPE_NULL (tombol mentah). */
+    /** SurfaceView yang menerima sentuhan. Teks diketik lewat keyboard PC di layar atau keyboard fisik. */
     private inner class DeskSurface(context: Context) : SurfaceView(context) {
-        override fun onCheckIsTextEditor(): Boolean = true
-
-        override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection {
-            outAttrs.inputType = InputType.TYPE_NULL
-            outAttrs.imeOptions = EditorInfo.IME_FLAG_NO_FULLSCREEN or EditorInfo.IME_FLAG_NO_EXTRACT_UI
-            return BaseInputConnection(this, false)
-        }
-
         @SuppressLint("ClickableViewAccessibility")
         override fun onTouchEvent(event: MotionEvent): Boolean = handleTouch(event)
     }
@@ -328,7 +306,6 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
         private const val BTN_LEFT = 272
         private const val BTN_RIGHT = 273
         private const val BTN_MIDDLE = 274
-        private const val SHIFT_EVDEV = 42
         private const val TAP_MS = 250L
         private const val SCROLL_STEP_PX = 40f
         private const val TOUCHPAD_GAIN = 1.6f
