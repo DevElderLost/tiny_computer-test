@@ -240,6 +240,8 @@
     <string name="tc_sc_gpu">图形</string>
     <string name="tc_sc_gpu_software">软件渲染</string>
     <string name="tc_sc_gpu_turnip">Turnip (Zink)</string>
+    <string name="tc_sc_screen">屏幕尺寸</string>
+    <string name="tc_sc_screen_note">在该应用开启新会话时生效。若已有其他应用在运行，请先点“关机”再更改。桌面打开时无效。</string>
     <string name="tc_sc_hidpi">HiDPI</string>
     <string name="tc_sc_opt_default">默认</string>
     <string name="tc_sc_opt_on">开</string>

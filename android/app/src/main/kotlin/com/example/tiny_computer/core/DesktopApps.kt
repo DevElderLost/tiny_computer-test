@@ -244,11 +244,20 @@ object DesktopApps {
 
     private val bitmaps = object : LruCache<String, Bitmap>(64) {}
 
-    /** Ikon aplikasi sebagai bitmap sisi paling lama ~[px]; di-cache. Dipanggil di thread latar. */
+    /** Membuang bitmap ikon [icon] dari cache (berkas ikonnya baru diganti atau dihapus). */
+    fun forgetIcon(icon: String) {
+        bitmaps.snapshot().keys.filter { it.startsWith("$icon@") }.forEach { bitmaps.remove(it) }
+    }
+
+    /**
+     * Ikon aplikasi sebagai bitmap sisi paling lama ~[px]; di-cache. Shortcut .exe tanpa ikon di tema
+     * mencoba mengambilnya dari .exe-nya ([ExeShortcuts.fallbackIcon]). Dipanggil di thread latar.
+     */
     fun icon(root: File, app: App, px: Int): Bitmap? {
-        val key = "${app.icon}@$px"
+        // ikon kosong (shortcut .exe lama) tidak boleh berbagi kunci: pakai id aplikasinya
+        val key = "${app.icon.ifEmpty { app.id }}@$px"
         bitmaps.get(key)?.let { return it }
-        val file = iconFile(root, app.icon) ?: return null
+        val file = iconFile(root, app.icon) ?: ExeShortcuts.fallbackIcon(app) ?: return null
         val bmp = runCatching { if (isSvg(file)) renderSvg(file, px) else decodeScaled(file, px) }.getOrNull() ?: return null
         bitmaps.put(key, bmp)
         return bmp

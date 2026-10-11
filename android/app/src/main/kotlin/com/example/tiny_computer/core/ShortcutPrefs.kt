@@ -34,6 +34,8 @@ object ShortcutPrefs {
         val hidpi: String = DEFAULT,
         /** Controller di layar saat aplikasi ini berjalan: default (ikut global) | on | off */
         val pad: String = DEFAULT,
+        /** Ukuran layar sesi aplikasi `LEBARxTINGGI`; kosong = ikuti pengaturan global (Settings > Output resolution). */
+        val screen: String = "",
         val hidden: Boolean = false,
     )
 
@@ -51,7 +53,8 @@ object ShortcutPrefs {
             Settings(
                 name = o.optString("name"), args = o.optString("args"), env = o.optString("env"),
                 workDir = o.optString("workDir"), gpu = o.optString("gpu", DEFAULT), hidpi = o.optString("hidpi", DEFAULT),
-                pad = o.optString("pad", DEFAULT), hidden = o.optBoolean("hidden", false),
+                pad = o.optString("pad", DEFAULT), screen = o.optString("screen"),
+                hidden = o.optBoolean("hidden", false),
             )
         }.getOrDefault(Settings())
     }
@@ -61,7 +64,8 @@ object ShortcutPrefs {
         else {
             val o = JSONObject()
                 .put("name", s.name).put("args", s.args).put("env", s.env).put("workDir", s.workDir)
-                .put("gpu", s.gpu).put("hidpi", s.hidpi).put("pad", s.pad).put("hidden", s.hidden)
+                .put("gpu", s.gpu).put("hidpi", s.hidpi).put("pad", s.pad).put("screen", s.screen)
+                .put("hidden", s.hidden)
             sp.edit().putString("app.$id", o.toString()).apply()
         }
         version++
@@ -76,4 +80,15 @@ object ShortcutPrefs {
     }
 
     fun setPadOverlay(id: String, on: Boolean) = save(id, get(id).copy(pad = if (on) ON else OFF))
+
+    /** `1280x720` (huruf x kecil/besar, boleh spasi) -> (1280, 720); null bila bukan ukuran yang wajar. */
+    fun parseSize(text: String): Pair<Int, Int>? {
+        val m = Regex("""^\s*(\d{3,5})\s*[xX×]\s*(\d{3,5})\s*$""").matchEntire(text) ?: return null
+        val w = m.groupValues[1].toInt()
+        val h = m.groupValues[2].toInt()
+        return if (w in 320..7680 && h in 240..4320) w to h else null
+    }
+
+    /** Ukuran layar khusus aplikasi ini; null = ikuti pengaturan global. */
+    fun screenSize(id: String?): Pair<Int, Int>? = if (id == null) null else parseSize(get(id).screen)
 }

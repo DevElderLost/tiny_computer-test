@@ -99,7 +99,7 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
                 it.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
             }
         }
-        val size = Launcher.displaySize(this)
+        val size = Launcher.sessionSize(this, currentApp)
         outW = size.first
         outH = size.second
 
@@ -156,7 +156,23 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
         super.onNewIntent(intent)
         setIntent(intent)
         readLaunchIntent(intent)
+        syncOutputSize()
         if (surfaceReady) startRequestedSession()
+    }
+
+    /**
+     * Ukuran layar aplikasi yang diminta bisa berbeda dari yang sedang tampil (tiap aplikasi Shortcut
+     * punya ukuran sendiri): ubah ukuran output compositor, juga pemetaan sentuhan ([outW]/[outH]).
+     */
+    private fun syncOutputSize() {
+        val size = Launcher.sessionSize(this, currentApp)
+        if (size.first == outW && size.second == outH) return
+        outW = size.first
+        outH = size.second
+        if (surfaceReady) {
+            WaylandCompositor.nativeResizeOutput(outW, outH)
+            lastOutput = outW to outH
+        }
     }
 
     /**
@@ -213,6 +229,11 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
             id?.let { turnip.driverPath(it) }, id?.let { turnip.libraryName(it) },
             applicationInfo.nativeLibraryDir, outW, outH, refresh, Cfg.fpsLimit,
         )
+        // compositor hidup lebih lama dari activity dan hanya menerima ukuran awal saat pertama dinyalakan
+        // (lihat CompositorHost.startOrAttach): sesi berikutnya dengan ukuran lain harus mengubahnya sendiri
+        val prev = lastOutput
+        if (prev != null && prev != (outW to outH)) WaylandCompositor.nativeResizeOutput(outW, outH)
+        lastOutput = outW to outH
         SessionState.running = true
         surfaceReady = true
         // soket wayland-0 sudah ada: nyalakan desktop (Xwayland + sesi X11 Debian) atau aplikasi Shortcut
@@ -368,6 +389,9 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
         /** Id berkas .desktop (tanpa ekstensi) yang dijalankan tanpa membuka desktop; tidak ada = desktop biasa. */
         const val EXTRA_APP = "tiny.shortcut.app"
         private const val TAG = "DisplayActivity"
+
+        /** Ukuran output yang terakhir diberikan ke compositor (satu proses = satu compositor). */
+        @Volatile private var lastOutput: Pair<Int, Int>? = null
         private const val SCALE_FIT = 1
         private const val ALIGN_CENTER = 0
         private const val SCENE_MOTION = 2

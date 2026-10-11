@@ -66,6 +66,7 @@ import androidx.compose.ui.window.DialogProperties
 import com.example.tiny_computer.R
 import com.example.tiny_computer.core.DesktopApps
 import com.example.tiny_computer.core.ExeShortcuts
+import com.example.tiny_computer.core.Launcher
 import com.example.tiny_computer.core.ShortcutPrefs
 import com.example.tiny_computer.core.TinyEnv
 import kotlinx.coroutines.Dispatchers
@@ -246,7 +247,7 @@ private fun AppTile(app: DesktopApps.App, label: String, dimmed: Boolean, onClic
 private fun AppIcon(app: DesktopApps.App, size: Dp, label: String) {
     val pal = LocalPalette.current
     val px = with(LocalDensity.current) { size.roundToPx() }
-    val bitmap by produceState<ImageBitmap?>(initialValue = null, app.icon, px) {
+    val bitmap by produceState<ImageBitmap?>(initialValue = null, app.id, app.icon, px) {
         value = withContext(Dispatchers.IO) { DesktopApps.icon(TinyEnv.containerDir(), app, px)?.asImageBitmap() }
     }
     val shape = RoundedCornerShape(size * 0.24f)
@@ -263,6 +264,14 @@ private fun AppIcon(app: DesktopApps.App, size: Dp, label: String) {
     }
 }
 
+/** Ukuran layar siap pilih untuk sesi aplikasi (sama dengan daftar ukuran layar Winlator). */
+private val SCREEN_PRESETS = listOf(
+    "640x360", "780x360", "640x480", "800x600", "854x480", "960x544", "1024x768", "1280x576",
+    "1280x720", "1280x1024", "1366x768", "1440x900", "1600x720", "1600x900", "1920x1080",
+)
+
+private const val SCREEN_CUSTOM = "custom"
+
 /**
  * Pengaturan satu aplikasi (tekan lama). Semua pilihan hanya berlaku untuk aplikasi ini dan
  * disimpan terpisah ([ShortcutPrefs]); pengaturan desktop utama tidak disentuh.
@@ -270,6 +279,7 @@ private fun AppIcon(app: DesktopApps.App, size: Dp, label: String) {
 @Composable
 private fun AppSettingsDialog(app: DesktopApps.App, onRemoved: () -> Unit, onDismiss: () -> Unit) {
     val pal = LocalPalette.current
+    val ctx = LocalContext.current
     var s by remember(app.id) { mutableStateOf(ShortcutPrefs.get(app.id)) }
     fun update(n: ShortcutPrefs.Settings) { s = n; ShortcutPrefs.save(app.id, n) }
 
@@ -278,6 +288,10 @@ private fun AppSettingsDialog(app: DesktopApps.App, onRemoved: () -> Unit, onDis
     val off = stringResource(R.string.tc_sc_opt_off)
     val shape = RoundedCornerShape(20.dp)
     val maxH = (LocalConfiguration.current.screenHeightDp * 0.9f).dp
+    // ukuran layar: pratetap atau isian sendiri; dinaikkan ke sini agar Reset ikut mengosongkannya
+    var customScreen by remember(app.id) { mutableStateOf(s.screen.isNotEmpty() && s.screen !in SCREEN_PRESETS) }
+    var cw by remember(app.id) { mutableStateOf(ShortcutPrefs.parseSize(s.screen)?.first?.toString().orEmpty()) }
+    var ch by remember(app.id) { mutableStateOf(ShortcutPrefs.parseSize(s.screen)?.second?.toString().orEmpty()) }
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(Modifier.fillMaxSize().clickableNoRipple(onDismiss), contentAlignment = Alignment.Center) {
@@ -317,6 +331,43 @@ private fun AppSettingsDialog(app: DesktopApps.App, onRemoved: () -> Unit, onDis
                         listOf(ShortcutPrefs.DEFAULT to def, ShortcutPrefs.ON to on, ShortcutPrefs.OFF to off),
                         s.hidpi,
                     ) { update(s.copy(hidpi = it)) }
+                    // ukuran layar: bawaan (ikut Settings), pratetap, atau isian sendiri (lebar x tinggi)
+                    DeckChoiceRow(
+                        stringResource(R.string.tc_sc_screen), stringResource(R.string.tc_sc_screen_note),
+                        listOf(ShortcutPrefs.DEFAULT to def) +
+                            SCREEN_PRESETS.map { it to it.replace('x', '×') } +
+                            (SCREEN_CUSTOM to stringResource(R.string.tc_opt_custom)),
+                        when {
+                            customScreen -> SCREEN_CUSTOM
+                            s.screen.isEmpty() -> ShortcutPrefs.DEFAULT
+                            else -> s.screen
+                        },
+                    ) { pick ->
+                        when (pick) {
+                            ShortcutPrefs.DEFAULT -> { customScreen = false; update(s.copy(screen = "")) }
+                            SCREEN_CUSTOM -> {
+                                customScreen = true
+                                // mulai dari ukuran yang sedang berlaku supaya isiannya tidak kosong
+                                if (ShortcutPrefs.parseSize(s.screen) == null) {
+                                    val (dw, dh) = Launcher.displaySize(ctx)
+                                    cw = dw.toString(); ch = dh.toString()
+                                    update(s.copy(screen = "${dw}x$dh"))
+                                }
+                            }
+                            else -> { customScreen = false; update(s.copy(screen = pick)) }
+                        }
+                    }
+                    if (customScreen) {
+                        fun commit() {
+                            val w = cw.toIntOrNull()
+                            val h = ch.toIntOrNull()
+                            if (w != null && h != null) {
+                                ShortcutPrefs.parseSize("${w}x$h")?.let { (nw, nh) -> update(s.copy(screen = "${nw}x$nh")) }
+                            }
+                        }
+                        DeckTextRow(stringResource(R.string.tc_ui_width), cw, number = true) { cw = it; commit() }
+                        DeckTextRow(stringResource(R.string.tc_ui_height), ch, number = true) { ch = it; commit() }
+                    }
                     DeckChoiceRow(
                         stringResource(R.string.tc_pad_overlay), null,
                         listOf(ShortcutPrefs.DEFAULT to def, ShortcutPrefs.ON to on, ShortcutPrefs.OFF to off),
@@ -328,6 +379,7 @@ private fun AppSettingsDialog(app: DesktopApps.App, onRemoved: () -> Unit, onDis
                     DeckButton(stringResource(R.string.tc_sc_reset), Modifier.weight(1f), primary = false) {
                         ShortcutPrefs.reset(app.id)
                         s = ShortcutPrefs.Settings()
+                        customScreen = false; cw = ""; ch = ""
                     }
                     DeckButton(stringResource(R.string.tc_close), Modifier.weight(1f), onClick = onDismiss)
                 }

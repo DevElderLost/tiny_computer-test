@@ -327,6 +327,8 @@
     <string name="tc_sc_gpu">Graphics</string>
     <string name="tc_sc_gpu_software">Software</string>
     <string name="tc_sc_gpu_turnip">Turnip (Zink)</string>
+    <string name="tc_sc_screen">Screen size</string>
+    <string name="tc_sc_screen_note">Applies when this app starts a new session. To change it while another app is running, use Shutdown first. Ignored while the desktop is open.</string>
     <string name="tc_sc_hidpi">HiDPI</string>
     <string name="tc_sc_opt_default">Default</string>
     <string name="tc_sc_opt_on">On</string>

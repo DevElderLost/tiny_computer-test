@@ -1,6 +1,7 @@
 package com.example.tiny_computer.core
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.net.Uri
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
@@ -16,6 +17,10 @@ import java.security.MessageDigest
  * (Xwayland + window manager ringan, tanpa membuka desktop), dan punya pengaturan per aplikasi
  * ([ShortcutPrefs]) lewat tekan lama. Perintah `wine` berasal dari shim yang ditulis [WineContents]
  * di `/usr/local/bin` kontainer (shim itu sendiri memuat `env.sh` Wine aktif).
+ *
+ * Ikon diambil dari resource .exe-nya ([ExeIconExtractor], logika Winlator) dan disimpan sebagai PNG di
+ * tema ikon pengguna (`~/.local/share/icons/hicolor/256x256/apps/<id>.png`, `Icon=<id>`), sehingga ikon
+ * yang sama dipakai menu Shortcut dan menu desktop. Tanpa ikon di .exe, kartu memakai huruf pertama nama.
  */
 object ExeShortcuts {
     /** Awalan id berkas .desktop; juga penanda bahwa entri ini boleh dihapus dari menu Shortcut. */
@@ -35,6 +40,51 @@ object ExeShortcuts {
     fun wineReady(): Boolean = File(TinyEnv.containerDir(), "usr/local/bin/wine").exists()
 
     private fun appsDir() = File(TinyEnv.containerDir(), "home/tiny/.local/share/applications")
+
+    private fun iconDir() = File(TinyEnv.containerDir(), "home/tiny/.local/share/icons/hicolor/256x256/apps")
+
+    /** PNG ikon hasil ekstraksi untuk shortcut [id] (belum tentu ada). */
+    fun iconPng(id: String) = File(iconDir(), "$id.png")
+
+    /** .exe yang ikonnya sudah dicoba diambil dan gagal; supaya tidak dibaca ulang setiap menu dibuka. */
+    private val noIcon = HashSet<String>()
+
+    /** Path di dalam kontainer -> berkas di penyimpanan Android (kebalikan [fromHostPath]). */
+    private fun hostFile(guest: String): File? = when {
+        guest.startsWith("/media/sd/") -> File("/storage/self/primary/" + guest.removePrefix("/media/sd/"))
+        guest.startsWith("/storage/") -> File(guest)
+        else -> null
+    }
+
+    /**
+     * Ikon untuk shortcut .exe yang dibuat sebelum ekstraksi ikon ada (atau PNG-nya terhapus): dibaca
+     * dari .exe-nya sekarang, disimpan, dan `Icon=` ditambahkan ke berkas .desktop. Null bila .exe
+     * tidak terjangkau atau memang tidak punya ikon. Dipanggil di thread latar.
+     */
+    fun fallbackIcon(app: DesktopApps.App): File? {
+        if (!isExeShortcut(app.id)) return null
+        val png = iconPng(app.id)
+        if (png.isFile) return png
+        if (synchronized(noIcon) { app.id in noIcon }) return null
+        val bmp = hostFile(app.comment)?.let { ExeIconExtractor.extract(it) }
+        if (bmp == null || !ExeIconExtractor.save(bmp, png)) {
+            synchronized(noIcon) { noIcon += app.id }
+            return null
+        }
+        png.setReadable(true, false)
+        setDesktopIcon(app.id)
+        return png
+    }
+
+    /** Menambahkan `Icon=<id>` ke .desktop shortcut yang belum punya. */
+    private fun setDesktopIcon(id: String) {
+        val f = File(appsDir(), "$id.desktop")
+        runCatching {
+            val text = f.readText()
+            if (Regex("(?m)^Icon=").containsMatchIn(text)) return
+            f.writeText(text.replaceFirst("Type=Application\n", "Type=Application\nIcon=$id\n"))
+        }
+    }
 
     private fun safe(s: String) = s.replace(Regex("[^A-Za-z0-9._-]"), "_")
 
@@ -91,7 +141,9 @@ object ExeShortcuts {
         if (!file.endsWith(".exe", ignoreCase = true)) return Outcome.NotExe
         if (!wineReady()) return Outcome.NeedWine
         val path = guestPath(ctx, uri) ?: return Outcome.BadLocation
-        return runCatching { Outcome.Ok(add(path, file.dropLast(4)), idFor(path, file.dropLast(4))) }
+        // ikon dibaca langsung dari URI yang dipilih (tidak bergantung izin penyimpanan); gagal = tanpa ikon
+        val icon = ExeIconExtractor.extract(ctx, uri)
+        return runCatching { Outcome.Ok(add(path, file.dropLast(4), icon), idFor(path, file.dropLast(4))) }
             .getOrElse { Outcome.Failed(it.message ?: it.javaClass.simpleName) }
     }
 
@@ -100,14 +152,24 @@ object ExeShortcuts {
         return ID_PREFIX + safe(label).take(32) + "-" + h.take(8)
     }
 
-    /** Menulis berkas .desktop; menambahkan .exe yang sama lagi hanya memperbarui entri yang ada. Mengembalikan nama tampilan. */
-    fun add(guestPath: String, label: String): String {
+    /**
+     * Menulis berkas .desktop; menambahkan .exe yang sama lagi hanya memperbarui entri yang ada. [icon]
+     * (hasil [ExeIconExtractor]) disimpan sebagai ikon shortcut. Mengembalikan nama tampilan.
+     */
+    fun add(guestPath: String, label: String, icon: Bitmap? = null): String {
         val name = oneLine(label).ifEmpty { "Windows app" }
         val dir = guestPath.substringBeforeLast('/', "/home/tiny").ifEmpty { "/" }
-        val f = File(appsDir().apply { mkdirs() }, idFor(guestPath, label) + ".desktop")
+        val id = idFor(guestPath, label)
+        val f = File(appsDir().apply { mkdirs() }, "$id.desktop")
+        val saved = icon != null && ExeIconExtractor.save(icon, iconPng(id))
+        if (saved) iconPng(id).setReadable(true, false)
+        synchronized(noIcon) { noIcon -= id }
+        if (saved) DesktopApps.forgetIcon(id)
+        val hasIcon = saved || iconPng(id).isFile
         f.writeText(
             "[Desktop Entry]\n" +
                 "Type=Application\n" +
+                (if (hasIcon) "Icon=$id\n" else "") +
                 "Name=${name}\n" +
                 "Comment=${oneLine(guestPath)}\n" +
                 "Exec=wine ${execQuote(guestPath)}\n" +
@@ -123,6 +185,9 @@ object ExeShortcuts {
     fun remove(id: String): Boolean {
         if (!isExeShortcut(id)) return false
         val ok = File(appsDir(), "$id.desktop").delete()
+        iconPng(id).delete()
+        DesktopApps.forgetIcon(id)
+        synchronized(noIcon) { noIcon -= id }
         ShortcutPrefs.reset(id)
         File(TinyEnv.dataPath, "tiny/shortcuts/run-${safe(id)}.sh").delete()
         File(TinyEnv.containerDir(), "home/tiny/.vnc/shortcut-${safe(id)}.log").delete()

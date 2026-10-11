@@ -141,12 +141,12 @@ exec sh -c "${'$'}TINY_CMD"
 
     /**
      * Menulis skrip sesi yang menyalakan Xwayland (+ window manager ringan bila ada, diawasi dan dicoba bergantian) tanpa sesi desktop
-     * dan mengembalikan path-nya di dalam guest. Ukuran layar sama dengan desktop
-     * ([Launcher.displaySize]). Skrip menunggu soket Wayland, lalu MENJADI Xwayland (`exec`): proot-nya
+     * dan mengembalikan path-nya di dalam guest. Ukuran layar = [size] (ukuran khusus aplikasi yang
+     * memulai sesi, atau ukuran desktop; lihat [Launcher.displaySize]). Skrip menunggu soket Wayland, lalu MENJADI Xwayland (`exec`): proot-nya
      * hidup selama X hidup dan, karena `--kill-on-exit`, window manager ikut berhenti bersamanya.
      */
-    fun prepareSession(ctx: Context): String {
-        val (w, h) = Launcher.displaySize(ctx)
+    fun prepareSession(ctx: Context, size: Pair<Int, Int>): String {
+        val (w, h) = size
         write(
             SESSION_SCRIPT,
             """

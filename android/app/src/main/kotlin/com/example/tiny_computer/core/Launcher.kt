@@ -238,10 +238,15 @@ TMPDIR=${'$'}DATA_DIR/pulseaudio_tmp HOME=${'$'}DATA_DIR/pulseaudio_tmp XDG_CONF
         }
     }
 
-    /** Ukuran output compositor: pengaturan pengguna, atau 75% panel (landscape) bila 0. */
-    fun displaySize(ctx: Context): Pair<Int, Int> {
-        var w = Cfg.displayWidth
-        var h = Cfg.displayHeight
+    /**
+     * Ukuran output compositor: pengaturan pengguna, atau 75% panel (landscape) bila 0. Bila [appId]
+     * diberikan dan aplikasi Shortcut itu punya ukuran layar sendiri ([ShortcutPrefs.Settings.screen]),
+     * ukuran itulah yang dipakai.
+     */
+    fun displaySize(ctx: Context, appId: String? = null): Pair<Int, Int> {
+        val custom = ShortcutPrefs.screenSize(appId)
+        var w = custom?.first ?: Cfg.displayWidth
+        var h = custom?.second ?: Cfg.displayHeight
         if (w <= 0 || h <= 0) {
             val dm: DisplayMetrics = ctx.resources.displayMetrics
             w = (max(dm.widthPixels, dm.heightPixels) * 0.75).roundToInt()
@@ -249,6 +254,21 @@ TMPDIR=${'$'}DATA_DIR/pulseaudio_tmp HOME=${'$'}DATA_DIR/pulseaudio_tmp XDG_CONF
         }
         // lebar/tinggi genap, seperti yang diharapkan Xwayland dan encoder
         return (w and 1.inv()).coerceAtLeast(320) to (h and 1.inv()).coerceAtLeast(240)
+    }
+
+    /** Ukuran Xwayland sesi aplikasi yang sedang berjalan (ditetapkan saat sesi dibuat). */
+    @Volatile private var appSessionSize: Pair<Int, Int>? = null
+
+    /**
+     * Ukuran layar yang benar-benar dipakai untuk [appId]. Desktop yang menyala memegang X, jadi
+     * aplikasi di dalamnya ikut ukuran desktop. Sesi aplikasi yang sudah berjalan juga tidak bisa
+     * diubah ukurannya, jadi aplikasi berikutnya ikut ukuran sesi itu. Selain itu ukuran khusus
+     * aplikasi dipakai untuk sesi baru ([launchAppLocked] memakai fungsi yang sama).
+     */
+    fun sessionSize(ctx: Context, appId: String?): Pair<Int, Int> {
+        if (appId == null || guiStarted) return displaySize(ctx)
+        if (appSessionStarted) appSessionSize?.let { return it }
+        return displaySize(ctx, appId)
     }
 
     /**
@@ -598,7 +618,9 @@ bash /etc/X11/xinit/Xsession &> "${'$'}HOME/.vnc/x.log" &
             gone += stopAppSession()
             waitGone(gone, 2000)
             advanceStage(1)
-            val session = spawnDetached(appProotScript(ctx, ShortcutRunner.prepareSession(ctx), killOnExit = true), "TinyAppSession")
+            val size = displaySize(ctx, appId)
+            appSessionSize = size
+            val session = spawnDetached(appProotScript(ctx, ShortcutRunner.prepareSession(ctx, size), killOnExit = true), "TinyAppSession")
             appSession = session
             // Xwayland mati sendiri (crash): aplikasinya ikut putus, tutup sesi dan kembali ke Shortcut
             watch("tiny-session-wait") {
