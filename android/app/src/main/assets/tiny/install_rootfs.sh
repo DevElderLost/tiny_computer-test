@@ -9,7 +9,7 @@ export PROOT_TMP_DIR=$DATA_DIR/proot_tmp
 export PROOT_LOADER=$DATA_DIR/applib/libproot-loader.so
 export PROOT_LOADER_32=$DATA_DIR/applib/libproot-loader32.so
 #export PROOT_L2S_DIR=$CONTAINER_DIR/.l2s
-$DATA_DIR/bin/proot --link2symlink sh -c "cat xa* | $DATA_DIR/bin/tar x -J --delay-directory-restore --preserve-permissions -v -C containers/0"
+# Ekstraksi rootfs (xa* -> containers/0) dijalankan Rootfs.extractRootfs() dari Kotlin supaya persennya terukur.
 #Script from proot-distro
 chmod u+rw "$CONTAINER_DIR/etc/passwd" "$CONTAINER_DIR/etc/shadow" "$CONTAINER_DIR/etc/group" "$CONTAINER_DIR/etc/gshadow"
 echo "aid_$(id -un):x:$(id -u):$(id -g):Termux:/:/sbin/nologin" >> "$CONTAINER_DIR/etc/passwd"

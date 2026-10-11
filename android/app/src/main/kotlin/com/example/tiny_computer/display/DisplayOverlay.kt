@@ -39,7 +39,7 @@ fun DisplayOverlay(state: DisplayUiState, pad: PadBridge, sendKey: (Int, Boolean
     val pal = LocalPalette.current
     Box(Modifier.fillMaxSize()) {
         if (state.padOverlay) {
-            ControllerOverlay(pad = pad, deck = state.padIdentity == "deck")
+            ControllerOverlay(pad = pad, deck = state.padIdentity == "deck", onKeyboard = { state.pcKeyboard = !state.pcKeyboard })
         }
         Row(Modifier.align(Alignment.TopCenter).padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             FloatingButton(active = false, onClick = { state.menuOpen = true }) {

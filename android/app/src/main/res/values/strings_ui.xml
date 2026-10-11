@@ -226,4 +226,76 @@
     <!-- Peringatan sengaja hanya berbahasa Inggris (sesuai permintaan), jadi tidak diterjemahkan -->
     <string name="tc_extras_no_internet" translatable="false">Internet is not active. Turn on Wi-Fi or mobile data, then tap Open desktop again to finish installing Wayland and microphone support.</string>
     <string name="tc_extras_failed" translatable="false">Installing Wayland and microphone support failed. Check your internet connection, then tap Open desktop again.</string>
+    <!-- Controller layar bergaya DroidDeck: warna, mapping tombol, editor posisi -->
+    <string name="ctrl_color">Color</string>
+    <string name="ctrl_color_hint">Tint of the on-screen buttons</string>
+    <string name="ctrl_custom">Custom</string>
+    <string name="ctrl_opacity">Opacity</string>
+    <string name="ctrl_percent">%1$d%%</string>
+    <string name="ctrl_size">Button size</string>
+    <string name="ctrl_size_hint" formatted="false">100% is the standard size</string>
+    <string name="ctrl_stick_click">Stick click</string>
+    <string name="ctrl_stick_click_hint">Double-tap and hold a stick for L3 or R3</string>
+    <string name="ctrl_adaptive">Adaptive sticks</string>
+    <string name="ctrl_rumble">Game vibration</string>
+    <string name="ctrl_steam_button">Steam button</string>
+    <string name="ctrl_qam_button">QAM button</string>
+    <string name="ctrl_keyboard_button">Keyboard button</string>
+    <string name="ctrl_adaptive_hint">Sticks appear where you touch and hide on release</string>
+    <string name="ctrl_layout">Layout</string>
+    <string name="ctrl_layout_custom">Custom positions saved</string>
+    <string name="ctrl_layout_default">Fitted to this screen</string>
+    <string name="ctrl_edit">Edit</string>
+    <string name="ctrl_reset">Reset</string>
+    <string name="ctrl_mapping">Button mapping</string>
+    <string name="ctrl_mapping_default">Every button sends its own input</string>
+    <string name="ctrl_mapping_count">%1$d of %2$d buttons remapped</string>
+    <string name="ctrl_configure">Configure</string>
+    <string name="ctrl_reset_all">Reset controller</string>
+    <string name="ctrl_reset_all_hint">Restores all controller settings and the layout</string>
+    <string name="ctrl_mapping_lede">What each on-screen button sends to the game. Hidden removes the button.</string>
+    <string name="ctrl_onscreen_buttons">On-screen buttons</string>
+    <string name="ctrl_defaults">Defaults</string>
+    <string name="ctrl_reset_mapping">Reset mapping</string>
+    <string name="ctrl_tint_steam_blue">Steam blue</string>
+    <string name="ctrl_tint_sky">Sky</string>
+    <string name="ctrl_tint_white">White</string>
+    <string name="ctrl_tint_violet">Violet</string>
+    <string name="ctrl_tint_green">Green</string>
+    <string name="ctrl_tint_amber">Amber</string>
+    <string name="ctrl_tint_red">Red</string>
+    <string name="ctrl_tint_pink">Pink</string>
+    <string name="ctrl_button_a">A button</string>
+    <string name="ctrl_button_b">B button</string>
+    <string name="ctrl_button_x">X button</string>
+    <string name="ctrl_button_y">Y button</string>
+    <string name="ctrl_button_lb">Left bumper</string>
+    <string name="ctrl_button_rb">Right bumper</string>
+    <string name="ctrl_button_lt">Left trigger</string>
+    <string name="ctrl_button_rt">Right trigger</string>
+    <string name="ctrl_button_view">View button</string>
+    <string name="ctrl_button_menu">Menu button</string>
+    <string name="ctrl_target_a" translatable="false">A</string>
+    <string name="ctrl_target_b" translatable="false">B</string>
+    <string name="ctrl_target_x" translatable="false">X</string>
+    <string name="ctrl_target_y" translatable="false">Y</string>
+    <string name="ctrl_target_lb" translatable="false">LB</string>
+    <string name="ctrl_target_rb" translatable="false">RB</string>
+    <string name="ctrl_target_lt" translatable="false">LT</string>
+    <string name="ctrl_target_rt" translatable="false">RT</string>
+    <string name="ctrl_target_l3" translatable="false">L3</string>
+    <string name="ctrl_target_r3" translatable="false">R3</string>
+    <string name="ctrl_target_steam" translatable="false">Steam</string>
+    <string name="ctrl_target_view">View</string>
+    <string name="ctrl_target_menu">Menu</string>
+    <string name="ctrl_target_up">D-pad up</string>
+    <string name="ctrl_target_down">D-pad down</string>
+    <string name="ctrl_target_left">D-pad left</string>
+    <string name="ctrl_target_right">D-pad right</string>
+    <string name="ctrl_target_hidden">Hidden</string>
+    <string name="ctrl_editor_drag">Drag to move</string>
+    <string name="ctrl_editor_save">Save</string>
+    <string name="ctrl_cancel">Cancel</string>
+    <string name="ctrl_back">Back</string>
+    <string name="tc_ctrl_title_hint">How the touch controls look and behave in the desktop session</string>
 </resources>

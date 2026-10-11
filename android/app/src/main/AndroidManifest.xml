@@ -52,6 +52,12 @@
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustNothing" />
         <activity
+            android:name=".controller.ControllerEditorActivity"
+            android:exported="false"
+            android:theme="@style/App.Theme.Display"
+            android:screenOrientation="sensorLandscape"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|density|keyboardHidden|keyboard|navigation|uiMode|layoutDirection|fontScale|locale" />
+        <activity
             android:name=".Signal9Activity"
             android:exported="true"
             android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>

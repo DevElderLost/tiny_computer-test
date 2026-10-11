@@ -68,6 +68,58 @@ object Rootfs {
         }.onFailure { Log.w(TAG, "libfakeinput.so tidak ada di assets: controller tidak aktif (${it.message})") }
     }
 
+    /**
+     * Mengekstrak rootfs (`xa*`, arsip tar.xz yang dipecah) ke containers/0. Dulu `cat xa* | tar` di
+     * dalam skrip shell, sehingga tahap "Installing System Files" tidak punya persen. Sekarang bagian
+     * xa* dialirkan dari Kotlin ke stdin tar: pipa hanya menampung 64 KB, jadi byte yang sudah
+     * terkirim hampir persis sama dengan yang sudah dibaca tar (persen dari ukuran arsip terkompresi).
+     * Sampai 99% saja selama berjalan; 100% baru terpasang bersama pindah ke tahap berikutnya.
+     */
+    private fun extractRootfs(data: String) {
+        val parts = File(data).listFiles { f -> f.isFile && f.name.startsWith("xa") }?.sortedBy { it.name } ?: emptyList()
+        val total = parts.sumOf { it.length() }
+        val cmd = "$data/bin/proot --link2symlink sh -c \"$data/bin/tar x -J --delay-directory-restore --preserve-permissions -C containers/0\""
+        val pb = ProcessBuilder("/system/bin/sh", "-c", cmd).directory(File(data)).redirectErrorStream(true)
+        pb.environment().apply {
+            put("PATH", "$data/bin:" + (get("PATH") ?: ""))
+            put("LD_LIBRARY_PATH", "$data/lib")
+            put("PROOT_TMP_DIR", "$data/proot_tmp")
+            put("PROOT_LOADER", "$data/applib/libproot-loader.so")
+            put("PROOT_LOADER_32", "$data/applib/libproot-loader32.so")
+        }
+        val p = pb.start()
+        // keluaran (hanya galat, tanpa -v) harus tetap dibaca agar proses tidak macet
+        val tail = ArrayDeque<String>()
+        val drain = Thread {
+            runCatching {
+                p.inputStream.bufferedReader().forEachLine { line ->
+                    synchronized(tail) { if (tail.size >= 10) tail.removeFirst(); tail.addLast(line) }
+                }
+            }
+        }.apply { start() }
+
+        var fed = 0L
+        try {
+            p.outputStream.use { out ->
+                val buf = ByteArray(1 shl 16)
+                for (f in parts) f.inputStream().use { i ->
+                    while (true) {
+                        val n = i.read(buf)
+                        if (n < 0) break
+                        out.write(buf, 0, n)
+                        fed += n
+                        if (total > 0) percent = (fed * 99 / total).toInt()
+                    }
+                }
+            }
+        } catch (e: java.io.IOException) {
+            Log.w(TAG, "tar berhenti sebelum semua xa* terkirim ($fed/$total byte): ${e.message}")
+        }
+        val code = p.waitFor()
+        drain.join(2000)
+        if (code != 0) Log.w(TAG, "ekstraksi rootfs exit=$code: ${synchronized(tail) { tail.joinToString(" | ") }}")
+    }
+
     private fun initForFirstTime(ctx: Context) {
         val data = TinyEnv.dataPath
         step("installingBootPackage")
@@ -83,6 +135,7 @@ object Rootfs {
         }
 
         step("installingContainerSystem")
+        extractRootfs(data)
         val localeLine = if (TinyEnv.isChineseLocale) ""
         else "echo 'LANG=en_US.UTF-8' > \$CONTAINER_DIR/usr/local/etc/tmoe-linux/locale.txt"
         val script = asset(ctx, "tiny/install_rootfs.sh")
