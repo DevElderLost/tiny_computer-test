@@ -2,6 +2,7 @@ package com.example.tiny_computer.display
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -28,6 +29,7 @@ import com.droiddeck.launcher.wayland.CompositorHost
 import com.droiddeck.launcher.wayland.WaylandCompositor
 import com.example.tiny_computer.core.Cfg
 import com.example.tiny_computer.core.Launcher
+import com.example.tiny_computer.core.ShortcutPrefs
 import com.example.tiny_computer.core.TinyEnv
 import com.example.tiny_computer.ui.TinyTheme
 import java.io.File
@@ -56,6 +58,11 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
     private var outW = 1280
     private var outH = 720
 
+    // Shortcut: id aplikasi yang membuka layar ini (null = desktop biasa), dan yang menunggu surface siap
+    private var currentApp: String? = null
+    private var pendingApp: String? = null
+    private var surfaceReady = false
+
     // pelacakan sentuhan
     private var lastX = 0f
     private var lastY = 0f
@@ -68,6 +75,7 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        readLaunchIntent(intent)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         WindowInsetsControllerCompat(window, window.decorView).apply {
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
@@ -99,6 +107,11 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
                         pad = p,
                         sendKey = { code, down -> WaylandCompositor.nativeSendKey(code, if (down) 1 else 0) },
                         onClose = { finish() },
+                        onPadOverlayChange = { on ->
+                            // aplikasi Shortcut punya pengaturan controller sendiri; desktop memakai yang global
+                            val app = currentApp
+                            if (app != null) { ShortcutPrefs.setPadOverlay(app, on) } else { Cfg.padOverlay = on }
+                        },
                     )
                 }
             }
@@ -110,9 +123,38 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
         })
     }
 
+    /** Id aplikasi Shortcut dari intent (bila ada) menentukan sesi mana yang dinyalakan di surfaceCreated. */
+    private fun readLaunchIntent(i: Intent?) {
+        val app = i?.getStringExtra(EXTRA_APP)
+        currentApp = app
+        pendingApp = app
+        ui.padOverlay = ShortcutPrefs.padOverlay(app) ?: Cfg.padOverlay
+    }
+
+    /** launchMode singleTask: ketukan Shortcut berikutnya masuk ke sini selama layar ini masih hidup. */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        readLaunchIntent(intent)
+        if (surfaceReady) startRequestedSession()
+    }
+
+    /**
+     * Mode aplikasi: jalankan aplikasi yang diminta (di dalam desktop bila sedang berjalan, atau di
+     * Xwayland khusus aplikasi). Mode desktop: nyalakan desktop sekali per peluncuran. Layar yang
+     * dibuka ulang (surface dibuat lagi) tanpa permintaan baru hanya menempel ke sesi yang berjalan.
+     */
+    private fun startRequestedSession() {
+        if (!Launcher.isStarted) return
+        val app = pendingApp
+        pendingApp = null
+        if (app != null) Launcher.launchApp(this, app)
+        else if (currentApp == null && !Launcher.guiStarted) Launcher.launchGuiBackend(this)
+    }
+
     override fun onResume() {
         super.onResume()
-        ui.padOverlay = Cfg.padOverlay
+        ui.padOverlay = ShortcutPrefs.padOverlay(currentApp) ?: Cfg.padOverlay
         ui.padIdentity = Cfg.padIdentity
         surfaceView.requestFocus()
     }
@@ -147,8 +189,9 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
             applicationInfo.nativeLibraryDir, outW, outH, refresh, Cfg.fpsLimit,
         )
         SessionState.running = true
-        // soket wayland-0 sudah ada: nyalakan Xwayland + sesi X11 Debian di dalam kontainer (sekali per peluncuran)
-        if (Launcher.isStarted && !Launcher.guiStarted) Launcher.launchGuiBackend(this)
+        surfaceReady = true
+        // soket wayland-0 sudah ada: nyalakan desktop (Xwayland + sesi X11 Debian) atau aplikasi Shortcut
+        startRequestedSession()
     }
 
     private var surfW = 0
@@ -162,6 +205,7 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
+        surfaceReady = false
         CompositorHost.detach(holder.surface)
     }
 
@@ -296,6 +340,8 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
     }
 
     companion object {
+        /** Id berkas .desktop (tanpa ekstensi) yang dijalankan tanpa membuka desktop; tidak ada = desktop biasa. */
+        const val EXTRA_APP = "tiny.shortcut.app"
         private const val TAG = "DisplayActivity"
         private const val SCALE_FIT = 1
         private const val ALIGN_CENTER = 0

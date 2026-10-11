@@ -134,4 +134,6 @@ dependencies {
     implementation "androidx.appcompat:appcompat:1.7.0"
     implementation "com.google.android.material:material:1.7.0"
     implementation 'com.github.tiann:FreeReflection:3.2.2'
+    // Ikon .svg di menu Shortcut (sama seperti DroidDeck).
+    implementation 'com.caverock:androidsvg-aar:1.4'
 }

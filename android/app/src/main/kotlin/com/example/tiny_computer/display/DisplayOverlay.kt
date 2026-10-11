@@ -35,7 +35,10 @@ import com.example.tiny_computer.ui.clickableNoRipple
 
 /** Lapisan Compose di atas SurfaceView: tombol menu kecil, controller layar, keyboard PC, dan dialog menu. */
 @Composable
-fun DisplayOverlay(state: DisplayUiState, pad: PadBridge, sendKey: (Int, Boolean) -> Unit, onClose: () -> Unit) {
+fun DisplayOverlay(
+    state: DisplayUiState, pad: PadBridge, sendKey: (Int, Boolean) -> Unit, onClose: () -> Unit,
+    onPadOverlayChange: (Boolean) -> Unit = { Cfg.padOverlay = it },
+) {
     val pal = LocalPalette.current
     Box(Modifier.fillMaxSize()) {
         if (state.padOverlay) {
@@ -65,7 +68,7 @@ fun DisplayOverlay(state: DisplayUiState, pad: PadBridge, sendKey: (Int, Boolean
                     SwitchRow(stringResource(R.string.tc_display_touchpad), state.touchpad) { state.touchpad = it }
                     SwitchRow(stringResource(R.string.tc_pad_overlay), state.padOverlay) {
                         state.padOverlay = it
-                        Cfg.padOverlay = it
+                        onPadOverlayChange(it)
                     }
                 }
             },

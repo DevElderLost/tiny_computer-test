@@ -35,6 +35,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SportsEsports
@@ -79,12 +80,13 @@ import kotlinx.coroutines.withContext
 
 private enum class Page(val icon: ImageVector, val label: Int) {
     HOME(Icons.Filled.Computer, R.string.tc_nav_home),
+    SHORTCUT(Icons.Filled.Apps, R.string.tc_nav_shortcut),
     TERMINAL(Icons.Filled.Terminal, R.string.tc_nav_terminal),
     CONTROLLER(Icons.Filled.SportsEsports, R.string.tc_nav_controller),
 }
 
 /**
- * Kerangka UI Compose: navigasi (Desktop, Terminal, Controller, Pengaturan). Pemasangan sistem dan start
+ * Kerangka UI Compose: navigasi (Desktop, Shortcut, Terminal, Controller, Pengaturan). Pemasangan sistem dan start
  * kontainer tidak jalan otomatis; keduanya dimulai dari tombol Open desktop (lihat [Startup]) dengan
  * layar progres [StartupOverlay] di atas seluruh UI.
  */
@@ -99,6 +101,13 @@ fun TinyApp() {
     val requestDesktop: () -> Unit = {
         if (Startup.phase == Startup.Phase.DONE) openDesktop() else Startup.begin(ctx, openDesktop = true)
     }
+    // Shortcut: jalankan aplikasi langsung (tanpa Open desktop); kontainer dinyalakan dulu bila belum berjalan
+    val openApp = { id: String ->
+        ctx.startActivity(Intent(ctx, DisplayActivity::class.java).putExtra(DisplayActivity.EXTRA_APP, id))
+    }
+    val requestApp: (String) -> Unit = { id ->
+        if (Startup.phase == Startup.Phase.DONE) openApp(id) else Startup.beginForApp(ctx, id)
+    }
 
     LaunchedEffect(Unit) {
         // Sistem sudah terpasang dan "Mulai dengan GUI" dinyalakan: langsung masuk desktop seperti sebelumnya.
@@ -109,7 +118,8 @@ fun TinyApp() {
         if (phase == Startup.Phase.DONE) {
             // proses shell keluar normal (kode 0) -> tutup aplikasi, seperti SystemNavigator.pop di versi Dart
             TermSessions.forCurrent(ctx).onExit = { code -> if (code == 0) ctx.findActivity()?.finish() }
-            if (Startup.consumeOpen()) openDesktop()
+            val app = Startup.consumeApp()
+            if (app != null) { Startup.consumeOpen(); openApp(app) } else if (Startup.consumeOpen()) openDesktop()
         }
     }
     // jangan keluar dari aplikasi di tengah pemasangan
@@ -118,19 +128,23 @@ fun TinyApp() {
     BackHandler(enabled = showSettings && phase != Startup.Phase.RUNNING) { showSettings = false }
 
     Box(Modifier.fillMaxSize()) {
-        TinyShell(page, { page = it }, requestDesktop, { showSettings = true }, phase == Startup.Phase.DONE)
+        TinyShell(page, { page = it }, requestDesktop, requestApp, { showSettings = true }, phase == Startup.Phase.DONE)
         if (showSettings) SettingsPage(onBack = { showSettings = false })
         if (phase == Startup.Phase.RUNNING || phase == Startup.Phase.FAILED) StartupOverlay(onClose = { Startup.dismiss() })
     }
 }
 
 @Composable
-private fun TinyShell(page: Int, onPage: (Int) -> Unit, onOpenDesktop: () -> Unit, onOpenSettings: () -> Unit, started: Boolean) {
+private fun TinyShell(
+    page: Int, onPage: (Int) -> Unit, onOpenDesktop: () -> Unit, onLaunchApp: (String) -> Unit,
+    onOpenSettings: () -> Unit, started: Boolean,
+) {
     val pal = LocalPalette.current
     val landscape = isLandscape()
     val content: @Composable () -> Unit = {
         when (Page.values()[page]) {
             Page.HOME -> HomeScreen(onOpenDesktop, onOpenSettings)
+            Page.SHORTCUT -> ShortcutScreen(onLaunchApp)
             Page.TERMINAL -> if (started) TerminalScreen() else TerminalGate()
             Page.CONTROLLER -> ControllerScreen()
         }

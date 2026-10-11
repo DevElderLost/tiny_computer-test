@@ -24,3 +24,7 @@
 -keep class com.github.luben.zstd.** { *; }
 -dontwarn org.apache.commons.compress.**
 -dontwarn com.github.luben.zstd.**
+
+# androidsvg: ikon .svg aplikasi di menu Shortcut
+-keep class com.caverock.androidsvg.** { *; }
+-dontwarn com.caverock.androidsvg.**

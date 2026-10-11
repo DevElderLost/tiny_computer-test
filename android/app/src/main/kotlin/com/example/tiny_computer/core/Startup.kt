@@ -42,8 +42,18 @@ object Startup {
     var openWhenReady by mutableStateOf(false)
         private set
 
+    /** Shortcut yang diketuk saat kontainer belum menyala: dijalankan begitu kontainer siap, tanpa membuka desktop. */
+    var pendingApp by mutableStateOf<String?>(null)
+        private set
+
     /** Data sistem sudah pernah dipasang (penanda yang sama dengan `Rootfs.initData`). */
     val installed: Boolean get() = TinyPrefs.contains("defaultContainer")
+
+    /** Dari menu Shortcut: nyalakan kontainer (bila perlu) lalu jalankan aplikasi [appId], bukan desktop. */
+    fun beginForApp(ctx: Context, appId: String) {
+        pendingApp = appId
+        begin(ctx, openDesktop = false)
+    }
 
     @Synchronized
     fun begin(ctx: Context, openDesktop: Boolean) {
@@ -74,11 +84,13 @@ object Startup {
                 } else {
                     notice = problem
                     openWhenReady = false
+                    pendingApp = null
                     phase = Phase.IDLE
                 }
             } catch (t: Throwable) {
                 Log.e(TAG, "startup gagal", t)
                 error = t.message ?: t.javaClass.simpleName
+                pendingApp = null
                 phase = Phase.FAILED
             }
         }, "tiny-startup").start()
@@ -90,6 +102,7 @@ object Startup {
             phase = Phase.IDLE
             error = null
             openWhenReady = false
+            pendingApp = null
         }
     }
 
@@ -100,6 +113,13 @@ object Startup {
         val o = openWhenReady
         openWhenReady = false
         return o
+    }
+
+    /** Mengembalikan id Shortcut yang menunggu kontainer siap (sekali), atau null. */
+    fun consumeApp(): String? {
+        val a = pendingApp
+        pendingApp = null
+        return a
     }
 
     /** Tahap yang ditampilkan di layar progres; kuncinya sama dengan `Rootfs.statusText`. */

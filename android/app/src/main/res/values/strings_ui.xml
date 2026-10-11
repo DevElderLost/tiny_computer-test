@@ -298,4 +298,31 @@
     <string name="ctrl_cancel">Cancel</string>
     <string name="ctrl_back">Back</string>
     <string name="tc_ctrl_title_hint">How the touch controls look and behave in the desktop session</string>
+    <!-- Menu Shortcut -->
+    <string name="tc_nav_shortcut">Shortcut</string>
+    <string name="tc_sc_hint">Apps installed in the Linux system. Tap to run, long-press for per-app settings.</string>
+    <string name="tc_sc_count">%1$d apps · tap to run, long-press for settings</string>
+    <string name="tc_sc_not_ready">Apps appear here after the system has finished installing and you have opened the desktop at least once. Go to the Desktop tab and tap Open desktop first.</string>
+    <string name="tc_sc_search">Search apps</string>
+    <string name="tc_sc_refresh">Refresh</string>
+    <string name="tc_sc_empty">No applications found in the Linux system yet. Install some from the terminal, then tap Refresh.</string>
+    <string name="tc_sc_no_match">No app matches your search.</string>
+    <string name="tc_sc_show_hidden">Show hidden (%1$d)</string>
+    <string name="tc_sc_hide_hidden">Hide hidden</string>
+    <string name="tc_sc_settings_hint">These settings only apply to this app. The main desktop settings are not changed.</string>
+    <string name="tc_sc_group_launch">Launch</string>
+    <string name="tc_sc_group_display">Graphics and input</string>
+    <string name="tc_sc_name">Display name</string>
+    <string name="tc_sc_args">Extra launch arguments</string>
+    <string name="tc_sc_workdir">Working directory</string>
+    <string name="tc_sc_env">Environment variables (one KEY=VALUE per line)</string>
+    <string name="tc_sc_gpu">Graphics</string>
+    <string name="tc_sc_gpu_software">Software</string>
+    <string name="tc_sc_gpu_turnip">Turnip (Zink)</string>
+    <string name="tc_sc_hidpi">HiDPI</string>
+    <string name="tc_sc_opt_default">Default</string>
+    <string name="tc_sc_opt_on">On</string>
+    <string name="tc_sc_opt_off">Off</string>
+    <string name="tc_sc_hide">Hide from the list</string>
+    <string name="tc_sc_reset">Reset</string>
 </resources>

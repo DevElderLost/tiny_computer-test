@@ -211,4 +211,31 @@
     <string name="tc_ob_need">请先允许存储和麦克风权限才能继续。</string>
     <string name="tc_ob_info">首次设置会在你点击“打开桌面”时开始，约需 5 到 10 分钟，无需联网。安装期间请勿退出应用。\n\n在桌面中：\n- 轻点＝左键\n- 长按＝右键\n- 双指轻点＝打开键盘\n- 双指滑动＝鼠标滚轮</string>
     <string name="tc_extras_installing">正在安装 Wayland 与麦克风支持…</string>
+    <!-- Menu Shortcut -->
+    <string name="tc_nav_shortcut">快捷方式</string>
+    <string name="tc_sc_hint">Linux 系统中已安装的应用。轻点运行，长按进入该应用的专属设置。</string>
+    <string name="tc_sc_count">%1$d 个应用 · 轻点运行，长按设置</string>
+    <string name="tc_sc_not_ready">系统安装完成且至少打开过一次桌面后，应用才会显示在这里。请先到“桌面”页点击“打开桌面”。</string>
+    <string name="tc_sc_search">搜索应用</string>
+    <string name="tc_sc_refresh">刷新</string>
+    <string name="tc_sc_empty">Linux 系统中还没有应用。请在终端安装后点击刷新。</string>
+    <string name="tc_sc_no_match">没有符合搜索的应用。</string>
+    <string name="tc_sc_show_hidden">显示已隐藏（%1$d）</string>
+    <string name="tc_sc_hide_hidden">不显示已隐藏</string>
+    <string name="tc_sc_settings_hint">这些设置只对该应用生效，不会改变桌面的主设置。</string>
+    <string name="tc_sc_group_launch">启动</string>
+    <string name="tc_sc_group_display">图形与输入</string>
+    <string name="tc_sc_name">显示名称</string>
+    <string name="tc_sc_args">额外启动参数</string>
+    <string name="tc_sc_workdir">工作目录</string>
+    <string name="tc_sc_env">环境变量（每行一个 KEY=VALUE）</string>
+    <string name="tc_sc_gpu">图形</string>
+    <string name="tc_sc_gpu_software">软件渲染</string>
+    <string name="tc_sc_gpu_turnip">Turnip (Zink)</string>
+    <string name="tc_sc_hidpi">HiDPI</string>
+    <string name="tc_sc_opt_default">默认</string>
+    <string name="tc_sc_opt_on">开</string>
+    <string name="tc_sc_opt_off">关</string>
+    <string name="tc_sc_hide">从列表中隐藏</string>
+    <string name="tc_sc_reset">重置</string>
 </resources>

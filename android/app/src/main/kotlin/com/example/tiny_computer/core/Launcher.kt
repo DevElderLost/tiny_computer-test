@@ -17,6 +17,12 @@ object Launcher {
     /** True setelah perintah Xwayland + Xsession dikirim ke kontainer yang sedang berjalan. */
     @Volatile var guiStarted = false
 
+    /**
+     * True setelah Xwayland dinyalakan khusus untuk aplikasi dari menu Shortcut (tanpa sesi desktop).
+     * Saling meniadakan dengan [guiStarted]: membuka desktop menggantikan sesi aplikasi ini.
+     */
+    @Volatile var appSessionStarted = false
+
     /** True setelah perintah boot ditulis ke terminal (kontainer sedang/ sudah berjalan). */
     val isStarted: Boolean get() = started
 
@@ -197,6 +203,7 @@ clear""".trimIndent(),
         )
         started = true
         guiStarted = false
+        appSessionStarted = false
     }
 
     /**
@@ -204,9 +211,11 @@ clear""".trimIndent(),
      * Xwayland berjalan rootful (satu jendela xdg-toplevel di compositor) lalu sesi X11
      * Debian (`/etc/X11/xinit/Xsession`, tak berubah) dijalankan di DISPLAY=:4.
      */
-    fun guiCommand(ctx: Context): String {
+    fun guiCommand(ctx: Context, replaceAppSession: Boolean = false): String {
         val (w, h) = displaySize(ctx)
-        return """
+        // sesi aplikasi dari menu Shortcut memegang display :4; hentikan dulu sebelum desktop memakainya
+        val stopApps = if (replaceAppSession) "pkill -x Xwayland 2>/dev/null; sleep 1\n" else ""
+        return stopApps + """
 mkdir -p "${'$'}HOME/.vnc"
 command -v Xwayland >/dev/null 2>&1 || { echo "Memasang xwayland..."; sudo apt update && sudo apt install -y xwayland; }
 unset WAYLAND_DISPLAY
@@ -220,8 +229,29 @@ bash /etc/X11/xinit/Xsession &> "${'$'}HOME/.vnc/x.log" &
 
     fun launchGuiBackend(ctx: Context) {
         val term = TermSessions.forCurrent(ctx)
+        val replace = appSessionStarted
         guiStarted = true
-        term.writeLine(guiCommand(ctx))
+        appSessionStarted = false
+        // syarat ikon muncul di menu Shortcut: desktop pernah dibuka sekali
+        Cfg.desktopOpenedOnce = true
+        term.writeLine(guiCommand(ctx, replace))
+        term.writeLine("clear")
+    }
+
+    /**
+     * Menjalankan aplikasi dari menu Shortcut (logika DroidDeck: langsung jalankan program, tidak
+     * perlu menekan Open desktop). Bila desktop sedang berjalan, aplikasi muncul di dalamnya
+     * (DISPLAY=:4 yang sama); bila tidak, Xwayland + window manager ringan dinyalakan khusus untuk
+     * aplikasi (lihat [ShortcutRunner.sessionCommand]) dan aplikasi lain berikutnya ikut sesi itu.
+     */
+    fun launchApp(ctx: Context, appId: String) {
+        val run = ShortcutRunner.prepare(ctx, appId) ?: return
+        val term = TermSessions.forCurrent(ctx)
+        if (!guiStarted && !appSessionStarted) {
+            appSessionStarted = true
+            term.writeLine(ShortcutRunner.sessionCommand(ctx))
+        }
+        term.writeLine(run)
         term.writeLine("clear")
     }
 

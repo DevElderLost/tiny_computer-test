@@ -181,6 +181,11 @@ object Cfg {
         get() = TinyPrefs.getBool("padDeckPads", true)
         set(v) = TinyPrefs.setBool("padDeckPads", v)
 
+    /** Desktop pernah dibuka sekali (Xwayland + sesi X11 dinyalakan); syarat ikon tampil di menu Shortcut. */
+    var desktopOpenedOnce: Boolean
+        get() = TinyPrefs.getBool("desktopOpenedOnce", false)
+        set(v) = TinyPrefs.setBool("desktopOpenedOnce", v)
+
     /** Layar awal (info pemasangan + izin) sudah dilewati; tidak ditampilkan lagi. */
     var onboardingDone: Boolean
         get() = TinyPrefs.getBool("onboardingDone", false)
