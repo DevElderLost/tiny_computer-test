@@ -113,6 +113,8 @@
     <string name="tc_ui_avnc_resize_factor_value">目前縮放為</string>
     <string name="tc_ui_microphone_support">麥克風支援</string>
     <string name="tc_ui_start_streaming">開啟麥克風</string>
+    <string name="tc_ui_mic_monitoring">麥克風即時監聽</string>
+    <string name="tc_ui_mic_monitoring_hint">需要先開啟麥克風</string>
     <string name="tc_display_menu">显示菜单</string>
     <string name="tc_display_keyboard">键盘</string>
     <string name="tc_display_touchpad">触控板模式（相对指针）</string>

@@ -113,6 +113,8 @@
     <string name="tc_ui_avnc_resize_factor_value">Current scaling is</string>
     <string name="tc_ui_microphone_support">Microphone Support</string>
     <string name="tc_ui_start_streaming">Start Microphone</string>
+    <string name="tc_ui_mic_monitoring">Mic Realtime Audio Monitoring</string>
+    <string name="tc_ui_mic_monitoring_hint">Requires Start Microphone to be active</string>
     <string name="tc_display_menu">Display menu</string>
     <string name="tc_display_keyboard">Keyboard</string>
     <string name="tc_display_touchpad">Touchpad mode (relative pointer)</string>

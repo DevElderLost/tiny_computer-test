@@ -79,11 +79,17 @@ TMPDIR=${'$'}DATA_DIR/pulseaudio_tmp HOME=${'$'}DATA_DIR/pulseaudio_tmp XDG_CONF
      * Perintah di dalam kontainer yang menyiapkan mikrofon virtual: sink null + source remap, lalu klien
      * soket. Memakai `tiny_virtual_mic` bila ada; bila tidak, `socat` + `pacat` (paket socat dan
      * pulseaudio-utils); bila keduanya tidak ada, mencetak petunjuk (tanpa membuat aplikasi macet).
+     *
+     * `set-default-source AndroidMic` penting: pulseaudio.conf memuat module-opensles yang sudah punya
+     * source `input` (mik Android langsung, tidak bisa dipakai dari proot). Tanpa ini aplikasi di
+     * guest merekam dari `input`, bukan dari mikrofon virtual, sehingga suara "tidak tertangkap".
      */
     fun micCommand(socketPath: String): String = """
 pactl list short sinks | grep -q AndroidSink || pactl load-module module-null-sink sink_name=AndroidSink sink_properties=device.description="Android_Audio_Stream" >/dev/null
 pactl list short sources | grep -q AndroidMic || pactl load-module module-remap-source master=AndroidSink.monitor source_name=AndroidMic source_properties=device.description="Android_Virtual_Mic" >/dev/null
+pactl set-default-source AndroidMic
 pkill -f tiny_virtual_mic 2>/dev/null; pkill -f 'UNIX-CONNECT:$socketPath' 2>/dev/null
+for i in ${'$'}(seq 1 25); do [ -S $socketPath ] && break; sleep 0.2; done
 if command -v tiny_virtual_mic >/dev/null 2>&1; then
   tiny_virtual_mic $socketPath AndroidSink &
 elif command -v socat >/dev/null 2>&1 && command -v pacat >/dev/null 2>&1; then
@@ -91,6 +97,26 @@ elif command -v socat >/dev/null 2>&1 && command -v pacat >/dev/null 2>&1; then
 else
   echo "Klien mikrofon tidak ada. Jalankan: sudo apt install -y socat pulseaudio-utils"
 fi
+pactl list short source-outputs | cut -f1 | xargs -r -I{} pactl move-source-output {} AndroidMic >/dev/null 2>&1
+""".trimIndent()
+
+    /** Kebalikan [micCommand]: hentikan klien, bongkar modul Android* (dan loopback monitor), kembalikan default. */
+    fun micStopCommand(socketPath: String): String = """
+pkill -f tiny_virtual_mic 2>/dev/null; pkill -f 'UNIX-CONNECT:$socketPath' 2>/dev/null
+pactl list short modules | grep Android | cut -f1 | tac | xargs -r -n1 pactl unload-module 2>/dev/null
+""".trimIndent()
+
+    /**
+     * Monitor mik waktu nyata (padanan "Mic Realtime Audio Monitoring" di versi lama): loopback dari
+     * AndroidMic ke sink fisik. Sink dipilih eksplisit (bukan AndroidSink) agar tidak terjadi umpan balik
+     * AndroidMic -> AndroidSink -> AndroidMic.
+     */
+    fun micMonitorCommand(on: Boolean): String =
+        if (on) """
+pactl list short modules | grep -q 'module-loopback.*AndroidMic' || pactl load-module module-loopback source=AndroidMic sink=${'$'}(pactl list short sinks | cut -f2 | grep -v AndroidSink | head -n1) latency_msec=1 >/dev/null
+""".trimIndent()
+        else """
+pactl list short modules | grep 'module-loopback.*AndroidMic' | cut -f1 | xargs -r -n1 pactl unload-module 2>/dev/null
 """.trimIndent()
 
     fun launchCurrentContainer(ctx: Context) {
@@ -139,6 +165,9 @@ $data/bin/virgl_test_server ${Cfg.defaultVirglCommand}""".trimIndent(),
             extraOpt.append(turnipOpt(ctx)).append(' ')
             if (!Cfg.dri3) extraOpt.append("MESA_VK_WSI_DEBUG=sw ")
         }
+        // GTK4 (mis. pavucontrol "Volume Control" di Debian 13) memakai renderer GL secara bawaan; di
+        // Xwayland/proot tanpa EGL yang sehat jendelanya tampil kosong. Paksa renderer cairo (perangkat lunak).
+        if (!extraOpt.contains("GSK_RENDERER=")) extraOpt.append("GSK_RENDERER=cairo ")
         if (Cfg.isJpEnabled) extraOpt.append("LANG=ja_JP.UTF-8 ")
         extraMount += "--mount=\$DATA_DIR/tiny/font:/usr/share/fonts/tiny "
         extraMount += "--mount=\$DATA_DIR/tiny/extra/cmatrix:/home/tiny/.local/bin/cmatrix "

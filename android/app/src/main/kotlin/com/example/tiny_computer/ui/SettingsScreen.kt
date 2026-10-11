@@ -13,7 +13,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -21,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import com.example.tiny_computer.AudioStream
 import com.example.tiny_computer.R
 import com.example.tiny_computer.core.Cfg
@@ -30,6 +33,8 @@ import com.example.tiny_computer.core.TermSessions
 import com.example.tiny_computer.core.TinyEnv
 
 private var micStreaming = false
+private var micMonitoring = false
+private const val MIC_SOCKET = "/tmp/android_audio"
 
 /** Pengaturan global + kontainer (padanan SettingPage di main.dart; opsi VNC/AVNC/X11 diganti pengaturan Layar). */
 @Composable
@@ -101,23 +106,55 @@ fun SettingsScreen() {
             TextRow(stringResource(R.string.tc_ui_pulseaudio_port), Cfg.defaultAudioPort.toString(), number = true) { it.toIntOrNull()?.let { v -> if (v in 1024..65535) Cfg.defaultAudioPort = v } }
             Div()
             var mic by remember { mutableStateOf(micStreaming) }
-            SwitchRow(stringResource(R.string.tc_ui_start_streaming), mic) { on ->
-                val term = TermSessions.forCurrent(ctx)
-                if (on) {
-                    if (ctx.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-                        ctx.findActivity()?.requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 2)
-                        mic = false
+            var monitoring by remember { mutableStateOf(micMonitoring) }
+            var micReset by remember { mutableStateOf(0) }
+            // dibuat saat dipakai saja; membuat sesi terminal ketika halaman digambar bukan tujuannya
+            fun term() = TermSessions.forCurrent(ctx)
+
+            fun stopMic() {
+                term().writeLine(Launcher.micStopCommand(MIC_SOCKET)) // modul loopback ikut dibongkar
+                AudioStream.stopStreaming() // tidak memblokir thread UI
+                micStreaming = false; micMonitoring = false
+                mic = false; monitoring = false
+            }
+
+            // Thread perekam bisa berhenti sendiri (guest menutup soket, AudioRecord gagal). Tanpa ini
+            // saklar tetap "hidup" padahal tidak ada suara yang mengalir.
+            LaunchedEffect(mic) {
+                while (mic) {
+                    delay(1000)
+                    if (!AudioStream.running) { stopMic(); micReset++ }
+                }
+            }
+
+            key(micReset) {
+                SwitchRow(stringResource(R.string.tc_ui_start_streaming), mic) { on ->
+                    if (on) {
+                        if (ctx.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                            ctx.findActivity()?.requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 2)
+                            micReset++ // kembalikan saklar ke posisi mati
+                        } else {
+                            // server soket di sisi Android dulu (guest menyambung), lalu klien di guest
+                            AudioStream.startStreaming("${TinyEnv.dataPath}/containers/${TinyEnv.currentContainer}$MIC_SOCKET")
+                            term().writeLine(Launcher.micCommand(MIC_SOCKET))
+                            micStreaming = true
+                            mic = true
+                        }
                     } else {
-                        val path = "/tmp/android_audio"
-                        // server soket di sisi Android dulu (guest menyambung), lalu klien di guest
-                        AudioStream.startStreaming("${TinyEnv.dataPath}/containers/${TinyEnv.currentContainer}$path")
-                        term.writeLine(Launcher.micCommand(path))
-                        micStreaming = true
+                        stopMic()
                     }
-                } else {
-                    term.writeLine("pkill -f tiny_virtual_mic; pkill -f 'UNIX-CONNECT:/tmp/android_audio'")
-                    AudioStream.stopStreaming() // tidak memblokir thread UI
-                    micStreaming = false
+                }
+            }
+            Div()
+            key(mic, micReset) {
+                SwitchRow(
+                    stringResource(R.string.tc_ui_mic_monitoring), monitoring && mic,
+                    if (mic) null else stringResource(R.string.tc_ui_mic_monitoring_hint),
+                    enabled = mic,
+                ) { on ->
+                    term().writeLine(Launcher.micMonitorCommand(on))
+                    micMonitoring = on
+                    monitoring = on
                 }
             }
         }

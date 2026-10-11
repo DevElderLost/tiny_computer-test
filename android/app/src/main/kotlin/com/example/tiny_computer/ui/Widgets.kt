@@ -92,7 +92,7 @@ fun HintText(text: String) {
 }
 
 @Composable
-fun SwitchRow(title: String, checked: Boolean, subtitle: String? = null, onChange: (Boolean) -> Unit) {
+fun SwitchRow(title: String, checked: Boolean, subtitle: String? = null, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
     val pal = LocalPalette.current
     var v by remember(checked) { mutableStateOf(checked) }
     Row(
@@ -100,11 +100,11 @@ fun SwitchRow(title: String, checked: Boolean, subtitle: String? = null, onChang
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Column(Modifier.weight(1f).padding(end = 12.dp)) {
-            Text(title, style = MaterialTheme.typography.bodyMedium, color = pal.onBackground)
+            Text(title, style = MaterialTheme.typography.bodyMedium, color = if (enabled) pal.onBackground else pal.onSurfaceVariant)
             if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = pal.onSurfaceVariant)
         }
         Switch(
-            checked = v, onCheckedChange = { v = it; onChange(it) },
+            checked = v, enabled = enabled, onCheckedChange = { v = it; onChange(it) },
             colors = SwitchDefaults.colors(
                 checkedThumbColor = pal.onSignal, checkedTrackColor = pal.signal, checkedBorderColor = pal.signal,
                 uncheckedThumbColor = pal.onSurfaceVariant, uncheckedTrackColor = pal.surfaceVariant, uncheckedBorderColor = pal.line2,
