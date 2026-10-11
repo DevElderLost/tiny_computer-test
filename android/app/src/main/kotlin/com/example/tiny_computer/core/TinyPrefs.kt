@@ -180,6 +180,11 @@ object Cfg {
     var padDeckPads: Boolean
         get() = TinyPrefs.getBool("padDeckPads", true)
         set(v) = TinyPrefs.setBool("padDeckPads", v)
+
+    /** Layar awal (info pemasangan + izin) sudah dilewati; tidak ditampilkan lagi. */
+    var onboardingDone: Boolean
+        get() = TinyPrefs.getBool("onboardingDone", false)
+        set(v) = TinyPrefs.setBool("onboardingDone", v)
 }
 
 /** Satu kontainer di `containersInfo` (JSON): name, boot, vnc, vncUrl, vncUri, commands. */
@@ -188,7 +193,9 @@ object Containers {
 
     fun count() = list().size
 
-    fun json(index: Int): JSONObject = JSONObject(list()[index])
+    // Sebelum sistem terpasang daftar masih kosong; Beranda/Pengaturan membacanya, jadi jangan melempar.
+    fun json(index: Int): JSONObject =
+        list().getOrNull(index)?.let { runCatching { JSONObject(it) }.getOrNull() } ?: JSONObject()
 
     fun name(index: Int): String = json(index).optString("name", "Debian Trixie")
 
@@ -200,6 +207,7 @@ object Containers {
 
     fun put(index: Int, key: String, value: Any) {
         val all = list().toMutableList()
+        if (index !in all.indices) return
         val obj = JSONObject(all[index])
         obj.put(key, value)
         all[index] = obj.toString()

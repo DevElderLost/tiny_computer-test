@@ -1,15 +1,16 @@
 package com.example.tiny_computer
 
-import android.Manifest
+import android.content.Intent
 import android.graphics.Color
-import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import com.example.tiny_computer.core.AppPermissions
 import com.example.tiny_computer.core.Cfg
+import com.example.tiny_computer.core.Startup
 import com.example.tiny_computer.ui.TinyApp
 import com.example.tiny_computer.ui.TinyTheme
 
@@ -17,13 +18,21 @@ import com.example.tiny_computer.ui.TinyTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Pertama kali dibuka: info pemasangan dan izin ada di OnboardingActivity. Pengguna lama yang sudah
+        // memasang sistem dan mengaktifkan izin wajib tidak perlu melihatnya.
+        if (!Cfg.onboardingDone) {
+            if (Startup.installed && AppPermissions.requiredGranted(this)) {
+                Cfg.onboardingDone = true
+            } else {
+                startActivity(Intent(this, OnboardingActivity::class.java))
+                finish()
+                return
+            }
+        }
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
         )
-        if (Build.VERSION.SDK_INT < 33) {
-            requestPermissions(arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE), 1)
-        }
         setContent { TinyTheme { TinyApp() } }
     }
 

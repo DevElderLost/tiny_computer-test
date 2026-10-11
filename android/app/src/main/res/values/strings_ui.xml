@@ -189,4 +189,41 @@
     <string name="tc_drv_imported">Driver imported: %1$s</string>
     <string name="tc_drv_failed">Import failed: %1$s</string>
     <string name="tc_home_linux_driver">Container Vulkan driver</string>
+    <string name="tc_status_idle">Not started</string>
+    <string name="tc_start_title_first">Setting up Tiny Computer</string>
+    <string name="tc_start_title">Starting Tiny Computer</string>
+    <string name="tc_start_prepare">Preparing the runtime…</string>
+    <string name="tc_start_container">Starting the container…</string>
+    <string name="tc_start_detail_percent">%1$s · %2$d%%</string>
+    <string name="tc_start_step">Step %1$d of %2$d</string>
+    <string name="tc_start_failed">Startup failed</string>
+    <string name="tc_start_retry">Try again</string>
+    <string name="tc_start_back">Back</string>
+    <string name="tc_start_hint_first">The first setup takes about 5 to 10 minutes and needs no internet connection. Please do not exit the app. On the desktop: tap = left-click, long press = right-click, two-finger tap = keyboard.</string>
+    <string name="tc_start_terminal_hint">The container is not running yet. Open the desktop, or start it here, to use the terminal.</string>
+    <string name="tc_start_container_button">Start container</string>
+    <string name="tc_ctrl_defaults">Defaults</string>
+    <string name="tc_ctrl_reset">Reset controller</string>
+    <string name="tc_ctrl_reset_hint">Restores identity, overlay, opacity, size and haptics to their defaults</string>
+    <string name="tc_ctrl_reset_button">Reset</string>
+    <string name="tc_ob_title">Welcome to Tiny Computer</string>
+    <string name="tc_ob_subtitle">Allow the permissions below before the first setup.</string>
+    <string name="tc_ob_group_permissions">Permissions</string>
+    <string name="tc_ob_group_info">First install</string>
+    <string name="tc_ob_storage">Storage (required)</string>
+    <string name="tc_ob_storage_hint">Downloads, Documents and Pictures inside Tiny Computer are bound to your device folders. Without this permission they cannot be accessed, and Firefox cannot save downloads.</string>
+    <string name="tc_ob_mic">Microphone (required)</string>
+    <string name="tc_ob_mic_hint">Lets the container record sound through the virtual microphone.</string>
+    <string name="tc_ob_battery">Battery optimization (optional)</string>
+    <string name="tc_ob_battery_hint">Stops Android from pausing the container while it runs in the background.</string>
+    <string name="tc_ob_allow">Allow</string>
+    <string name="tc_ob_open_settings">Open settings</string>
+    <string name="tc_ob_granted">Granted</string>
+    <string name="tc_ob_next">Next</string>
+    <string name="tc_ob_need">Allow storage and microphone to continue.</string>
+    <string name="tc_ob_info">The first setup starts when you tap Open desktop. It takes about 5 to 10 minutes and does not need an internet connection. Please do not exit the app while it installs.\n\nOn the desktop:\n- Tap for left-click\n- Long press for right-click\n- Two-finger tap to open the keyboard\n- Two-finger swipe for the mouse wheel</string>
+    <string name="tc_extras_installing">Installing Wayland and microphone support…</string>
+    <!-- Peringatan sengaja hanya berbahasa Inggris (sesuai permintaan), jadi tidak diterjemahkan -->
+    <string name="tc_extras_no_internet" translatable="false">Internet is not active. Turn on Wi-Fi or mobile data, then tap Open desktop again to finish installing Wayland and microphone support.</string>
+    <string name="tc_extras_failed" translatable="false">Installing Wayland and microphone support failed. Check your internet connection, then tap Open desktop again.</string>
 </resources>

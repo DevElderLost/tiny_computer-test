@@ -22,6 +22,16 @@ object Rootfs {
     @Volatile
     var statusText: String = ""
 
+    /** Kemajuan tahap yang sedang berjalan (0..100), atau -1 bila tidak terukur. */
+    @Volatile
+    var percent: Int = -1
+
+    // persen direset lebih dulu agar layar progres tidak sempat memadukan tahap baru dengan persen lama
+    private fun step(name: String) {
+        percent = -1
+        statusText = name
+    }
+
     private fun asset(ctx: Context, name: String) =
         ctx.assets.open(name).bufferedReader(Charsets.UTF_8).use { it.readText() }
 
@@ -60,16 +70,19 @@ object Rootfs {
 
     private fun initForFirstTime(ctx: Context) {
         val data = TinyEnv.dataPath
-        statusText = "installingBootPackage"
+        step("installingBootPackage")
         setupBootstrap(ctx)
 
-        statusText = "copyingContainerSystem"
+        step("copyingContainerSystem")
         File(data, "containers/0/.l2s").mkdirs()
         // rootfs dipecah dengan `split` menjadi xa*, ditaruh di assets
         val parts = (ctx.assets.list("") ?: emptyArray()).filter { it.startsWith("xa") }.sorted()
-        for (name in parts) copyAsset(ctx, name, File(data, name))
+        for ((i, name) in parts.withIndex()) {
+            copyAsset(ctx, name, File(data, name))
+            percent = (i + 1) * 100 / parts.size
+        }
 
-        statusText = "installingContainerSystem"
+        step("installingContainerSystem")
         val localeLine = if (TinyEnv.isChineseLocale) ""
         else "echo 'LANG=en_US.UTF-8' > \$CONTAINER_DIR/usr/local/etc/tmoe-linux/locale.txt"
         val script = asset(ctx, "tiny/install_rootfs.sh")
@@ -123,7 +136,7 @@ object Rootfs {
         TinyEnv.currentContainer = Cfg.defaultContainer
 
         if (Cfg.reinstallBootstrap) {
-            statusText = "reinstallingBootPackage"
+            step("reinstallingBootPackage")
             setupBootstrap(ctx)
             Cfg.reinstallBootstrap = false
         }
