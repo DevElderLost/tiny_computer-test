@@ -56,11 +56,7 @@ object Launcher {
     private val idleCheck = Runnable {
         if (guiStarted) return@Runnable
         val session = appSession ?: return@Runnable
-        val anyApp = synchronized(appProcs) {
-            appProcs.removeAll { !it.isAlive }
-            appProcs.isNotEmpty()
-        }
-        if (anyApp && session.isAlive) return@Runnable
+        if (session.isAlive && appsBusy()) return@Runnable
         val failed = lastFailedApp
         stopAppSession()
         onAppSessionEnded?.invoke(failed)
@@ -73,6 +69,116 @@ object Launcher {
 
     private fun watch(name: String, block: () -> Unit) {
         Thread({ block() }, name).apply { isDaemon = true; start() }
+    }
+
+    // ------------------------------------------------------------------ pohon proses guest
+
+    /** PID proot tiap proses terlepas (dibaca dari baris `TINYPID=` di keluarannya). */
+    private val pids = java.util.concurrent.ConcurrentHashMap<Process, Int>()
+
+    private class ProcInfo(val ppid: Int, val tracer: Int, val zombie: Boolean, val comm: String)
+
+    /** Memindai /proc: induk, tracer (proot menjadi tracer semua proses guest), status zombie, dan nama proses. */
+    private fun scanProcs(): Map<Int, ProcInfo> {
+        val out = HashMap<Int, ProcInfo>()
+        File("/proc").listFiles()?.forEach { d ->
+            val pid = d.name.toIntOrNull() ?: return@forEach
+            runCatching {
+                var ppid = 0
+                var tracer = 0
+                var zombie = false
+                File(d, "status").forEachLine { l ->
+                    when {
+                        l.startsWith("PPid:") -> ppid = l.substring(5).trim().toIntOrNull() ?: 0
+                        l.startsWith("TracerPid:") -> tracer = l.substring(10).trim().toIntOrNull() ?: 0
+                        l.startsWith("State:") -> zombie = l.substring(6).trim().startsWith("Z")
+                    }
+                }
+                val comm = runCatching { File(d, "comm").readText().trim() }.getOrDefault("")
+                out[pid] = ProcInfo(ppid, tracer, zombie, comm)
+            }
+        }
+        return out
+    }
+
+    /**
+     * [root] beserta semua keturunannya. Proses yang ditinggal induknya (daemon, aplikasi yang
+     * melepaskan diri) tetap ketemu lewat TracerPid = proot, jadi tidak lolos hanya karena PPid-nya 1.
+     */
+    private fun treeOf(root: Int, procs: Map<Int, ProcInfo>): LinkedHashSet<Int> {
+        val me = android.os.Process.myPid()
+        val tree = LinkedHashSet<Int>()
+        tree.add(root)
+        var grew = true
+        while (grew) {
+            grew = false
+            for ((pid, i) in procs) {
+                if (pid != me && pid !in tree && (i.ppid in tree || i.tracer in tree)) { tree.add(pid); grew = true }
+            }
+        }
+        return tree
+    }
+
+    /** SIGKILL [root] dan seluruh pohonnya (anak dulu, akar terakhir); mengembalikan PID yang dikirimi sinyal. */
+    private fun killTree(root: Int): List<Int> {
+        val order = treeOf(root, scanProcs()).toList().reversed()
+        order.forEach { runCatching { android.os.Process.killProcess(it) } }
+        return order
+    }
+
+    /**
+     * Menunggu PID-PID itu benar-benar hilang. Penting sebelum Xwayland baru dinyalakan: Xwayland lama
+     * yang masih sekarat menghapus soket `/tmp/.X11-unix/X4` milik Xwayland baru.
+     */
+    private fun waitGone(targets: Collection<Int>, timeoutMs: Long) {
+        val end = SystemClock.elapsedRealtime() + timeoutMs
+        while (SystemClock.elapsedRealtime() < end) {
+            val procs = scanProcs()
+            if (targets.none { procs[it]?.zombie == false }) return
+            Thread.sleep(50)
+        }
+    }
+
+    // proses pendukung yang sering menetap setelah aplikasinya keluar; tidak dihitung sebagai "aplikasi masih jalan"
+    private val HELPER_PREFIXES = listOf(
+        "dbus", "at-spi", "dconf", "gvfs", "fcitx", "ibus", "pulseaudio", "pipewire", "wireplumber",
+        "xdg-", "xfce4-notifyd", "notify", "gnome-keyring", "chrome_crashpad", "crashpad", "proot",
+    )
+
+    private fun isHelper(comm: String) = HELPER_PREFIXES.any { comm.startsWith(it) }
+
+    /** True bila di bawah proot [root] masih ada proses selain pendukung (aplikasinya, atau peluncurnya yang membuat aplikasi). */
+    private fun treeBusy(root: Int, procs: Map<Int, ProcInfo>): Boolean =
+        treeOf(root, procs).any { pid ->
+            pid != root && procs[pid]?.let { !it.zombie && !isHelper(it.comm) } == true
+        }
+
+    /**
+     * Ada aplikasi Shortcut yang masih bekerja? Tanpa `--kill-on-exit` proot aplikasi tetap hidup selama
+     * ada proses guest apa pun, jadi "proot hidup" tidak cukup: daemon pendukung membuatnya hidup terus.
+     */
+    private fun appsBusy(): Boolean {
+        val live = synchronized(appProcs) {
+            appProcs.removeAll { !it.isAlive }
+            appProcs.toList()
+        }
+        if (live.isEmpty()) return false
+        val procs = scanProcs()
+        return live.any { p ->
+            val pid = pids[p] ?: 0
+            pid == 0 || treeBusy(pid, procs)
+        }
+    }
+
+    /** proot Shortcut yatim: sisa proses dari masa hidup aplikasi sebelumnya yang tidak lagi kita pantau. */
+    private fun sweepStale(): List<Int> {
+        val killed = ArrayList<Int>()
+        File("/proc").listFiles()?.forEach { d ->
+            val pid = d.name.toIntOrNull() ?: return@forEach
+            val cmd = runCatching { File(d, "cmdline").readText() }.getOrNull() ?: return@forEach
+            if (cmd.contains("/tiny/shortcuts/") && cmd.contains("proot")) killed += killTree(pid)
+        }
+        return killed
     }
     @Volatile private var padCache: PadSetup.Result? = null
 
@@ -338,12 +444,23 @@ bash /etc/X11/xinit/Xsession &> "${'$'}HOME/.vnc/x.log" &
 
     /** Proses terlepas (stdin = /dev/null) dengan keluaran dialirkan ke logcat; `exec` di skrip membuat prosesnya proot itu sendiri. */
     private fun spawnDetached(script: String, tag: String): Process {
-        val p = ProcessBuilder("/system/bin/sh", "-c", script)
+        // `$$` = PID shell; setelah `exec` itulah PID proot. Dipakai untuk mematikan seluruh pohonnya.
+        val p = ProcessBuilder("/system/bin/sh", "-c", "echo TINYPID=\$\$\n" + script)
             .redirectErrorStream(true)
             .redirectInput(ProcessBuilder.Redirect.from(File("/dev/null")))
             .start()
         Thread {
-            runCatching { p.inputStream.bufferedReader().useLines { lines -> lines.forEach { Log.d(tag, it) } } }
+            runCatching {
+                p.inputStream.bufferedReader().useLines { lines ->
+                    lines.forEach { line ->
+                        if (line.startsWith("TINYPID=")) {
+                            pids[p] = line.substring(8).trim().toIntOrNull() ?: 0
+                        } else {
+                            Log.d(tag, line)
+                        }
+                    }
+                }
+            }
         }.apply { isDaemon = true; start() }
         return p
     }
@@ -351,15 +468,21 @@ bash /etc/X11/xinit/Xsession &> "${'$'}HOME/.vnc/x.log" &
     /**
      * Skrip host yang meluncurkan proot BARU di rootfs kontainer ini dan menjalankan [guestScript]
      * (path di dalam guest) lewat `/bin/sh`. Memakai perintah boot yang sama dengan kontainer (mount,
-     * `env -i`, `--kill-on-exit`) kecuali program terakhirnya `/bin/bash -l` diganti skrip itu.
+     * `env -i`) kecuali program terakhirnya `/bin/bash -l` diganti skrip itu.
      * Bila perintah boot buatan pengguna tidak diakhiri `/bin/bash`, perintah boot bawaan yang dipakai.
+     *
+     * [killOnExit] = false membuang `--kill-on-exit`: proot lalu menunggu SEMUA proses guest, bukan hanya
+     * program pertama. Perlu untuk aplikasi berbentuk peluncur (mis. `code` milik VS Code menjalankan
+     * Electron terlepas lalu keluar); dengan `--kill-on-exit`, Electron ikut dibunuh begitu peluncurnya
+     * selesai dan layar langsung kembali ke menu Shortcut.
      */
-    private fun appProotScript(ctx: Context, guestScript: String): String {
+    private fun appProotScript(ctx: Context, guestScript: String, killOnExit: Boolean): String {
         val spec = guestSpec(ctx)
         val tail = Regex("""/bin/bash(\s+-l)?\s*$""")
         val custom = Containers.boot(TinyEnv.currentContainer, TinyEnv.defaultBoot).trim()
         val base = if (tail.containsMatchIn(custom)) custom else TinyEnv.defaultBoot.trim()
-        val prefix = tail.replace(base, "").trimEnd()
+        var prefix = tail.replace(base, "").trimEnd()
+        if (!killOnExit) prefix = prefix.replace(" --kill-on-exit", "")
         return guestEnvScript(spec) + "\nexec " + prefix + " /bin/sh " + guestScript + "\n"
     }
 
@@ -387,18 +510,41 @@ bash /etc/X11/xinit/Xsession &> "${'$'}HOME/.vnc/x.log" &
         // ada aplikasi baru: batalkan penutupan sesi yang mungkin sudah dijadwalkan
         mainHandler.removeCallbacks(idleCheck)
         lastFailedApp = null
+        // Tidak ada yang kita pantau tapi proot Shortcut masih ada = sisa masa hidup sebelumnya
+        // (aplikasi di-kill Android, crash). Bersihkan agar tidak menimpa sesi baru.
+        val gone = ArrayList<Int>()
+        val tracked = appSessionStarted || synchronized(appProcs) { appProcs.any { it.isAlive } }
+        if (!tracked) gone += sweepStale()
         if (!guiStarted && !appSessionStarted) {
-            // sisa proses lama (Xwayland yang mati, aplikasi yatim) dibersihkan sebelum sesi baru
-            stopAppSession()
-            val session = spawnDetached(appProotScript(ctx, ShortcutRunner.prepareSession(ctx)), "TinyAppSession")
+            // seluruh pohon proses sesi lama (Xwayland, aplikasi, anak-anaknya) dimatikan dan DITUNGGU
+            // sampai hilang sebelum Xwayland baru dibuat
+            gone += stopAppSession()
+            waitGone(gone, 2000)
+            val session = spawnDetached(appProotScript(ctx, ShortcutRunner.prepareSession(ctx), killOnExit = true), "TinyAppSession")
             appSession = session
             // Xwayland mati sendiri (crash): aplikasinya ikut putus, tutup sesi dan kembali ke Shortcut
             watch("tiny-session-wait") {
                 runCatching { session.waitFor() }
+                pids.remove(session)
                 if (appSession === session) scheduleIdleCheck(0)
             }
+            // proot aplikasi tidak lagi berhenti sendiri saat aplikasinya selesai (tanpa --kill-on-exit),
+            // jadi "sesi kosong" diperiksa berkala lewat pohon prosesnya; 3 pemeriksaan berturut-turut = kosong
+            watch("tiny-idle-poll") {
+                var idleTicks = 0
+                while (appSession === session) {
+                    Thread.sleep(1000)
+                    if (appSession !== session) break
+                    if (guiStarted) { idleTicks = 0; continue }
+                    idleTicks = if (appsBusy()) 0 else idleTicks + 1
+                    if (idleTicks >= 3) { scheduleIdleCheck(0); break }
+                }
+            }
+        } else {
+            // desktop yang menyala memegang X: hanya pastikan sisa proses lama sudah hilang
+            waitGone(gone, 2000)
         }
-        val proc = spawnDetached(appProotScript(ctx, script), "TinyApp-$appId")
+        val proc = spawnDetached(appProotScript(ctx, script, killOnExit = false), "TinyApp-$appId")
         synchronized(appProcs) {
             appProcs.removeAll { !it.isAlive }
             appProcs.add(proc)
@@ -407,22 +553,36 @@ bash /etc/X11/xinit/Xsession &> "${'$'}HOME/.vnc/x.log" &
         val startedAt = SystemClock.elapsedRealtime()
         watch("tiny-app-wait-$appId") {
             val code = runCatching { proc.waitFor() }.getOrDefault(-1)
+            pids.remove(proc)
             // galat dalam 5 detik pertama = gagal start; appSession null = kita sendiri yang mematikannya
             if (code != 0 && SystemClock.elapsedRealtime() - startedAt < 5000 && appSession != null) lastFailedApp = appId
             scheduleIdleCheck(2000)
         }
     }
 
-    /** Menghentikan sesi aplikasi Shortcut (Xwayland + semua aplikasinya); tidak menunggu prosesnya selesai. */
-    fun stopAppSession() {
+    /**
+     * Menghentikan sesi aplikasi Shortcut: SELURUH pohon proses tiap proot (aplikasi dulu, Xwayland
+     * terakhir), bukan hanya proot-nya. Mematikan proot tanpa `--kill-on-exit` meninggalkan proses guest
+     * yatim yang terus berjalan/crash dan menimpa sesi berikutnya. Tidak menunggu; kembaliannya daftar PID
+     * yang dikirimi sinyal untuk [waitGone].
+     */
+    fun stopAppSession(): List<Int> {
         mainHandler.removeCallbacks(idleCheck)
         lastFailedApp = null
-        appSession?.destroyForcibly()
-        appSession = null
+        val guests = ArrayList<Process>()
         synchronized(appProcs) {
-            appProcs.forEach { it.destroyForcibly() }
+            guests += appProcs
             appProcs.clear()
         }
+        appSession?.let { guests += it }
+        appSession = null
+        val killed = ArrayList<Int>()
+        for (g in guests) {
+            val pid = pids.remove(g) ?: 0
+            if (pid > 0) killed += killTree(pid)
+            g.destroyForcibly()
+        }
+        return killed
     }
 
     /** Port `workflow()`: siapkan data, terminal, audio, lalu nyalakan kontainer. */
