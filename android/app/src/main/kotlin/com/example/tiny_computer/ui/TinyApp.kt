@@ -7,6 +7,17 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -91,32 +102,66 @@ fun TinyApp() {
 
     if (!ready) { LoadingScreen(status); return }
 
-    Scaffold(
-        containerColor = pal.background,
-        bottomBar = {
-            NavigationBar(containerColor = pal.surface, tonalElevation = 0.dp) {
+    val landscape = isLandscape()
+    val content: @Composable () -> Unit = {
+        when (Page.values()[page]) {
+            Page.HOME -> HomeScreen { ctx.startActivity(Intent(ctx, DisplayActivity::class.java)) }
+            Page.TERMINAL -> TerminalScreen()
+            Page.CONTROLLER -> ControllerScreen()
+            // formulir panjang: dibatasi lebarnya supaya baris tidak melebar sepanjang layar lanskap
+            Page.SETTINGS -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                Box(Modifier.widthIn(max = 720.dp).fillMaxSize()) { SettingsScreen() }
+            }
+        }
+    }
+
+    if (landscape) {
+        // Lanskap seperti DroidDeck: rel navigasi di kiri (bukan bilah bawah yang memakan tinggi
+        // layar), isi halaman di sisi kanan dengan inset sistem (tombol navigasi, poni) dihormati.
+        Row(Modifier.fillMaxSize().background(pal.background)) {
+            NavigationRail(containerColor = pal.surface, modifier = Modifier.fillMaxHeight()) {
+                Spacer(Modifier.weight(1f))
                 Page.values().forEach { p ->
-                    NavigationBarItem(
+                    NavigationRailItem(
                         selected = page == p.ordinal, onClick = { page = p.ordinal },
                         icon = { Icon(p.icon, null) },
                         label = { Text(stringResource(p.label), fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
-                        colors = NavigationBarItemDefaults.colors(
+                        alwaysShowLabel = true,
+                        colors = NavigationRailItemDefaults.colors(
                             selectedIconColor = pal.signal, selectedTextColor = pal.signal,
                             indicatorColor = pal.signal.copy(alpha = 0.16f),
                             unselectedIconColor = pal.onSurfaceVariant, unselectedTextColor = pal.onSurfaceVariant,
                         ),
                     )
                 }
+                Spacer(Modifier.weight(1f))
             }
-        },
-    ) { inner ->
-        Column(Modifier.fillMaxSize().padding(inner)) {
-            when (Page.values()[page]) {
-                Page.HOME -> HomeScreen { ctx.startActivity(Intent(ctx, DisplayActivity::class.java)) }
-                Page.TERMINAL -> TerminalScreen()
-                Page.CONTROLLER -> ControllerScreen()
-                Page.SETTINGS -> SettingsScreen()
-            }
+            Column(
+                Modifier.weight(1f).fillMaxHeight()
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Bottom + WindowInsetsSides.End)),
+            ) { content() }
+        }
+    } else {
+        Scaffold(
+            containerColor = pal.background,
+            bottomBar = {
+                NavigationBar(containerColor = pal.surface, tonalElevation = 0.dp) {
+                    Page.values().forEach { p ->
+                        NavigationBarItem(
+                            selected = page == p.ordinal, onClick = { page = p.ordinal },
+                            icon = { Icon(p.icon, null) },
+                            label = { Text(stringResource(p.label), fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = pal.signal, selectedTextColor = pal.signal,
+                                indicatorColor = pal.signal.copy(alpha = 0.16f),
+                                unselectedIconColor = pal.onSurfaceVariant, unselectedTextColor = pal.onSurfaceVariant,
+                            ),
+                        )
+                    }
+                }
+            },
+        ) { inner ->
+            Column(Modifier.fillMaxSize().padding(inner)) { content() }
         }
     }
 }
@@ -125,17 +170,16 @@ fun TinyApp() {
 private fun HomeScreen(onOpen: () -> Unit) {
     val pal = LocalPalette.current
     val ctx = LocalContext.current
+    val land = isLandscape()
     val (w, h) = Launcher.displaySize(ctx)
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-        ScreenTitle(stringResource(R.string.tc_ui_app_title), Containers.name(TinyEnv.currentContainer))
-
+    val mainCard: @Composable () -> Unit = {
         // kartu utama: gradasi lembut dari warna sinyal
         val shape = RoundedCornerShape(20.dp)
         Column(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).clip(shape)
                 .background(Brush.linearGradient(listOf(pal.signal.copy(alpha = 0.28f), pal.surface, pal.surface)), shape)
-                .border(1.dp, pal.line2, shape).padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+                .border(1.dp, pal.line2, shape).padding(if (land) 16.dp else 20.dp),
+            verticalArrangement = Arrangement.spacedBy(if (land) 10.dp else 14.dp),
         ) {
             StatusChip(
                 stringResource(if (Launcher.isStarted) R.string.tc_status_running else R.string.tc_status_starting),
@@ -144,19 +188,36 @@ private fun HomeScreen(onOpen: () -> Unit) {
             Text(stringResource(R.string.tc_home_hint), style = MaterialTheme.typography.bodyMedium, color = pal.onBackground)
             DeckButton(stringResource(R.string.tc_home_start), Modifier.fillMaxWidth(), onClick = onOpen)
         }
-
+    }
+    val session: @Composable () -> Unit = {
         Group(stringResource(R.string.tc_group_session)) {
             InfoRow(stringResource(R.string.tc_home_resolution), "$w × $h")
             Div()
             InfoRow(stringResource(R.string.tc_home_pad), stringResource(if (Cfg.padIdentity == "deck") R.string.tc_ctrl_deck else R.string.tc_ctrl_xbox))
             Div()
             InfoRow(stringResource(R.string.tc_home_driver), Cfg.androidDriver.ifEmpty { stringResource(R.string.tc_home_driver_auto) })
+            Div()
+            InfoRow(stringResource(R.string.tc_home_linux_driver), Cfg.linuxDriver.ifEmpty { stringResource(R.string.tc_home_driver_auto) })
         }
+    }
+    val note: @Composable () -> Unit = {
         Text(
             stringResource(R.string.tc_ui_update_request),
             style = MaterialTheme.typography.bodySmall, color = pal.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 22.dp, vertical = 12.dp),
         )
+    }
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
+        ScreenTitle(stringResource(R.string.tc_ui_app_title), Containers.name(TinyEnv.currentContainer))
+        if (land) {
+            // dua kolom: kartu mulai di kiri, info sesi di kanan; tinggi layar lanskap sempit
+            Row(Modifier.fillMaxWidth()) {
+                Column(Modifier.weight(1f)) { mainCard(); note() }
+                Column(Modifier.weight(1f)) { session() }
+            }
+        } else {
+            mainCard(); session(); note()
+        }
     }
 }
 

@@ -24,9 +24,20 @@ class TurnipLoader(private val context: Context) {
         JSONObject(File(File(contentDir, id), "meta.json").readText()).optString("libraryName", "").ifEmpty { null }
     }.getOrNull()
 
-    /** Id driver yang siap dipakai, atau null (jatuh ke libvulkan sistem). */
+    /**
+     * Id driver yang siap dipakai, atau null (jatuh ke libvulkan sistem). Driver pilihan pengguna
+     * (bawaan atau hasil impor) yang rusak/hilang tidak lagi membuat layar hitam: dicoba driver
+     * sesuai GPU perangkat sebagai gantinya.
+     */
     fun install(preferred: String): String? {
-        val id = if (preferred.isNotEmpty() && File(contentDir, preferred).isDirectory) preferred else chooseByDevice()
+        if (preferred.isNotEmpty()) {
+            if (File(contentDir, preferred).isDirectory) installId(preferred)?.let { return it }
+            Log.w(TAG, "driver pilihan '$preferred' tidak bisa dipakai, memakai driver otomatis")
+        }
+        return installId(chooseByDevice())
+    }
+
+    private fun installId(id: String): String? {
         val dir = File(contentDir, id)
         if (!File(dir, "meta.json").isFile) {
             dir.deleteRecursively()

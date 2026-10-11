@@ -66,7 +66,7 @@ fun TerminalScreen() {
         AndroidView(
             modifier = Modifier.weight(1f).fillMaxWidth(),
             factory = { c ->
-                TerminalView(c, null).also { v ->
+                ScrollableTerminalView(c).also { v ->
                     v.setTerminalViewClient(TermViewClient(
                         onTap = {
                             if (!Cfg.isTerminalWriteEnabled) return@TermViewClient
@@ -88,17 +88,18 @@ fun TerminalScreen() {
                     termView = v
                 }
             },
-            update = { it.onScreenUpdated() },
+            // JANGAN panggil onScreenUpdated() di sini: dipanggil tiap rekomposisi dan menyeret
+            // tampilan kembali ke bawah sehingga terminal tidak bisa digulir. Pembaruan layar sudah
+            // datang dari TermSession.onTextChanged.
+            update = { },
         )
-        if (Cfg.isTerminalCommandsEnabled) {
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            if (Cfg.isTerminalCommandsEnabled) {
                 KeyChip("Ctrl", ctrl) { TermModifiers.ctrl = !TermModifiers.ctrl; ctrl = TermModifiers.ctrl }
                 KeyChip("Alt", alt) { TermModifiers.alt = !TermModifiers.alt; alt = TermModifiers.alt }
                 KEYS.forEach { k -> KeyChip(k.label) { term.write(k.seq); termView?.requestFocus() } }
             }
-        }
-        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             KeyChip(stringResource(R.string.tc_ui_control)) { showCommands = true }
             KeyChip("Ctrl+C") { term.write("\u0003") }
         }

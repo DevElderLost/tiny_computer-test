@@ -39,6 +39,8 @@ class TermSession(private val context: Context) : TerminalSessionClient {
     }
 
     fun write(text: String) {
+        // mengetik / menekan tombol selalu membawa kembali ke baris terbawah
+        (view as? com.example.tiny_computer.ui.ScrollableTerminalView)?.scrollToBottom()
         session.write(text)
     }
 

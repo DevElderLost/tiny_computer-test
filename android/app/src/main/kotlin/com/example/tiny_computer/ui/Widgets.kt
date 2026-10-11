@@ -12,6 +12,9 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -40,14 +43,19 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+/** Lanskap: navigasi pindah ke rel samping dan halaman memakai dua kolom (seperti DroidDeck). */
+@Composable
+fun isLandscape(): Boolean = LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+
 private val CardShape = RoundedCornerShape(14.dp)
 private val ControlShape = RoundedCornerShape(12.dp)
 
 /** Judul halaman: besar, dengan satu baris keterangan. */
 @Composable
 fun ScreenTitle(title: String, subtitle: String? = null) {
-    Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 8.dp)) {
-        Text(title, style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onBackground)
+    val land = isLandscape()
+    Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = if (land) 10.dp else 20.dp, bottom = if (land) 2.dp else 8.dp)) {
+        Text(title, style = if (land) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onBackground)
         if (subtitle != null) {
             Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 4.dp))
@@ -181,6 +189,37 @@ fun <T> ChoiceRow(options: List<Pair<T, String>>, selected: T, onSelect: (T) -> 
                 Box(Modifier.dot(10).background(if (on) pal.signal else pal.line2, CircleShape))
                 Text(label, Modifier.padding(start = 12.dp), color = if (on) pal.onBackground else pal.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
+            }
+        }
+    }
+}
+
+/**
+ * Pilihan tunggal ringkas: judul di atas, pil bergulir mendatar di bawahnya. Menggantikan
+ * [ChoiceRow] (tumpukan baris tinggi) di tempat yang butuh hemat tinggi, terutama lanskap.
+ */
+@Composable
+fun <T> ChipChoiceRow(title: String, options: List<Pair<T, String>>, selected: T, onSelect: (T) -> Unit) {
+    val pal = LocalPalette.current
+    val pill = RoundedCornerShape(50)
+    Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp)) {
+        Text(title, style = MaterialTheme.typography.bodyMedium, color = pal.onBackground)
+        Row(
+            Modifier.fillMaxWidth().padding(top = 8.dp).horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            options.forEach { (id, label) ->
+                val on = id == selected
+                Box(
+                    Modifier.clip(pill)
+                        .background(if (on) pal.signal.copy(alpha = 0.16f) else pal.surfaceVariant, pill)
+                        .border(1.dp, if (on) pal.signal else pal.line, pill)
+                        .clickableNoRipple { onSelect(id) }
+                        .padding(horizontal = 14.dp, vertical = 9.dp),
+                ) {
+                    Text(label, fontSize = 13.sp, color = if (on) pal.onBackground else pal.onSurfaceVariant,
+                        fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
+                }
             }
         }
     }

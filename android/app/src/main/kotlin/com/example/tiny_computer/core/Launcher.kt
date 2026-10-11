@@ -2,6 +2,7 @@ package com.example.tiny_computer.core
 
 import android.content.Context
 import android.util.DisplayMetrics
+import android.util.Log
 import com.example.tiny_computer.display.PadSetup
 import java.io.File
 import kotlin.math.max
@@ -47,6 +48,51 @@ TMPDIR=${'$'}DATA_DIR/pulseaudio_tmp HOME=${'$'}DATA_DIR/pulseaudio_tmp XDG_CONF
         return (w and 1.inv()).coerceAtLeast(320) to (h and 1.inv()).coerceAtLeast(240)
     }
 
+    /**
+     * Opsi lingkungan Turnip/Zink untuk guest. ICD diambil dari driver Linux hasil impor
+     * ([VulkanDrivers.activeIcd]); bila tidak ada, ICD bawaan di `tiny/extra` dipakai SELAMA berkasnya
+     * ada. Dulu path ke `freedreno_icd.aarch64.json` yang tidak ada tetap dikirim, sehingga vulkaninfo
+     * gagal "Failed to open JSON file" -> "Found no drivers".
+     */
+    fun turnipOpt(ctx: Context): String {
+        val re = Regex("""\s*VK_(?:ICD_FILENAMES|DRIVER_FILES)=\S+""")
+        val base = Cfg.defaultTurnipOpt
+        val imported = VulkanDrivers.activeIcd(ctx)
+        if (imported != null) {
+            Log.i("Launcher", "driver Vulkan Linux hasil impor: $imported")
+            return re.replace(base, "").trim() + " VK_ICD_FILENAMES=$imported VK_DRIVER_FILES=$imported"
+        }
+        val guestPrefix = "/home/tiny/.local/share/tiny/"
+        var out = base
+        for (m in re.findAll(base)) {
+            val value = m.value.substringAfter('=')
+            val host = if (value.startsWith(guestPrefix)) File(TinyEnv.dataPath, "tiny/" + value.removePrefix(guestPrefix)) else File(value)
+            if (!host.isFile) {
+                Log.w("Launcher", "ICD $value tidak ada ($host); impor driver Vulkan Linux di Pengaturan")
+                out = out.replace(m.value, "")
+            }
+        }
+        return out.trim()
+    }
+
+    /**
+     * Perintah di dalam kontainer yang menyiapkan mikrofon virtual: sink null + source remap, lalu klien
+     * soket. Memakai `tiny_virtual_mic` bila ada; bila tidak, `socat` + `pacat` (paket socat dan
+     * pulseaudio-utils); bila keduanya tidak ada, mencetak petunjuk (tanpa membuat aplikasi macet).
+     */
+    fun micCommand(socketPath: String): String = """
+pactl list short sinks | grep -q AndroidSink || pactl load-module module-null-sink sink_name=AndroidSink sink_properties=device.description="Android_Audio_Stream" >/dev/null
+pactl list short sources | grep -q AndroidMic || pactl load-module module-remap-source master=AndroidSink.monitor source_name=AndroidMic source_properties=device.description="Android_Virtual_Mic" >/dev/null
+pkill -f tiny_virtual_mic 2>/dev/null; pkill -f 'UNIX-CONNECT:$socketPath' 2>/dev/null
+if command -v tiny_virtual_mic >/dev/null 2>&1; then
+  tiny_virtual_mic $socketPath AndroidSink &
+elif command -v socat >/dev/null 2>&1 && command -v pacat >/dev/null 2>&1; then
+  (socat -u UNIX-CONNECT:$socketPath - | pacat --playback --device=AndroidSink --rate=44100 --channels=1 --format=s16le --latency-msec=60) &
+else
+  echo "Klien mikrofon tidak ada. Jalankan: sudo apt install -y socat pulseaudio-utils"
+fi
+""".trimIndent()
+
     fun launchCurrentContainer(ctx: Context) {
         val data = TinyEnv.dataPath
         val idx = TinyEnv.currentContainer
@@ -54,9 +100,14 @@ TMPDIR=${'$'}DATA_DIR/pulseaudio_tmp HOME=${'$'}DATA_DIR/pulseaudio_tmp XDG_CONF
         val extraOpt = StringBuilder()
         val preload = ArrayList<String>()
 
+        // Isi folder `extra` berasal dari patch.tar.gz; berkas yang tidak ada TIDAK boleh masuk
+        // LD_PRELOAD karena setiap proses guest lalu mencetak "cannot be preloaded" (lihat terminal).
+        val extraDir = File(data, "tiny/extra")
         if (Cfg.getifaddrsBridge) {
             Shell.spawn("$data/bin/getifaddrs_bridge_server $data/containers/$idx/tmp/.getifaddrs-bridge")
-            preload += "/home/tiny/.local/share/tiny/extra/getifaddrs_bridge_client_lib.so"
+            if (File(extraDir, "getifaddrs_bridge_client_lib.so").isFile) {
+                preload += "/home/tiny/.local/share/tiny/extra/getifaddrs_bridge_client_lib.so"
+            } else Log.w("Launcher", "getifaddrs_bridge_client_lib.so tidak ada di $extraDir, bridge dilewati")
         }
         // Controller (evdev + hidraw) dari DroidDeck: libfakeinput.so melayani /dev/input dan /dev/hidraw16.
         val pad = PadSetup.prepare(ctx)
@@ -85,13 +136,17 @@ $data/bin/virgl_test_server ${Cfg.defaultVirglCommand}""".trimIndent(),
             extraOpt.append(Cfg.defaultVirglOpt).append(' ')
         }
         if (Cfg.turnip) {
-            extraOpt.append(Cfg.defaultTurnipOpt).append(' ')
+            extraOpt.append(turnipOpt(ctx)).append(' ')
             if (!Cfg.dri3) extraOpt.append("MESA_VK_WSI_DEBUG=sw ")
         }
         if (Cfg.isJpEnabled) extraOpt.append("LANG=ja_JP.UTF-8 ")
         extraMount += "--mount=\$DATA_DIR/tiny/font:/usr/share/fonts/tiny "
         extraMount += "--mount=\$DATA_DIR/tiny/extra/cmatrix:/home/tiny/.local/bin/cmatrix "
-        extraMount += "--mount=\$DATA_DIR/tiny/extra/tiny_virtual_mic:/home/tiny/.local/bin/tiny_virtual_mic "
+        // proot tidak membuat titik mount untuk sumber yang tidak ada; tanpa berkas ini perintah
+        // `tiny_virtual_mic` "command not found" (ada cadangan socat/pacat di [micCommand]).
+        if (File(extraDir, "tiny_virtual_mic").isFile) {
+            extraMount += "--mount=\$DATA_DIR/tiny/extra/tiny_virtual_mic:/home/tiny/.local/bin/tiny_virtual_mic "
+        }
 
         val boot = Containers.boot(idx, TinyEnv.defaultBoot)
         val term = TermSessions.forCurrent(ctx)

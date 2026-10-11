@@ -25,6 +25,7 @@ import com.example.tiny_computer.AudioStream
 import com.example.tiny_computer.R
 import com.example.tiny_computer.core.Cfg
 import com.example.tiny_computer.core.Containers
+import com.example.tiny_computer.core.Launcher
 import com.example.tiny_computer.core.TermSessions
 import com.example.tiny_computer.core.TinyEnv
 
@@ -55,6 +56,8 @@ fun SettingsScreen() {
             SwitchRow(stringResource(R.string.tc_ui_hidpi_support), Cfg.isHidpiEnabled, stringResource(R.string.tc_ui_apply_on_next_launch)) { Cfg.isHidpiEnabled = it }
             TextRow(stringResource(R.string.tc_ui_hidpi_env_var), Cfg.defaultHidpiOpt) { Cfg.defaultHidpiOpt = it }
         }
+
+        DriverGroup()
 
         Group(stringResource(R.string.tc_group_terminal)) {
             TextRow(stringResource(R.string.tc_ui_terminal_max_lines), Cfg.termMaxLines.toString(), number = true) { it.toIntOrNull()?.let { v -> Cfg.termMaxLines = v.coerceIn(100, 50000) } }
@@ -106,16 +109,14 @@ fun SettingsScreen() {
                         mic = false
                     } else {
                         val path = "/tmp/android_audio"
+                        // server soket di sisi Android dulu (guest menyambung), lalu klien di guest
                         AudioStream.startStreaming("${TinyEnv.dataPath}/containers/${TinyEnv.currentContainer}$path")
-                        term.writeLine("""pactl load-module module-null-sink sink_name=AndroidSink sink_properties=device.description="Android_Audio_Stream"
-pactl load-module module-remap-source master=AndroidSink.monitor source_name=AndroidMic source_properties=device.description="Android_Virtual_Mic"
-pkill -f tiny_virtual_mic
-tiny_virtual_mic $path AndroidSink &""")
+                        term.writeLine(Launcher.micCommand(path))
                         micStreaming = true
                     }
                 } else {
-                    term.writeLine("pkill -f tiny_virtual_mic")
-                    AudioStream.stopStreaming()
+                    term.writeLine("pkill -f tiny_virtual_mic; pkill -f 'UNIX-CONNECT:/tmp/android_audio'")
+                    AudioStream.stopStreaming() // tidak memblokir thread UI
                     micStreaming = false
                 }
             }

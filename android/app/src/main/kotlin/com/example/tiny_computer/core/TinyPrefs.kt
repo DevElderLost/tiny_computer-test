@@ -146,6 +146,10 @@ object Cfg {
     var androidDriver: String
         get() = TinyPrefs.getString("androidDriver", "")
         set(v) = TinyPrefs.setString("androidDriver", v)
+    /** Id driver Vulkan Linux (glibc) hasil impor yang dipakai di dalam kontainer; kosong = bawaan/otomatis. */
+    var linuxDriver: String
+        get() = TinyPrefs.getString("linuxDriver", "")
+        set(v) = TinyPrefs.setString("linuxDriver", v)
     /** 0 None 1 Linear 2 Nearest 3 SGSR 4 FSR 5 FSR Fit 6 Sharpen 7 NIS 8 SGSR HQ */
     var upscaler: Int
         get() = TinyPrefs.getInt("upscaler", 1)

@@ -175,4 +175,16 @@
     <string name="tc_pckb_key_alt">Alt</string>
     <string name="tc_pckb_key_space">Space</string>
     <string name="tc_pckb_key_altgr">AltGr</string>
+    <!-- Impor driver (seperti DroidDeck) -->
+    <string name="tc_drv_title">GPU drivers</string>
+    <string name="tc_drv_hint">Import a Turnip zip/tzst: Linux (glibc) for programs inside the container, Android (adrenotools) for the display, or a DroidDeck bundle with both. Applies on next launch.</string>
+    <string name="tc_drv_import">Import driver (.zip / .tzst)</string>
+    <string name="tc_drv_importing">Importing…</string>
+    <string name="tc_drv_linux">Vulkan driver in container (Linux)</string>
+    <string name="tc_drv_android">Display driver (Android / Turnip)</string>
+    <string name="tc_drv_auto">Automatic</string>
+    <string name="tc_drv_remove">Remove selected driver</string>
+    <string name="tc_drv_imported">Driver imported: %1$s</string>
+    <string name="tc_drv_failed">Import failed: %1$s</string>
+    <string name="tc_home_linux_driver">Container Vulkan driver</string>
 </resources>
