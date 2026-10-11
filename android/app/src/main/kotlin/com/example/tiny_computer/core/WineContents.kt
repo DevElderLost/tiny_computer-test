@@ -36,7 +36,7 @@ import java.nio.file.Paths
  *
  * Template target di profile.json dipetakan ke guest:
  *   `${system32}` / `${syswow64}` -> drive_c/windows/system32 / syswow64 di prefix
- *   `${libdir}`                   -> `lib` milik Wine aktif (tempat `lib/wine/aarch64-unix/*.so`; di sini FEX
+ *   `${libdir}`                   -> `lib` milik Wine aktif (tempat berkas .so di `lib/wine/aarch64-unix/`; di sini FEX
  *                                    menaruh libwow64fex.so / libarm64ecfex.so, yang dicari Wine relatif ke loader-nya)
  */
 object WineContents {
