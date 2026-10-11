@@ -437,7 +437,9 @@ command -v Xwayland >/dev/null 2>&1 || { echo "Memasang xwayland..."; sudo apt u
 unset WAYLAND_DISPLAY
 rm -f /tmp/.X11-unix/X4 /tmp/.X4-lock
 for i in ${'$'}(seq 1 150); do [ -S /tmp/wayland-0 ] && break; sleep 0.2; done
-(XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0 Xwayland :4 -fullscreen -geometry ${w}x$h -noreset -ac +iglx > "${'$'}HOME/.vnc/xwayland.log" 2>&1 &)
+# MIT-SHM dimatikan seperti versi original: SysV shm tidak bisa di-attach lewat proot, sehingga Mesa/Qt/Wine
+# mencetak "Failed to attach to x11 shm" berulang bila X mengiklankan ekstensi ini.
+(XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0 Xwayland :4 -fullscreen -geometry ${w}x$h -noreset -ac +iglx -extension MIT-SHM > "${'$'}HOME/.vnc/xwayland.log" 2>&1 &)
 for i in ${'$'}(seq 1 150); do [ -S /tmp/.X11-unix/X4 ] && break; sleep 0.2; done
 bash /etc/X11/xinit/Xsession &> "${'$'}HOME/.vnc/x.log" &
 """.trimIndent()
