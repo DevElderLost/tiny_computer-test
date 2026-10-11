@@ -88,12 +88,14 @@ fun ShortcutScreen(onLaunch: (String) -> Unit) {
     val version = ShortcutPrefs.version
     val list = apps
     val settings = remember(list, version) { list.orEmpty().associate { it.id to ShortcutPrefs.get(it.id) } }
-    val hiddenCount = settings.values.count { it.hidden }
+    // disembunyikan = disembunyikan pengguna ATAU aplikasi sistem; keduanya bisa ditampilkan lewat "Show hidden"
+    fun isHidden(a: DesktopApps.App) = a.system || settings[a.id]?.hidden == true
+    val hiddenCount = list.orEmpty().count { isHidden(it) }
     val q = query.trim().lowercase()
     val visible = remember(list, settings, q, showHidden) {
         fun label(a: DesktopApps.App) = settings[a.id]?.name?.ifBlank { null } ?: a.name
         list.orEmpty().filter { a ->
-            (showHidden || settings[a.id]?.hidden != true) &&
+            (showHidden || !isHidden(a)) &&
                 (q.isEmpty() || label(a).lowercase().contains(q) || a.comment.lowercase().contains(q) ||
                     a.id.lowercase().contains(q) || a.exec.lowercase().contains(q))
         }.sortedBy { label(it).lowercase() }
@@ -102,7 +104,7 @@ fun ShortcutScreen(onLaunch: (String) -> Unit) {
     Column(Modifier.fillMaxSize()) {
         ScreenTitle(
             stringResource(R.string.tc_nav_shortcut),
-            if (ready && list != null) stringResource(R.string.tc_sc_count, list.size) else stringResource(R.string.tc_sc_hint),
+            if (ready && list != null) stringResource(R.string.tc_sc_count, list.count { !it.system }) else stringResource(R.string.tc_sc_hint),
         )
         when {
             !ready -> Group { HintText(stringResource(R.string.tc_sc_not_ready)) }
@@ -120,7 +122,7 @@ fun ShortcutScreen(onLaunch: (String) -> Unit) {
                     }
                 }
                 if (visible.isEmpty()) {
-                    HintText(stringResource(if (list.isEmpty()) R.string.tc_sc_empty else R.string.tc_sc_no_match))
+                    HintText(stringResource(if (list.none { !it.system }) R.string.tc_sc_empty else R.string.tc_sc_no_match))
                 } else {
                     LazyVerticalGrid(
                         columns = GridCells.Adaptive(minSize = 88.dp),
@@ -132,7 +134,7 @@ fun ShortcutScreen(onLaunch: (String) -> Unit) {
                         items(visible, key = { it.id }) { app ->
                             val s = settings[app.id]
                             AppTile(
-                                app = app, label = s?.name?.ifBlank { null } ?: app.name, dimmed = s?.hidden == true,
+                                app = app, label = s?.name?.ifBlank { null } ?: app.name, dimmed = isHidden(app),
                                 onClick = { onLaunch(app.id) }, onLongClick = { editing = app },
                             )
                         }

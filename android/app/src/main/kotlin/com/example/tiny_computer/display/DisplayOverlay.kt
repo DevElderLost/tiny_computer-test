@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -28,6 +29,8 @@ import com.droiddeck.launcher.input.PadBridge
 import com.example.tiny_computer.R
 import com.example.tiny_computer.controller.ControllerOverlay
 import com.example.tiny_computer.core.Cfg
+import com.example.tiny_computer.core.Launcher
+import com.example.tiny_computer.ui.AppProgressOverlay
 import com.example.tiny_computer.ui.LocalPalette
 import com.example.tiny_computer.ui.PcKeyboard
 import com.example.tiny_computer.ui.SwitchRow
@@ -37,6 +40,7 @@ import com.example.tiny_computer.ui.clickableNoRipple
 @Composable
 fun DisplayOverlay(
     state: DisplayUiState, pad: PadBridge, sendKey: (Int, Boolean) -> Unit, onClose: () -> Unit,
+    onShutdown: () -> Unit = {},
     onPadOverlayChange: (Boolean) -> Unit = { Cfg.padOverlay = it },
 ) {
     val pal = LocalPalette.current
@@ -51,9 +55,20 @@ fun DisplayOverlay(
             FloatingButton(active = state.pcKeyboard, onClick = { state.pcKeyboard = !state.pcKeyboard }) {
                 Icon(Icons.Filled.Keyboard, stringResource(R.string.tc_display_keyboard), tint = if (state.pcKeyboard) pal.signal else pal.onBackground)
             }
+            // Shutdown: hanya untuk layar aplikasi Shortcut, tepat di samping tombol keyboard PC
+            if (state.appMode) {
+                FloatingButton(active = false, onClick = onShutdown) {
+                    Icon(Icons.Filled.PowerSettingsNew, stringResource(R.string.tc_display_shutdown), tint = pal.onBackground)
+                }
+            }
         }
         if (state.pcKeyboard) {
             PcKeyboard(sendKey = sendKey, onClose = { state.pcKeyboard = false })
+        }
+        // paling atas: progres menunggu proot menyala / menunggu semua proses mati (menutup tombol dan menelan sentuhan)
+        val phase = Launcher.appPhase
+        if (state.appMode && (phase == Launcher.AppPhase.STARTING || phase == Launcher.AppPhase.STOPPING)) {
+            AppProgressOverlay(stopping = phase == Launcher.AppPhase.STOPPING, stage = Launcher.appStage)
         }
     }
     if (state.menuOpen) {

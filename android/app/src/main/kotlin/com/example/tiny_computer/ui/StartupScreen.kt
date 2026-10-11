@@ -123,6 +123,44 @@ private fun stageDetail(key: String, percent: Int): String {
     return if (percent >= 0) stringResource(R.string.tc_start_detail_percent, base, percent) else base
 }
 
+/**
+ * Layar progres yang sama (judul, keterangan tahap, segmen) untuk aplikasi dari menu Shortcut:
+ * [stopping] false = menunggu proot/Xwayland/aplikasi menyala (3 tahap), true = menunggu semua proses
+ * benar-benar mati setelah Shutdown (2 tahap). [stage] berasal dari `Launcher.appStage`.
+ */
+@Composable
+fun AppProgressOverlay(stopping: Boolean, stage: Int) {
+    val colors = MaterialTheme.colorScheme
+    val keys = if (stopping) {
+        listOf(R.string.tc_app_stop_apps, R.string.tc_app_stop_wait)
+    } else {
+        listOf(R.string.tc_app_stage_prepare, R.string.tc_app_stage_display, R.string.tc_app_stage_app)
+    }
+    val active = stage.coerceIn(0, keys.lastIndex)
+    Box(
+        Modifier.fillMaxSize().background(colors.background)
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}
+            .systemBarsPadding(),
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.align(Alignment.Center).padding(horizontal = 32.dp, vertical = 24.dp),
+        ) {
+            Text(
+                stringResource(if (stopping) R.string.tc_app_stop_title else R.string.tc_app_start_title),
+                fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = colors.onBackground,
+                textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                stringResource(keys[active]), fontSize = 14.sp, lineHeight = 20.sp, color = colors.onSurfaceVariant,
+                textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 6.dp).widthIn(max = 520.dp),
+            )
+            LoadSegments(keys.size, active, -1, Modifier.padding(top = 18.dp))
+        }
+    }
+}
+
 /** Satu segmen per tahap: yang selesai terisi, yang berjalan terisi sesuai persen (atau bergerak bila -1). */
 @Composable
 private fun LoadSegments(count: Int, active: Int, percent: Int, modifier: Modifier = Modifier) {

@@ -117,6 +117,14 @@
     <string name="tc_ui_mic_monitoring_hint">Requires Start Microphone to be active</string>
     <string name="tc_display_menu">Display menu</string>
     <string name="tc_display_keyboard">Keyboard</string>
+    <string name="tc_display_shutdown">Shutdown</string>
+    <string name="tc_app_start_title">Starting app</string>
+    <string name="tc_app_stage_prepare">Preparing the session…</string>
+    <string name="tc_app_stage_display">Starting the display…</string>
+    <string name="tc_app_stage_app">Starting the app…</string>
+    <string name="tc_app_stop_title">Shutting down</string>
+    <string name="tc_app_stop_apps">Stopping apps…</string>
+    <string name="tc_app_stop_wait">Waiting for processes to exit…</string>
     <string name="tc_display_touchpad">Touchpad mode (relative pointer)</string>
     <string name="tc_display_back">Back to terminal</string>
     <string name="tc_close">Close</string>

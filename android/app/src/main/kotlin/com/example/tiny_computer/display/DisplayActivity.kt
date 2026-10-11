@@ -45,6 +45,8 @@ class DisplayUiState {
     var padIdentity by mutableStateOf(Cfg.padIdentity)
     /** Keyboard PC di layar (dari DroidDeck): tombol evdev asli, bukan keyboard Android. */
     var pcKeyboard by mutableStateOf(false)
+    /** True bila layar ini menjalankan aplikasi Shortcut (bukan desktop): tombol Shutdown dan layar progres aktif. */
+    var appMode by mutableStateOf(false)
 }
 
 /**
@@ -119,6 +121,11 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
                         pad = p,
                         sendKey = { code, down -> WaylandCompositor.nativeSendKey(code, if (down) 1 else 0) },
                         onClose = { finish() },
+                        onShutdown = {
+                            // matikan semua aplikasi + Xwayland sesi Shortcut sekarang juga; layar progres tampil
+                            // sampai semua proses benar-benar mati, baru kembali ke menu Shortcut
+                            Launcher.shutdownAppSession { finish() }
+                        },
                         onPadOverlayChange = { on ->
                             // aplikasi Shortcut punya pengaturan controller sendiri; desktop memakai yang global
                             val app = currentApp
@@ -140,6 +147,7 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
         val app = i?.getStringExtra(EXTRA_APP)
         currentApp = app
         pendingApp = app
+        ui.appMode = app != null
         ui.padOverlay = ShortcutPrefs.padOverlay(app) ?: Cfg.padOverlay
     }
 

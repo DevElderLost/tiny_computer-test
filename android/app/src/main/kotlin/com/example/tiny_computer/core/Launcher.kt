@@ -6,6 +6,10 @@ import android.os.Looper
 import android.os.SystemClock
 import android.util.DisplayMetrics
 import android.util.Log
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import com.example.tiny_computer.display.PadSetup
 import java.io.File
 import kotlin.math.max
@@ -50,16 +54,38 @@ object Launcher {
     @Volatile var onAppSessionEnded: ((String?) -> Unit)? = null
 
     /**
+     * Generasi sesi aplikasi. Naik setiap Shutdown; peluncuran yang sudah diminta sebelum Shutdown
+     * (tiketnya lama) dibatalkan, dan pemantau progres lama berhenti.
+     */
+    @Volatile private var epoch = 0
+
+    /** Tahap sesi aplikasi Shortcut yang ditampilkan layar progres di layar aplikasi. */
+    enum class AppPhase { IDLE, STARTING, RUNNING, STOPPING }
+
+    /** STARTING: menunggu proot/Xwayland/aplikasi menyala. STOPPING: menunggu semua proses benar-benar mati. */
+    var appPhase by mutableStateOf(AppPhase.IDLE)
+        private set
+
+    /** Indeks segmen progres (0-based) untuk [appPhase]; tidak pernah mundur selama satu fase. */
+    var appStage by mutableIntStateOf(0)
+        private set
+
+    private fun advanceStage(to: Int) {
+        if (to > appStage) appStage = to
+    }
+
+    /**
      * Cek "sesi aplikasi sudah kosong?" setelah jeda. Jeda perlu karena peluncur/aplikasi single-instance
      * (mis. Firefox menyerahkan ke jendela lama) bisa keluar sebentar lalu aplikasinya muncul lagi.
      */
     private val idleCheck = Runnable {
-        if (guiStarted) return@Runnable
+        if (guiStarted || appPhase == AppPhase.STOPPING) return@Runnable
         val session = appSession ?: return@Runnable
         if (session.isAlive && appsBusy()) return@Runnable
         val failed = lastFailedApp
-        stopAppSession()
-        onAppSessionEnded?.invoke(failed)
+        // matikan dan tunggu sampai benar-benar mati sebelum layar ditutup; bila sementara itu pengguna
+        // sudah membuka aplikasi lain (STARTING), layar tidak boleh ikut ditutup
+        stopAndWait { if (appPhase != AppPhase.STARTING) onAppSessionEnded?.invoke(failed) }
     }
 
     private fun scheduleIdleCheck(delayMs: Long) {
@@ -496,16 +522,64 @@ bash /etc/X11/xinit/Xsession &> "${'$'}HOME/.vnc/x.log" &
      */
     fun launchApp(ctx: Context, appId: String) {
         val app = ctx.applicationContext
+        val ticket = epoch
+        // layar progres langsung tampil, bahkan sebelum thread latar sempat berjalan
+        appStage = 0
+        appPhase = AppPhase.STARTING
         Thread({
             synchronized(spawnLock) {
-                runCatching { launchAppLocked(app, appId) }
-                    .onFailure { Log.e("Launcher", "gagal menjalankan shortcut $appId", it) }
+                if (ticket == epoch) {
+                    runCatching { launchAppLocked(app, appId) }
+                        .onFailure {
+                            Log.e("Launcher", "gagal menjalankan shortcut $appId", it)
+                            mainHandler.post {
+                                if (appPhase == AppPhase.STARTING) appPhase = AppPhase.IDLE
+                                onAppSessionEnded?.invoke(appId)
+                            }
+                        }
+                }
             }
         }, "tiny-shortcut").start()
     }
 
+    /**
+     * Tombol Shutdown: matikan sesi aplikasi Shortcut SEKARANG (semua aplikasi + Xwayland), tanpa
+     * menunggu aplikasinya keluar sendiri. Tidak memblokir pemanggil; [appPhase] menjadi STOPPING
+     * sampai semua proses benar-benar hilang, lalu [onDone] dipanggil di thread utama. Peluncuran
+     * berikutnya menunggu lewat kunci [spawnLock]. Desktop (kontainer PTY) tidak disentuh.
+     */
+    fun shutdownAppSession(onDone: () -> Unit = {}) {
+        epoch++
+        stopAndWait(onDone)
+    }
+
+    /** Mematikan sesi aplikasi di thread latar dan menunggu prosesnya hilang; [onDone] jalan di thread utama. */
+    private fun stopAndWait(onDone: () -> Unit) {
+        appStage = 0
+        appPhase = AppPhase.STOPPING
+        Thread({
+            synchronized(spawnLock) {
+                val killed = stopAppSession()
+                if (appPhase == AppPhase.STOPPING) advanceStage(1)
+                waitGone(killed, 3000)
+            }
+            mainHandler.post {
+                // aplikasi baru yang sempat diminta selama menunggu (STARTING) tidak boleh ditimpa
+                if (appPhase == AppPhase.STOPPING) appPhase = AppPhase.IDLE
+                onDone()
+            }
+        }, "tiny-stop").start()
+    }
+
     private fun launchAppLocked(ctx: Context, appId: String) {
-        val script = ShortcutRunner.prepare(ctx, appId) ?: return
+        val myEpoch = epoch
+        val script = ShortcutRunner.prepare(ctx, appId) ?: run {
+            mainHandler.post {
+                if (appPhase == AppPhase.STARTING) appPhase = AppPhase.IDLE
+                onAppSessionEnded?.invoke(null)
+            }
+            return
+        }
         ensureAudio()
         // ada aplikasi baru: batalkan penutupan sesi yang mungkin sudah dijadwalkan
         mainHandler.removeCallbacks(idleCheck)
@@ -515,11 +589,13 @@ bash /etc/X11/xinit/Xsession &> "${'$'}HOME/.vnc/x.log" &
         val gone = ArrayList<Int>()
         val tracked = appSessionStarted || synchronized(appProcs) { appProcs.any { it.isAlive } }
         if (!tracked) gone += sweepStale()
+        advanceStage(0)
         if (!guiStarted && !appSessionStarted) {
             // seluruh pohon proses sesi lama (Xwayland, aplikasi, anak-anaknya) dimatikan dan DITUNGGU
             // sampai hilang sebelum Xwayland baru dibuat
             gone += stopAppSession()
             waitGone(gone, 2000)
+            advanceStage(1)
             val session = spawnDetached(appProotScript(ctx, ShortcutRunner.prepareSession(ctx), killOnExit = true), "TinyAppSession")
             appSession = session
             // Xwayland mati sendiri (crash): aplikasinya ikut putus, tutup sesi dan kembali ke Shortcut
@@ -550,6 +626,19 @@ bash /etc/X11/xinit/Xsession &> "${'$'}HOME/.vnc/x.log" &
             appProcs.add(proc)
         }
         mainHandler.removeCallbacks(idleCheck)
+        // progres: tahap 2 = menunggu X (soket :4), tahap 3 = menunggu proses aplikasi di proot benar-benar jalan;
+        // selesai (RUNNING) setelah keduanya, proot aplikasi mati (gagal start, ditangani auto-close), atau 40 detik
+        watch("tiny-ready-poll") {
+            val sock = File(TinyEnv.runtimeDir(), ".X11-unix/X4")
+            val end = SystemClock.elapsedRealtime() + 40_000
+            while (SystemClock.elapsedRealtime() < end && appPhase == AppPhase.STARTING && myEpoch == epoch && proc.isAlive) {
+                if (!sock.exists()) advanceStage(1)
+                else if (!appsBusy()) advanceStage(2)
+                else break
+                Thread.sleep(200)
+            }
+            if (appPhase == AppPhase.STARTING && myEpoch == epoch) appPhase = AppPhase.RUNNING
+        }
         val startedAt = SystemClock.elapsedRealtime()
         watch("tiny-app-wait-$appId") {
             val code = runCatching { proc.waitFor() }.getOrDefault(-1)

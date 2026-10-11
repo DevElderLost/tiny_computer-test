@@ -140,7 +140,7 @@ exec sh -c "${'$'}TINY_CMD"
     }
 
     /**
-     * Menulis skrip sesi yang menyalakan Xwayland (+ window manager ringan bila ada) tanpa sesi desktop
+     * Menulis skrip sesi yang menyalakan Xwayland (+ window manager ringan bila ada, diawasi dan dicoba bergantian) tanpa sesi desktop
      * dan mengembalikan path-nya di dalam guest. Ukuran layar sama dengan desktop
      * ([Launcher.displaySize]). Skrip menunggu soket Wayland, lalu MENJADI Xwayland (`exec`): proot-nya
      * hidup selama X hidup dan, karena `--kill-on-exit`, window manager ikut berhenti bersamanya.
@@ -155,14 +155,42 @@ mkdir -p "${'$'}HOME/.vnc"
 command -v Xwayland >/dev/null 2>&1 || { echo "Xwayland belum terpasang"; exit 1; }
 rm -f /tmp/.X11-unix/X4 /tmp/.X4-lock
 i=0; while [ ${'$'}i -lt 150 ] && [ ! -S /tmp/wayland-0 ]; do sleep 0.2; i=${'$'}((i+1)); done
+# window manager (title bar + tombol tutup/maksimalkan/kecilkan) untuk aplikasi Shortcut.
+# - berjalan di bus D-Bus sendiri: xfwm4 butuh xfconf lewat D-Bus, tanpa itu langsung mati dan jendela
+#   tampil tanpa bingkai;
+# - tiap kandidat diperiksa masih hidup setelah 2 detik, kalau tidak lanjut ke kandidat berikutnya;
+# - bila WM yang sudah berjalan berhenti (crash), dinyalakan lagi (maks 20 kali).
 (
   i=0; while [ ${'$'}i -lt 150 ] && [ ! -S /tmp/.X11-unix/X4 ]; do sleep 0.2; i=${'$'}((i+1)); done
-  for wm in xfwm4 openbox metacity marco icewm fluxbox; do
-    if command -v ${'$'}wm >/dev/null 2>&1; then
-      if [ "${'$'}wm" = xfwm4 ]; then args=--compositor=off; else args=; fi
-      DISPLAY=:4 ${'$'}wm ${'$'}args > "${'$'}HOME/.vnc/wm.log" 2>&1 &
-      break
-    fi
+  export DISPLAY=:4
+  WMLOG="${'$'}HOME/.vnc/wm.log"
+  : > "${'$'}WMLOG"
+  tries=0
+  while [ ${'$'}tries -lt 20 ]; do
+    tries=${'$'}((tries+1))
+    started=0
+    for wm in xfwm4 openbox metacity marco icewm fluxbox; do
+      command -v ${'$'}wm >/dev/null 2>&1 || continue
+      args=
+      [ "${'$'}wm" = xfwm4 ] && args=--compositor=off
+      echo "[wm] mulai ${'$'}wm" >> "${'$'}WMLOG"
+      if command -v dbus-launch >/dev/null 2>&1; then
+        dbus-launch --exit-with-session ${'$'}wm ${'$'}args >> "${'$'}WMLOG" 2>&1 &
+      else
+        ${'$'}wm ${'$'}args >> "${'$'}WMLOG" 2>&1 &
+      fi
+      pid=${'$'}!
+      sleep 2
+      if kill -0 ${'$'}pid 2>/dev/null; then
+        started=1
+        wait ${'$'}pid
+        echo "[wm] ${'$'}wm berhenti" >> "${'$'}WMLOG"
+        break
+      fi
+      echo "[wm] ${'$'}wm langsung berhenti, coba berikutnya" >> "${'$'}WMLOG"
+    done
+    [ ${'$'}started = 1 ] || break
+    sleep 1
   done
 ) &
 XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0 exec Xwayland :4 -fullscreen -geometry ${w}x$h -noreset -ac +iglx > "${'$'}HOME/.vnc/xwayland.log" 2>&1

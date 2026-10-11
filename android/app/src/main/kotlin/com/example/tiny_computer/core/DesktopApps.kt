@@ -33,6 +33,11 @@ object DesktopApps {
         val terminal: Boolean,
         /** `Path=`: direktori kerja bawaan, boleh kosong. */
         val path: String,
+        /**
+         * Aplikasi sistem (bawaan desktop: pengaturan, panel, manajer berkas, pemasang paket, dst).
+         * Tidak tampil di menu Shortcut kecuali pengguna menekan "Show hidden". Lihat [isSystemApp].
+         */
+        val system: Boolean = false,
     )
 
     // urutan prioritas: entri pengguna menimpa entri sistem dengan id yang sama
@@ -45,6 +50,35 @@ object DesktopApps {
     private val ICON_ROOTS = listOf("home/tiny/.local/share/icons", "usr/local/share/icons", "usr/share/icons")
     private val BIN_DIRS = listOf("usr/local/bin", "usr/bin", "bin", "usr/local/games", "usr/games", "usr/sbin", "sbin", "home/tiny/.local/bin")
     private const val WANTED_ICON_PX = 96
+
+    /** Folder (path tamu) tempat aplikasi yang dipasang pengguna berada: tidak pernah dianggap aplikasi sistem. */
+    private val USER_APP_PREFIXES = listOf("/home/", "/usr/local/", "/var/lib/flatpak/")
+
+    /** Nilai `Categories=` yang menandai aplikasi bawaan desktop / pengaturan sistem (tanpa beda huruf besar-kecil). */
+    private val SYSTEM_CATEGORIES = setOf(
+        "settings", "desktopsettings", "hardwaresettings", "packagemanager", "system", "core",
+        "x-xfce", "x-xfce-toplevel", "x-xfce-settingsdialog", "x-xfce-personalsettings",
+        "x-xfce-hardwaresettings", "x-xfce-systemsettings", "x-xfce-mailreader", "x-xfce-webbrowser",
+        "x-xfce-filemanager", "x-xfce-terminalemulator", "x-gnome-settings-panel",
+    )
+
+    /** Awalan id berkas .desktop komponen sistem yang kategorinya tidak konsisten. */
+    private val SYSTEM_ID_PREFIXES = listOf(
+        "xfce", "org.xfce.", "thunar", "exo-", "xfwm4", "xfdesktop", "panel-", "org.freedesktop.", "xdg-",
+        "nm-", "pavucontrol", "gdebi", "fcitx", "im-config", "ibus",
+    )
+
+    /**
+     * Aplikasi sistem = bawaan desktop, bukan aplikasi yang dipasang pengguna. Entri di `~/.local`,
+     * `/usr/local` dan flatpak selalu dianggap aplikasi pengguna; selebihnya dinilai dari `Categories=`
+     * dan awalan id.
+     */
+    private fun isSystemApp(guestPath: String, id: String, categories: String): Boolean {
+        if (USER_APP_PREFIXES.any { guestPath.startsWith(it) }) return false
+        val lid = id.lowercase()
+        if (SYSTEM_ID_PREFIXES.any { lid.startsWith(it) }) return true
+        return categories.split(';').any { it.trim().lowercase() in SYSTEM_CATEGORIES }
+    }
 
     /** Desktop sudah terpasang dan pernah dibuka sekali: syarat ikon tampil di menu Shortcut. */
     fun ready(): Boolean =
@@ -136,6 +170,7 @@ object DesktopApps {
             id = id, name = name, comment = localized(values, "Comment"), exec = exec,
             icon = values["Icon"].orEmpty(), terminal = values["Terminal"].equals("true", true),
             path = values["Path"].orEmpty(),
+            system = isSystemApp(file.path.removePrefix(root.path).let { if (it.startsWith("/")) it else "/$it" }, id, values["Categories"].orEmpty()),
         )
     }
 

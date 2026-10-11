@@ -117,6 +117,14 @@
     <string name="tc_ui_mic_monitoring_hint">需要先開啟麥克風</string>
     <string name="tc_display_menu">显示菜单</string>
     <string name="tc_display_keyboard">键盘</string>
+    <string name="tc_display_shutdown">關機</string>
+    <string name="tc_app_start_title">正在啟動應用</string>
+    <string name="tc_app_stage_prepare">正在準備工作階段…</string>
+    <string name="tc_app_stage_display">正在啟動顯示…</string>
+    <string name="tc_app_stage_app">正在啟動應用…</string>
+    <string name="tc_app_stop_title">正在關閉</string>
+    <string name="tc_app_stop_apps">正在停止應用…</string>
+    <string name="tc_app_stop_wait">正在等待程序結束…</string>
     <string name="tc_display_touchpad">触控板模式（相对指针）</string>
     <string name="tc_display_back">返回终端</string>
     <string name="tc_close">关闭</string>
