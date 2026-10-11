@@ -111,6 +111,22 @@ fi
         var cmd = cleanExec(app.exec)
         if (s.args.isNotBlank()) cmd += " " + s.args.trim()
         if (app.terminal) cmd = "x-terminal-emulator -e sh -c ${q("exec $cmd")}"
+        // Wine: matikan XRandR di driver X11. Xwayland menawarkan daftar mode "emulasi" sampai 5K/8K, sehingga
+        // Wine melaporkan mode saat ini jauh melebihi layar (mis. 5120x2880 pada layar 960x544) dan game
+        // membuka jendela sebesar itu. Dengan UseXRandR=N Wine hanya melihat satu mode = ukuran layar X
+        // sesi ini (-geometry dari prepareSession). Idempoten: hanya menulis bila belum ada di prefix.
+        if (Regex("^(\\S*/)?wine(64)?(\\s|$)").containsMatchIn(cmd)) {
+            sb.append(
+                """
+WPFX="${'$'}{WINEPREFIX:-${'$'}HOME/.wine}"
+if ! grep -qs '"UseXRandR"="N"' "${'$'}WPFX/user.reg" 2>/dev/null; then
+  echo "[tiny] Wine: UseXRandR=N (ukuran layar mengikuti sesi X)"
+  wine reg add 'HKCU\Software\Wine\X11 Driver' /v UseXRandR /t REG_SZ /d N /f
+  wineserver -w 2>/dev/null
+fi
+""".trimStart(),
+            )
+        }
         sb.append("TINY_CMD=${q(cmd)}\n")
         sb.append(
             """
@@ -192,6 +208,17 @@ i=0; while [ ${'$'}i -lt 150 ] && [ ! -S /tmp/wayland-0 ]; do sleep 0.2; i=${'$'
     [ ${'$'}started = 1 ] || break
     sleep 1
   done
+) &
+# Paksa mode layar = ${w}x$h bila xrandr ada (Xwayland rootful bisa menyala dengan mode lain); hasilnya dicatat.
+(
+  i=0; while [ ${'$'}i -lt 150 ] && [ ! -S /tmp/.X11-unix/X4 ]; do sleep 0.2; i=${'$'}((i+1)); done
+  if command -v xrandr >/dev/null 2>&1; then
+    export DISPLAY=:4
+    sleep 1
+    out=${'$'}(xrandr 2>/dev/null | awk '/ connected/{print ${'$'}1; exit}')
+    [ -n "${'$'}out" ] && xrandr --output "${'$'}out" --mode ${w}x$h >> "${'$'}HOME/.vnc/xrandr.log" 2>&1
+    xrandr --current >> "${'$'}HOME/.vnc/xrandr.log" 2>&1
+  fi
 ) &
 XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0 exec Xwayland :4 -fullscreen -geometry ${w}x$h -noreset -ac +iglx -extension MIT-SHM > "${'$'}HOME/.vnc/xwayland.log" 2>&1
 """.trimStart(),
