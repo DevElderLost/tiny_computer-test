@@ -90,6 +90,8 @@ object ExtraSetup {
         val deadline = SystemClock.elapsedRealtime() + TIMEOUT_MS
         // tunggu sampai berkas berisi (echo membuat berkas kosong sesaat sebelum menulis)
         while (!(status.isFile && status.length() > 0)) {
+            // shell kontainer mati di tengah jalan: tidak akan ada berkas status, jangan menunggu 20 menit
+            if (TermSessions.peek()?.exitCode != null) return failure(ctx)
             if (SystemClock.elapsedRealtime() > deadline) {
                 Log.w(TAG, "waktu habis menunggu apt")
                 return failure(ctx)

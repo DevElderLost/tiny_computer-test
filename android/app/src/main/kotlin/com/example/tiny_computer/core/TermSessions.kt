@@ -55,6 +55,10 @@ class TermSession(private val context: Context) : TerminalSessionClient {
     override fun onSessionFinished(finishedSession: TerminalSession) {
         val code = finishedSession.exitStatus
         exitCode = code
+        // shell kontainer sudah mati: tanpa reset, Launcher/Startup mengira kontainer masih jalan dan
+        // perintah berikutnya ditulis ke terminal mati (aplikasi/desktop tidak pernah muncul)
+        Launcher.markStopped()
+        Startup.reset()
         updateScreen()
         // sinyal -9 (batas proses anak Android 12+): tampilkan halaman petunjuk, seperti launchSignal9Page
         if (code == -9) {
@@ -140,7 +144,8 @@ object TermSessions {
 
     fun forCurrent(context: Context): TermSession {
         val idx = TinyEnv.currentContainer
-        synchronized(map) { map[idx] }?.let { return it }
+        // sesi yang shell-nya sudah keluar tidak dipakai ulang: dibuat baru agar kontainer bisa dinyalakan lagi
+        synchronized(map) { map[idx] }?.takeIf { it.exitCode == null }?.let { return it }
         val app = context.applicationContext
         val create = { TermSession(app).also { it.session.updateSize(80, 24) } }
         val made = if (Looper.myLooper() == Looper.getMainLooper()) create() else {
@@ -150,7 +155,10 @@ object TermSessions {
             latch.await()
             box[0]!!
         }
-        return synchronized(map) { map.getOrPut(idx) { made } }
+        return synchronized(map) {
+            val cur = map[idx]
+            if (cur != null && cur.exitCode == null) cur else { map[idx] = made; made }
+        }
     }
 
     fun peek(): TermSession? = synchronized(map) { map[TinyEnv.currentContainer] }

@@ -8,9 +8,10 @@ import java.io.File
  * Menjalankan aplikasi dari menu Shortcut TANPA membuka desktop, seperti DroidDeck menjalankan satu
  * program penuh layar (di DroidDeck lewat gamescope; di sini lewat Xwayland + window manager ringan
  * di atas compositor yang sama). Skrip peluncur ditulis ke `$DATA_DIR/tiny/shortcuts`, yang di dalam
- * kontainer terlihat sebagai `~/.local/share/tiny/shortcuts`, lalu cukup satu baris `sh <skrip>`
- * yang dikirim ke terminal kontainer. Dengan begitu tidak ada masalah kutip/escape di PTY, dan
- * pengaturan per aplikasi ([ShortcutPrefs]) hanya hidup di skrip itu, tidak bocor ke desktop.
+ * kontainer terlihat sebagai `~/.local/share/tiny/shortcuts`. Skrip itu dijalankan oleh proot BARU
+ * ([Launcher.launchApp]), bukan diketik ke terminal kontainer, sehingga tidak bergantung pada shell
+ * kontainer yang hidup. Pengaturan per aplikasi ([ShortcutPrefs]) hanya hidup di skrip itu, tidak
+ * bocor ke desktop.
  */
 object ShortcutRunner {
     private const val TAG = "TinyShortcut"
@@ -52,11 +53,16 @@ object ShortcutRunner {
     private val ENV_KEY = Regex("[A-Za-z_][A-Za-z0-9_]*")
 
     /** Isi skrip peluncur untuk satu aplikasi dengan pengaturannya. */
-    private fun script(ctx: Context, app: DesktopApps.App, s: ShortcutPrefs.Settings): String {
+    private fun script(ctx: Context, app: DesktopApps.App, s: ShortcutPrefs.Settings, id: String): String {
         val sb = StringBuilder()
         sb.append("#!/bin/sh\n")
         sb.append("# Ditulis ulang oleh menu Shortcut Tiny Computer setiap kali aplikasi dijalankan.\n")
+        // proot terpisah tidak punya terminal: keluaran aplikasi masuk ke berkas log
+        sb.append("mkdir -p \"\$HOME/.vnc\"\n")
+        sb.append("exec > \"\$HOME/.vnc/shortcut-$id.log\" 2>&1\n")
         sb.append("export DISPLAY=:4\n")
+        // sesi X (Xwayland milik desktop atau milik sesi aplikasi) bisa baru menyala: tunggu soketnya
+        sb.append("i=0; while [ \$i -lt 150 ] && [ ! -S /tmp/.X11-unix/X4 ]; do sleep 0.2; i=\$((i+1)); done\n")
 
         // grafis khusus aplikasi ini
         when (s.gpu) {
@@ -118,8 +124,8 @@ exec sh -c "${'$'}TINY_CMD"
     }
 
     /**
-     * Menulis skrip peluncur untuk [appId] dan mengembalikan baris perintah untuk terminal kontainer,
-     * atau null bila aplikasinya sudah tidak ada. Berjalan di latar belakang kontainer dengan log di
+     * Menulis skrip peluncur untuk [appId] dan mengembalikan path-nya DI DALAM guest (untuk
+     * `/bin/sh <path>` di proot baru), atau null bila aplikasinya sudah tidak ada. Log ada di
      * `~/.vnc/shortcut-<id>.log`.
      */
     fun prepare(ctx: Context, appId: String): String? {
@@ -129,16 +135,17 @@ exec sh -c "${'$'}TINY_CMD"
             return null
         }
         val id = safe(appId)
-        write("run-$id.sh", script(ctx, app, ShortcutPrefs.get(appId)))
-        return "mkdir -p \"\$HOME/.vnc\"; (setsid sh $GUEST_DIR/run-$id.sh > \"\$HOME/.vnc/shortcut-$id.log\" 2>&1 &)"
+        write("run-$id.sh", script(ctx, app, ShortcutPrefs.get(appId), id))
+        return "$GUEST_DIR/run-$id.sh"
     }
 
     /**
-     * Perintah yang menyalakan Xwayland (+ window manager ringan bila ada) tanpa sesi desktop.
-     * Ukuran layar sama dengan desktop ([Launcher.displaySize]). Skrip menunggu soket Wayland dan X
-     * sehingga perintah berikutnya (peluncur aplikasi) baru jalan setelah X siap.
+     * Menulis skrip sesi yang menyalakan Xwayland (+ window manager ringan bila ada) tanpa sesi desktop
+     * dan mengembalikan path-nya di dalam guest. Ukuran layar sama dengan desktop
+     * ([Launcher.displaySize]). Skrip menunggu soket Wayland, lalu MENJADI Xwayland (`exec`): proot-nya
+     * hidup selama X hidup dan, karena `--kill-on-exit`, window manager ikut berhenti bersamanya.
      */
-    fun sessionCommand(ctx: Context): String {
+    fun prepareSession(ctx: Context): String {
         val (w, h) = Launcher.displaySize(ctx)
         write(
             SESSION_SCRIPT,
@@ -148,17 +155,19 @@ mkdir -p "${'$'}HOME/.vnc"
 command -v Xwayland >/dev/null 2>&1 || { echo "Xwayland belum terpasang"; exit 1; }
 rm -f /tmp/.X11-unix/X4 /tmp/.X4-lock
 i=0; while [ ${'$'}i -lt 150 ] && [ ! -S /tmp/wayland-0 ]; do sleep 0.2; i=${'$'}((i+1)); done
-(XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0 Xwayland :4 -fullscreen -geometry ${w}x$h -noreset -ac +iglx > "${'$'}HOME/.vnc/xwayland.log" 2>&1 &)
-i=0; while [ ${'$'}i -lt 150 ] && [ ! -S /tmp/.X11-unix/X4 ]; do sleep 0.2; i=${'$'}((i+1)); done
-for wm in xfwm4 openbox metacity marco icewm fluxbox; do
-  if command -v ${'$'}wm >/dev/null 2>&1; then
-    if [ "${'$'}wm" = xfwm4 ]; then args=--compositor=off; else args=; fi
-    (DISPLAY=:4 ${'$'}wm ${'$'}args > "${'$'}HOME/.vnc/wm.log" 2>&1 &)
-    break
-  fi
-done
+(
+  i=0; while [ ${'$'}i -lt 150 ] && [ ! -S /tmp/.X11-unix/X4 ]; do sleep 0.2; i=${'$'}((i+1)); done
+  for wm in xfwm4 openbox metacity marco icewm fluxbox; do
+    if command -v ${'$'}wm >/dev/null 2>&1; then
+      if [ "${'$'}wm" = xfwm4 ]; then args=--compositor=off; else args=; fi
+      DISPLAY=:4 ${'$'}wm ${'$'}args > "${'$'}HOME/.vnc/wm.log" 2>&1 &
+      break
+    fi
+  done
+) &
+XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0 exec Xwayland :4 -fullscreen -geometry ${w}x$h -noreset -ac +iglx > "${'$'}HOME/.vnc/xwayland.log" 2>&1
 """.trimStart(),
         )
-        return "sh $GUEST_DIR/$SESSION_SCRIPT"
+        return "$GUEST_DIR/$SESSION_SCRIPT"
     }
 }

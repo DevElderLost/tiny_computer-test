@@ -78,8 +78,6 @@ fun SettingsScreen() {
 
         Group(stringResource(R.string.tc_group_startup)) {
             HintText(stringResource(R.string.tc_ui_restart_required_hint))
-            SwitchRow(stringResource(R.string.tc_ui_start_with_g_u_i), Cfg.autoLaunchGui) { Cfg.autoLaunchGui = it }
-            Div()
             SwitchRow(stringResource(R.string.tc_ui_reinstall_boot_package), Cfg.reinstallBootstrap) { Cfg.reinstallBootstrap = it }
             Div()
             SwitchRow(stringResource(R.string.tc_ui_getifaddrs_bridge), Cfg.getifaddrsBridge, stringResource(R.string.tc_ui_fix_getifaddrs_permission)) { Cfg.getifaddrsBridge = it }

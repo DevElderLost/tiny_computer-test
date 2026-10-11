@@ -1,6 +1,9 @@
 package com.example.tiny_computer.core
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.util.DisplayMetrics
 import android.util.Log
 import com.example.tiny_computer.display.PadSetup
@@ -18,10 +21,60 @@ object Launcher {
     @Volatile var guiStarted = false
 
     /**
-     * True setelah Xwayland dinyalakan khusus untuk aplikasi dari menu Shortcut (tanpa sesi desktop).
-     * Saling meniadakan dengan [guiStarted]: membuka desktop menggantikan sesi aplikasi ini.
+     * Proses proot terpisah yang menjalankan Xwayland (+ window manager ringan) khusus untuk aplikasi
+     * dari menu Shortcut, tanpa sesi desktop. Bukan bagian dari shell kontainer (PTY): hidup sendiri,
+     * seperti proses guest DroidDeck. Membuka desktop menggantikan sesi ini ([stopAppSession]).
      */
-    @Volatile var appSessionStarted = false
+    @Volatile private var appSession: Process? = null
+
+    /** Proot terpisah milik tiap aplikasi Shortcut yang sedang berjalan. */
+    private val appProcs = ArrayList<Process>()
+
+    /** True selama proot sesi aplikasi (Xwayland) masih hidup. */
+    val appSessionStarted: Boolean get() = appSession?.isAlive == true
+
+    /** Layanan sisi Android (getifaddrs bridge, virgl) yang dinyalakan sekali per proses aplikasi. */
+    private val services = HashMap<String, Process>()
+    private val spawnLock = Any()
+
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    /** Aplikasi Shortcut terakhir yang langsung berhenti dengan kode galat (untuk pesan ke pengguna). */
+    @Volatile private var lastFailedApp: String? = null
+
+    /**
+     * Dipanggil di thread utama ketika semua aplikasi Shortcut sudah selesai (atau Xwayland sesi mati)
+     * dan sesi aplikasi ditutup; argumennya id aplikasi yang gagal start, atau null. Didaftarkan oleh
+     * layar aplikasi ([com.example.tiny_computer.display.DisplayActivity]) untuk kembali ke menu Shortcut.
+     */
+    @Volatile var onAppSessionEnded: ((String?) -> Unit)? = null
+
+    /**
+     * Cek "sesi aplikasi sudah kosong?" setelah jeda. Jeda perlu karena peluncur/aplikasi single-instance
+     * (mis. Firefox menyerahkan ke jendela lama) bisa keluar sebentar lalu aplikasinya muncul lagi.
+     */
+    private val idleCheck = Runnable {
+        if (guiStarted) return@Runnable
+        val session = appSession ?: return@Runnable
+        val anyApp = synchronized(appProcs) {
+            appProcs.removeAll { !it.isAlive }
+            appProcs.isNotEmpty()
+        }
+        if (anyApp && session.isAlive) return@Runnable
+        val failed = lastFailedApp
+        stopAppSession()
+        onAppSessionEnded?.invoke(failed)
+    }
+
+    private fun scheduleIdleCheck(delayMs: Long) {
+        mainHandler.removeCallbacks(idleCheck)
+        mainHandler.postDelayed(idleCheck, delayMs)
+    }
+
+    private fun watch(name: String, block: () -> Unit) {
+        Thread({ block() }, name).apply { isDaemon = true; start() }
+    }
+    @Volatile private var padCache: PadSetup.Result? = null
 
     /** True setelah perintah boot ditulis ke terminal (kontainer sedang/ sudah berjalan). */
     val isStarted: Boolean get() = started
@@ -39,6 +92,18 @@ rm -rf ${'$'}DATA_DIR/pulseaudio_tmp/*
 TMPDIR=${'$'}DATA_DIR/pulseaudio_tmp HOME=${'$'}DATA_DIR/pulseaudio_tmp XDG_CONFIG_HOME=${'$'}DATA_DIR/pulseaudio_tmp LD_LIBRARY_PATH=${'$'}DATA_DIR/bin:${'$'}LD_LIBRARY_PATH ${'$'}DATA_DIR/bin/pulseaudio -F ${'$'}DATA_DIR/bin/pulseaudio.conf.tmp
 """.trimIndent(),
         )
+    }
+
+    /** Audio hanya dinyalakan bila belum berjalan: shortcut tidak lagi bergantung pada start kontainer. */
+    private fun ensureAudio() {
+        if (audioProcess?.isAlive != true) setupAudio()
+    }
+
+    private fun ensureService(name: String, script: String) {
+        synchronized(services) {
+            if (services[name]?.isAlive == true) return
+            services[name] = Shell.spawn(script)
+        }
     }
 
     /** Ukuran output compositor: pengaturan pengguna, atau 75% panel (landscape) bila 0. */
@@ -125,7 +190,15 @@ pactl list short modules | grep -q 'module-loopback.*AndroidMic' || pactl load-m
 pactl list short modules | grep 'module-loopback.*AndroidMic' | cut -f1 | xargs -r -n1 pactl unload-module 2>/dev/null
 """.trimIndent()
 
-    fun launchCurrentContainer(ctx: Context) {
+    /** Hasil [guestSpec]: nilai `EXTRA_MOUNT` dan `EXTRA_OPT` untuk perintah boot proot. */
+    private class GuestSpec(val mount: String, val opt: String)
+
+    /**
+     * Menyusun `EXTRA_MOUNT` / `EXTRA_OPT` (bridge jaringan, controller, HiDPI, virgl, Turnip, ...) dan
+     * menyalakan layanan sisi Android yang dibutuhkannya bila belum berjalan. Dipakai bersama oleh shell
+     * kontainer ([launchCurrentContainer]) dan proot terpisah milik Shortcut ([launchApp]).
+     */
+    private fun guestSpec(ctx: Context): GuestSpec {
         val data = TinyEnv.dataPath
         val idx = TinyEnv.currentContainer
         var extraMount = ""
@@ -136,13 +209,15 @@ pactl list short modules | grep 'module-loopback.*AndroidMic' | cut -f1 | xargs 
         // LD_PRELOAD karena setiap proses guest lalu mencetak "cannot be preloaded" (lihat terminal).
         val extraDir = File(data, "tiny/extra")
         if (Cfg.getifaddrsBridge) {
-            Shell.spawn("$data/bin/getifaddrs_bridge_server $data/containers/$idx/tmp/.getifaddrs-bridge")
+            ensureService("getifaddrs-$idx", "$data/bin/getifaddrs_bridge_server $data/containers/$idx/tmp/.getifaddrs-bridge")
             if (File(extraDir, "getifaddrs_bridge_client_lib.so").isFile) {
                 preload += "/home/tiny/.local/share/tiny/extra/getifaddrs_bridge_client_lib.so"
             } else Log.w("Launcher", "getifaddrs_bridge_client_lib.so tidak ada di $extraDir, bridge dilewati")
         }
         // Controller (evdev + hidraw) dari DroidDeck: libfakeinput.so melayani /dev/input dan /dev/hidraw16.
-        val pad = PadSetup.prepare(ctx)
+        // Hasilnya dipakai ulang oleh semua proot selama sesi berjalan; menyiapkan ulang akan menghapus
+        // node/ring pad yang sedang dipakai aplikasi lain.
+        val pad = padCache ?: PadSetup.prepare(ctx).also { padCache = it }
         if (File(data, "tiny/extra/libfakeinput.so").isFile) {
             preload += "/home/tiny/.local/share/tiny/extra/libfakeinput.so"
             pad.env.forEach { extraOpt.append(it).append(' ') }
@@ -157,7 +232,8 @@ pactl list short modules | grep 'module-loopback.*AndroidMic' | cut -f1 | xargs 
 
         if (Cfg.isHidpiEnabled) extraOpt.append(Cfg.defaultHidpiOpt).append(' ')
         if (Cfg.virgl) {
-            Shell.spawn(
+            ensureService(
+                "virgl-$idx",
                 """
 export DATA_DIR=$data
 export PATH=${'$'}DATA_DIR/bin:${'$'}PATH
@@ -182,28 +258,36 @@ $data/bin/virgl_test_server ${Cfg.defaultVirglCommand}""".trimIndent(),
         if (File(extraDir, "tiny_virtual_mic").isFile) {
             extraMount += "--mount=\$DATA_DIR/tiny/extra/tiny_virtual_mic:/home/tiny/.local/bin/tiny_virtual_mic "
         }
+        return GuestSpec(extraMount, extraOpt.toString())
+    }
 
-        val boot = Containers.boot(idx, TinyEnv.defaultBoot)
-        val term = TermSessions.forCurrent(ctx)
-        term.writeLine(
-            """
+    /** Baris `export ...` yang dibutuhkan perintah boot proot (`$DATA_DIR`, `$CONTAINER_DIR`, `$EXTRA_*`, `PROOT_*`). */
+    private fun guestEnvScript(spec: GuestSpec): String {
+        val data = TinyEnv.dataPath
+        val idx = TinyEnv.currentContainer
+        return """
 export DATA_DIR=$data
 export PATH=${'$'}DATA_DIR/bin:${'$'}PATH
 export LD_LIBRARY_PATH=${'$'}DATA_DIR/lib
 export CONTAINER_DIR=${'$'}DATA_DIR/containers/$idx
-export EXTRA_MOUNT="$extraMount"
-export EXTRA_OPT="$extraOpt"
+export EXTRA_MOUNT="${spec.mount}"
+export EXTRA_OPT="${spec.opt}"
 cd ${'$'}DATA_DIR
 export PROOT_TMP_DIR=${'$'}DATA_DIR/proot_tmp
 export PROOT_LOADER=${'$'}DATA_DIR/applib/libproot-loader.so
-export PROOT_LOADER_32=${'$'}DATA_DIR/applib/libproot-loader32.so
-$boot
-${TinyEnv.postCommand}
-clear""".trimIndent(),
-        )
+export PROOT_LOADER_32=${'$'}DATA_DIR/applib/libproot-loader32.so""".trimIndent()
+    }
+
+    fun launchCurrentContainer(ctx: Context) {
+        val idx = TinyEnv.currentContainer
+        // pad virtual disiapkan ulang hanya bila tidak ada aplikasi Shortcut yang sedang memakainya
+        if (!appSessionStarted) padCache = null
+        val spec = guestSpec(ctx)
+        val boot = Containers.boot(idx, TinyEnv.defaultBoot)
+        val term = TermSessions.forCurrent(ctx)
+        term.writeLine(guestEnvScript(spec) + "\n" + boot + "\n" + TinyEnv.postCommand + "\nclear")
         started = true
         guiStarted = false
-        appSessionStarted = false
     }
 
     /**
@@ -230,8 +314,10 @@ bash /etc/X11/xinit/Xsession &> "${'$'}HOME/.vnc/x.log" &
     fun launchGuiBackend(ctx: Context) {
         val term = TermSessions.forCurrent(ctx)
         val replace = appSessionStarted
+        // Xwayland milik Shortcut ada di proot terpisah: matikan dari sisi Android (EXITKILL ikut
+        // mematikan anak-anaknya); `pkill` di guiCommand hanya jaring pengaman + jeda.
+        if (replace) stopAppSession()
         guiStarted = true
-        appSessionStarted = false
         // syarat ikon muncul di menu Shortcut: desktop pernah dibuka sekali
         Cfg.desktopOpenedOnce = true
         term.writeLine(guiCommand(ctx, replace))
@@ -239,26 +325,110 @@ bash /etc/X11/xinit/Xsession &> "${'$'}HOME/.vnc/x.log" &
     }
 
     /**
-     * Menjalankan aplikasi dari menu Shortcut (logika DroidDeck: langsung jalankan program, tidak
-     * perlu menekan Open desktop). Bila desktop sedang berjalan, aplikasi muncul di dalamnya
-     * (DISPLAY=:4 yang sama); bila tidak, Xwayland + window manager ringan dinyalakan khusus untuk
-     * aplikasi (lihat [ShortcutRunner.sessionCommand]) dan aplikasi lain berikutnya ikut sesi itu.
+     * Shell kontainer (PTY) sudah berakhir: reset penanda supaya peluncuran berikutnya benar-benar
+     * menyalakan kontainer lagi, bukan menulis perintah ke terminal yang sudah mati. Proot terpisah
+     * milik Shortcut tidak ikut dihentikan.
+     */
+    fun markStopped() {
+        started = false
+        guiStarted = false
+    }
+
+    // ------------------------------------------------------------------ Shortcut: proot terpisah
+
+    /** Proses terlepas (stdin = /dev/null) dengan keluaran dialirkan ke logcat; `exec` di skrip membuat prosesnya proot itu sendiri. */
+    private fun spawnDetached(script: String, tag: String): Process {
+        val p = ProcessBuilder("/system/bin/sh", "-c", script)
+            .redirectErrorStream(true)
+            .redirectInput(ProcessBuilder.Redirect.from(File("/dev/null")))
+            .start()
+        Thread {
+            runCatching { p.inputStream.bufferedReader().useLines { lines -> lines.forEach { Log.d(tag, it) } } }
+        }.apply { isDaemon = true; start() }
+        return p
+    }
+
+    /**
+     * Skrip host yang meluncurkan proot BARU di rootfs kontainer ini dan menjalankan [guestScript]
+     * (path di dalam guest) lewat `/bin/sh`. Memakai perintah boot yang sama dengan kontainer (mount,
+     * `env -i`, `--kill-on-exit`) kecuali program terakhirnya `/bin/bash -l` diganti skrip itu.
+     * Bila perintah boot buatan pengguna tidak diakhiri `/bin/bash`, perintah boot bawaan yang dipakai.
+     */
+    private fun appProotScript(ctx: Context, guestScript: String): String {
+        val spec = guestSpec(ctx)
+        val tail = Regex("""/bin/bash(\s+-l)?\s*$""")
+        val custom = Containers.boot(TinyEnv.currentContainer, TinyEnv.defaultBoot).trim()
+        val base = if (tail.containsMatchIn(custom)) custom else TinyEnv.defaultBoot.trim()
+        val prefix = tail.replace(base, "").trimEnd()
+        return guestEnvScript(spec) + "\nexec " + prefix + " /bin/sh " + guestScript + "\n"
+    }
+
+    /**
+     * Menjalankan aplikasi dari menu Shortcut seperti DroidDeck: sebagai proses proot sendiri, tanpa
+     * bergantung pada shell kontainer/terminal, jadi tetap jalan walau desktop belum dibuka atau
+     * kontainer sudah di-exit. Bila desktop sedang berjalan, aplikasi muncul di dalamnya (DISPLAY=:4
+     * yang sama lewat /tmp bersama); bila tidak, satu proot lain menyalakan Xwayland + window manager
+     * ringan ([ShortcutRunner.prepareSession]) dan aplikasi berikutnya ikut sesi itu. Dijalankan di
+     * thread latar karena menulis berkas dan membaca daftar aplikasi.
      */
     fun launchApp(ctx: Context, appId: String) {
-        val run = ShortcutRunner.prepare(ctx, appId) ?: return
-        val term = TermSessions.forCurrent(ctx)
+        val app = ctx.applicationContext
+        Thread({
+            synchronized(spawnLock) {
+                runCatching { launchAppLocked(app, appId) }
+                    .onFailure { Log.e("Launcher", "gagal menjalankan shortcut $appId", it) }
+            }
+        }, "tiny-shortcut").start()
+    }
+
+    private fun launchAppLocked(ctx: Context, appId: String) {
+        val script = ShortcutRunner.prepare(ctx, appId) ?: return
+        ensureAudio()
+        // ada aplikasi baru: batalkan penutupan sesi yang mungkin sudah dijadwalkan
+        mainHandler.removeCallbacks(idleCheck)
+        lastFailedApp = null
         if (!guiStarted && !appSessionStarted) {
-            appSessionStarted = true
-            term.writeLine(ShortcutRunner.sessionCommand(ctx))
+            // sisa proses lama (Xwayland yang mati, aplikasi yatim) dibersihkan sebelum sesi baru
+            stopAppSession()
+            val session = spawnDetached(appProotScript(ctx, ShortcutRunner.prepareSession(ctx)), "TinyAppSession")
+            appSession = session
+            // Xwayland mati sendiri (crash): aplikasinya ikut putus, tutup sesi dan kembali ke Shortcut
+            watch("tiny-session-wait") {
+                runCatching { session.waitFor() }
+                if (appSession === session) scheduleIdleCheck(0)
+            }
         }
-        term.writeLine(run)
-        term.writeLine("clear")
+        val proc = spawnDetached(appProotScript(ctx, script), "TinyApp-$appId")
+        synchronized(appProcs) {
+            appProcs.removeAll { !it.isAlive }
+            appProcs.add(proc)
+        }
+        mainHandler.removeCallbacks(idleCheck)
+        val startedAt = SystemClock.elapsedRealtime()
+        watch("tiny-app-wait-$appId") {
+            val code = runCatching { proc.waitFor() }.getOrDefault(-1)
+            // galat dalam 5 detik pertama = gagal start; appSession null = kita sendiri yang mematikannya
+            if (code != 0 && SystemClock.elapsedRealtime() - startedAt < 5000 && appSession != null) lastFailedApp = appId
+            scheduleIdleCheck(2000)
+        }
+    }
+
+    /** Menghentikan sesi aplikasi Shortcut (Xwayland + semua aplikasinya); tidak menunggu prosesnya selesai. */
+    fun stopAppSession() {
+        mainHandler.removeCallbacks(idleCheck)
+        lastFailedApp = null
+        appSession?.destroyForcibly()
+        appSession = null
+        synchronized(appProcs) {
+            appProcs.forEach { it.destroyForcibly() }
+            appProcs.clear()
+        }
     }
 
     /** Port `workflow()`: siapkan data, terminal, audio, lalu nyalakan kontainer. */
     fun start(ctx: Context) {
         TermSessions.forCurrent(ctx)
-        setupAudio()
+        ensureAudio()
         launchCurrentContainer(ctx)
     }
 }

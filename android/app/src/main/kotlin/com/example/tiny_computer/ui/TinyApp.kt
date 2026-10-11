@@ -101,19 +101,22 @@ fun TinyApp() {
     val requestDesktop: () -> Unit = {
         if (Startup.phase == Startup.Phase.DONE) openDesktop() else Startup.begin(ctx, openDesktop = true)
     }
-    // Shortcut: jalankan aplikasi langsung (tanpa Open desktop); kontainer dinyalakan dulu bila belum berjalan
+    // Shortcut: jalankan aplikasi langsung (tanpa Open desktop) di proot terpisah; kontainer/terminal tidak perlu hidup
     val openApp = { id: String ->
         ctx.startActivity(Intent(ctx, DisplayActivity::class.java).putExtra(DisplayActivity.EXTRA_APP, id))
     }
     val requestApp: (String) -> Unit = { id ->
-        if (Startup.phase == Startup.Phase.DONE) openApp(id) else Startup.beginForApp(ctx, id)
+        when {
+            // kontainer sedang dinyalakan oleh alur lain: ikut menunggu, lalu buka aplikasinya
+            Startup.phase == Startup.Phase.RUNNING -> Startup.beginForApp(ctx, id)
+            // sistem sudah terpasang: tidak perlu kontainer, cukup siapkan data lalu buka layar aplikasi
+            Startup.installed -> Startup.prepareForApp(ctx) { openApp(id) }
+            else -> Startup.beginForApp(ctx, id)
+        }
     }
 
-    LaunchedEffect(Unit) {
-        // Sistem sudah terpasang dan "Mulai dengan GUI" dinyalakan: langsung masuk desktop seperti sebelumnya.
-        // Peluncuran pertama (belum terpasang) selalu menunggu tombol Open desktop.
-        if (Startup.phase == Startup.Phase.IDLE && Startup.installed && Cfg.autoLaunchGui) Startup.begin(ctx, openDesktop = true)
-    }
+    // Desktop TIDAK lagi dibuka otomatis saat aplikasi dimulai: kontainer + desktop hanya dinyalakan
+    // dari tombol Open desktop (atau Start container di tab Terminal). Shortcut berjalan tanpa keduanya.
     LaunchedEffect(phase) {
         if (phase == Startup.Phase.DONE) {
             // proses shell keluar normal (kode 0) -> tutup aplikasi, seperti SystemNavigator.pop di versi Dart

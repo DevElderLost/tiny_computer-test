@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.widget.Toast
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -63,6 +64,16 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
     private var pendingApp: String? = null
     private var surfaceReady = false
 
+    // semua aplikasi Shortcut selesai: tutup layar ini supaya kembali ke menu Shortcut (desktop tidak ikut tertutup)
+    private val onAppEnded: (String?) -> Unit = { failed ->
+        if (currentApp != null && !isFinishing) {
+            if (failed != null) {
+                Toast.makeText(applicationContext, "App stopped right after start. Log: ~/.vnc/shortcut-$failed.log", Toast.LENGTH_LONG).show()
+            }
+            finish()
+        }
+    }
+
     // pelacakan sentuhan
     private var lastX = 0f
     private var lastY = 0f
@@ -93,6 +104,7 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
         val p = PadBridge(File(File(filesDir, "session"), "dev/input"))
         p.start()
         pad = p
+        Launcher.onAppSessionEnded = onAppEnded
 
         surfaceView = DeskSurface(this).apply {
             holder.addCallback(this@DisplayActivity)
@@ -145,11 +157,15 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
      * dibuka ulang (surface dibuat lagi) tanpa permintaan baru hanya menempel ke sesi yang berjalan.
      */
     private fun startRequestedSession() {
-        if (!Launcher.isStarted) return
         val app = pendingApp
-        pendingApp = null
-        if (app != null) Launcher.launchApp(this, app)
-        else if (currentApp == null && !Launcher.guiStarted) Launcher.launchGuiBackend(this)
+        if (app != null) {
+            // aplikasi Shortcut berjalan di proot sendiri: tidak butuh kontainer/terminal yang hidup
+            pendingApp = null
+            Launcher.launchApp(this, app)
+            return
+        }
+        if (!Launcher.isStarted) return
+        if (currentApp == null && !Launcher.guiStarted) Launcher.launchGuiBackend(this)
     }
 
     override fun onResume() {
@@ -160,6 +176,7 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
     }
 
     override fun onDestroy() {
+        if (Launcher.onAppSessionEnded === onAppEnded) Launcher.onAppSessionEnded = null
         pad?.stop()
         pad = null
         super.onDestroy()

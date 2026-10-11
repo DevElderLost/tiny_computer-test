@@ -1,6 +1,8 @@
 package com.example.tiny_computer.core
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -49,10 +51,39 @@ object Startup {
     /** Data sistem sudah pernah dipasang (penanda yang sama dengan `Rootfs.initData`). */
     val installed: Boolean get() = TinyPrefs.contains("defaultContainer")
 
-    /** Dari menu Shortcut: nyalakan kontainer (bila perlu) lalu jalankan aplikasi [appId], bukan desktop. */
+    /** Data sistem sudah disiapkan (`Rootfs.initData`) di proses ini. */
+    private val dataReady = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /**
+     * Dari menu Shortcut saat sistem sudah terpasang: TIDAK menyalakan kontainer. Aplikasi berjalan di
+     * proot terpisah ([Launcher.launchApp]), jadi cukup memastikan data siap (symlink applib, libfakeinput)
+     * sekali per proses di thread latar, lalu [onReady] dipanggil di thread utama.
+     */
+    fun prepareForApp(ctx: Context, onReady: () -> Unit) {
+        if (dataReady.get() || Launcher.isStarted) { onReady(); return }
+        val app = ctx.applicationContext
+        Thread({
+            runCatching { Rootfs.initData(app) }.onFailure { Log.e(TAG, "initData gagal", it) }
+            dataReady.set(true)
+            Handler(Looper.getMainLooper()).post { onReady() }
+        }, "tiny-app-prepare").start()
+    }
+
+    /** Dari menu Shortcut saat sistem belum terpasang / kontainer sedang dinyalakan: tunggu sampai siap lalu jalankan [appId]. */
     fun beginForApp(ctx: Context, appId: String) {
         pendingApp = appId
         begin(ctx, openDesktop = false)
+    }
+
+    /**
+     * Shell kontainer berakhir: kembali ke IDLE supaya Open desktop / Start container menyalakan
+     * ulang kontainer. Saat RUNNING dibiarkan; [ExtraSetup.run] berhenti sendiri bila shell mati.
+     */
+    fun reset() {
+        if (phase == Phase.RUNNING) return
+        phase = Phase.IDLE
+        openWhenReady = false
+        pendingApp = null
     }
 
     @Synchronized
@@ -72,6 +103,7 @@ object Startup {
             try {
                 if (!Launcher.isStarted) {
                     Rootfs.initData(app)
+                    dataReady.set(true)
                     Rootfs.percent = -1
                     Rootfs.statusText = "startingContainer"
                     Launcher.start(app)
