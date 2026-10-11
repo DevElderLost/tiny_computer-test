@@ -251,6 +251,15 @@ static std::recursive_mutex &controller_mutex() {
   return *mutex;
 }
 
+// Set the first time this process opens a fake pad node (evdev ring, uinput, hidraw). Until then
+// no fd of this process can be one of ours, so the fd-keyed hooks (close, read, write, ioctl,
+// poll, select, fstat) hand straight to libc without touching controller_mutex() or the maps.
+// The library is preloaded into every process of the guest session, desktop included (KIO,
+// Kdenlive, dbus): those must behave exactly as without it. constant-initialised, so it is
+// valid even before any constructor of this library has run. Never reset.
+static std::atomic<bool> g_armed{false};
+static inline bool armed() { return g_armed.load(std::memory_order_acquire); }
+
 static std::unordered_map<int, std::shared_ptr<FakeController>> &controller_map() {
   static auto *map = new std::unordered_map<int, std::shared_ptr<FakeController>>();
   return *map;
@@ -691,6 +700,7 @@ open_fake_input_ring(const char *event, int flags) {
     capture_keyframe(*controller, snap);
   {
     std::lock_guard<std::recursive_mutex> guard(controller_mutex());
+    g_armed.store(true, std::memory_order_release);
     controller_map()[fd] = controller;
   }
 
@@ -891,6 +901,7 @@ __attribute__((visibility("hidden"))) static int open_uinput(int flags) {
   auto writer = std::make_shared<UinputWriter>();
   writer->owner = getpid();
   std::lock_guard<std::recursive_mutex> guard(controller_mutex());
+  g_armed.store(true, std::memory_order_release);
   uinput_map()[fd] = writer;
   Logger::log("uinput: opened as fd %d\n", fd);
   return fd;
@@ -1488,6 +1499,7 @@ __attribute__((visibility("hidden"))) static int open_deck_hidraw(int flags) {
   deck->mapping_size = mapping_size;
   {
     std::lock_guard<std::recursive_mutex> guard(controller_mutex());
+    g_armed.store(true, std::memory_order_release);
     deck_map()[pair[0]] = deck;
   }
   pthread_t thread;
@@ -1720,6 +1732,7 @@ __attribute__((visibility("hidden"))) static int open_touch_hidraw(int flags) {
   touch->touch = true;
   {
     std::lock_guard<std::recursive_mutex> guard(controller_mutex());
+    g_armed.store(true, std::memory_order_release);
     deck_map()[pair[0]] = touch;
   }
   touch_state([](TouchRingFile &r) { r.opened++; });
@@ -2150,7 +2163,7 @@ EXPORT int open(const char *pathname, int flags, ...) {
 
   va_start(va, flags);
 
-  hasMode = flags & O_CREAT;
+  hasMode = (flags & O_CREAT) || (flags & O_TMPFILE) == O_TMPFILE;
 
   if (hasMode) {
     mode = va_arg(va, mode_t);
@@ -2225,7 +2238,7 @@ EXPORT int openat(int dirfd, const char *pathname, int flags, ...) {
 
   va_start(va, flags);
 
-  hasMode = flags & O_CREAT;
+  hasMode = (flags & O_CREAT) || (flags & O_TMPFILE) == O_TMPFILE;
 
   if (hasMode) {
     mode = va_arg(va, mode_t);
@@ -2351,6 +2364,7 @@ static int fake_stat_path(const char *pathname, S *statbuf, Real real) {
 template <typename S, typename Real>
 static int fake_stat_fd(int fd, S *buf, Real real) {
   int ret = real(fd, buf);
+  if (!armed()) return ret;
 
   std::lock_guard<std::recursive_mutex> guard(controller_mutex());
   if (ret == 0 && deck_map().count(fd)) {
@@ -2552,6 +2566,8 @@ EXPORT int ioctl(int fd, ioctl_request_t op, ...) {
   va_start(va, op);
   argp = va_arg(va, void *);
   va_end(va);
+
+  if (!armed()) return syscall(SYS_ioctl, fd, op, argp);
 
   // The lock must not be held across the passthrough: binder's transport is a
   // blocking ioctl(BINDER_WRITE_READ), so a parked binder pool thread would own
@@ -2768,6 +2784,7 @@ EXPORT int ioctl(int fd, ioctl_request_t op, ...) {
 EXPORT int close(int fd) {
   static auto my_close = reinterpret_cast<decltype(&::close)>(dlsym(RTLD_NEXT, "close"));
 
+  if (!armed()) return my_close(fd);
   close_uinput(fd);
   std::unique_lock<std::recursive_mutex> guard(controller_mutex());
   deck_map().erase(fd);
@@ -2786,6 +2803,7 @@ EXPORT int close(int fd) {
 static constexpr int kMaxRingWaitMs = 2;
 
 EXPORT ssize_t read(int fd, void *buf, size_t count) {
+  if (!armed()) return syscall(SYS_read, fd, buf, count);
   std::unique_lock<std::recursive_mutex> guard(controller_mutex());
   auto controller = controller_map().find(fd);
   if (controller == controller_map().end()) {
@@ -2884,6 +2902,7 @@ EXPORT ssize_t read(int fd, void *buf, size_t count) {
 EXPORT ssize_t write(int fd, const void *buf, size_t count) {
   static auto my_write = reinterpret_cast<decltype(&::write)>(dlsym(RTLD_NEXT, "write"));
 
+  if (!armed()) return my_write(fd, buf, count);
   std::unique_lock<std::recursive_mutex> guard(controller_mutex());
   auto made = uinput_map().find(fd);
   if (made != uinput_map().end()) return write_uinput(*made->second, buf, count);
@@ -2912,6 +2931,7 @@ EXPORT ssize_t write(int fd, const void *buf, size_t count) {
 }
 
 EXPORT ssize_t writev(int fd, const struct iovec *iov, int iovcnt) {
+  if (!armed()) return syscall(SYS_writev, fd, iov, iovcnt);
   std::unique_lock<std::recursive_mutex> guard(controller_mutex());
   if (deck_map().count(fd)) {
     ssize_t total = 0;
@@ -2960,6 +2980,14 @@ static int poll_fake(struct pollfd *fds, nfds_t nfds, int timeout,
                      const sigset_t *sigmask) {
   static auto my_poll = reinterpret_cast<decltype(&::poll)>(dlsym(RTLD_NEXT, "poll"));
   static auto my_ppoll = reinterpret_cast<decltype(&::ppoll)>(dlsym(RTLD_NEXT, "ppoll"));
+
+  if (!armed()) {
+    if (sigmask) {
+      struct timespec wait = {timeout / 1000, (timeout % 1000) * 1000000L};
+      return my_ppoll(fds, nfds, timeout < 0 ? nullptr : &wait, sigmask);
+    }
+    return my_poll(fds, nfds, timeout);
+  }
 
   bool has_fake_fds = false;
   std::vector<struct pollfd> real_fds;
@@ -3065,6 +3093,7 @@ EXPORT int ppoll(struct pollfd *fds, nfds_t nfds,
     errno = EINVAL;
     return -1;
   }
+  if (!armed()) return my_ppoll(fds, nfds, timeout, sigmask);
   for (nfds_t i = 0; i < nfds; ++i) {
     if (!is_fake_input_fd(fds[i].fd)) continue;
     if (!sigmask)
@@ -3090,6 +3119,9 @@ EXPORT int ppoll(struct pollfd *fds, nfds_t nfds,
 EXPORT int select(int nfds, fd_set *readfds, fd_set *writefds,
                   fd_set *exceptfds, struct timeval *timeout) {
   static auto my_select = reinterpret_cast<decltype(&::select)>(dlsym(RTLD_NEXT, "select"));
+
+  if (!armed())
+    return my_select ? my_select(nfds, readfds, writefds, exceptfds, timeout) : -1;
 
   fd_set original_readfds;
   fd_set original_writefds;
