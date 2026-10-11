@@ -1,5 +1,8 @@
 package com.example.tiny_computer.ui
 
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -23,6 +26,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -35,6 +39,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -46,6 +51,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
@@ -59,9 +65,11 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.tiny_computer.R
 import com.example.tiny_computer.core.DesktopApps
+import com.example.tiny_computer.core.ExeShortcuts
 import com.example.tiny_computer.core.ShortcutPrefs
 import com.example.tiny_computer.core.TinyEnv
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
@@ -69,6 +77,9 @@ import kotlinx.coroutines.withContext
  * seperti di desktop tetapi kecil dan bersudut membulat. Ketuk = jalankan langsung tanpa Open
  * desktop (logika DroidDeck); tekan lama = pengaturan khusus aplikasi itu ([ShortcutPrefs]), tidak
  * berhubungan dengan pengaturan desktop utama.
+ *
+ * Tombol Add (+) menambah shortcut program Windows (.exe): berkas dipilih lewat pemilih berkas sistem lalu
+ * dijalankan dengan `wine` di sesi proot baru, sama seperti aplikasi lain ([ExeShortcuts]).
  *
  * Daftar baru muncul setelah sistem selesai dipasang DAN desktop pernah dibuka sekali
  * ([DesktopApps.ready]); sebelum itu halaman hanya menampilkan petunjuk.
@@ -81,6 +92,24 @@ fun ShortcutScreen(onLaunch: (String) -> Unit) {
     var query by remember { mutableStateOf("") }
     var showHidden by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<DesktopApps.App?>(null) }
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    // pilih .exe: pemilih sistem tidak bisa menyaring ekstensi, jadi pilihan divalidasi di ExeShortcuts
+    val exePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val r = withContext(Dispatchers.IO) { ExeShortcuts.addFromUri(ctx, uri) }
+            val msg = when (r) {
+                is ExeShortcuts.Outcome.Ok -> { refresh++; ctx.getString(R.string.tc_sc_added, r.name) }
+                ExeShortcuts.Outcome.NotExe -> ctx.getString(R.string.tc_sc_add_not_exe)
+                ExeShortcuts.Outcome.BadLocation -> ctx.getString(R.string.tc_sc_add_bad_location)
+                ExeShortcuts.Outcome.NeedWine -> ctx.getString(R.string.tc_sc_add_need_wine)
+                is ExeShortcuts.Outcome.Failed -> ctx.getString(R.string.tc_sc_add_failed, r.message)
+            }
+            Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show()
+        }
+    }
 
     val apps by produceState<List<DesktopApps.App>?>(initialValue = null, ready, refresh) {
         value = if (ready) withContext(Dispatchers.IO) { DesktopApps.scan() } else emptyList()
@@ -112,7 +141,10 @@ fun ShortcutScreen(onLaunch: (String) -> Unit) {
                 CircularProgressIndicator(color = pal.signal)
             }
             else -> {
-                SearchBar(query, { query = it }, onRefresh = { refresh++ })
+                SearchBar(
+                    query, { query = it }, onRefresh = { refresh++ },
+                    onAdd = { exePicker.launch(arrayOf("*/*")) },
+                )
                 if (hiddenCount > 0) {
                     Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
                         KeyChip(
@@ -144,11 +176,13 @@ fun ShortcutScreen(onLaunch: (String) -> Unit) {
         }
     }
 
-    editing?.let { app -> AppSettingsDialog(app) { editing = null } }
+    editing?.let { app ->
+        AppSettingsDialog(app, onRemoved = { editing = null; refresh++ }) { editing = null }
+    }
 }
 
 @Composable
-private fun SearchBar(query: String, onQuery: (String) -> Unit, onRefresh: () -> Unit) {
+private fun SearchBar(query: String, onQuery: (String) -> Unit, onRefresh: () -> Unit, onAdd: () -> Unit) {
     val pal = LocalPalette.current
     val shape = RoundedCornerShape(12.dp)
     Row(
@@ -173,6 +207,13 @@ private fun SearchBar(query: String, onQuery: (String) -> Unit, onRefresh: () ->
                 .border(1.dp, pal.line2, shape).clickableNoRipple(onRefresh),
         ) {
             Icon(Icons.Filled.Refresh, stringResource(R.string.tc_sc_refresh), tint = pal.onBackground, modifier = Modifier.size(20.dp))
+        }
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.size(48.dp).clip(shape).background(Color.White.copy(alpha = 0.03f), shape)
+                .border(1.dp, pal.line2, shape).clickableNoRipple(onAdd),
+        ) {
+            Icon(Icons.Filled.Add, stringResource(R.string.tc_sc_add), tint = pal.onBackground, modifier = Modifier.size(22.dp))
         }
     }
 }
@@ -227,7 +268,7 @@ private fun AppIcon(app: DesktopApps.App, size: Dp, label: String) {
  * disimpan terpisah ([ShortcutPrefs]); pengaturan desktop utama tidak disentuh.
  */
 @Composable
-private fun AppSettingsDialog(app: DesktopApps.App, onDismiss: () -> Unit) {
+private fun AppSettingsDialog(app: DesktopApps.App, onRemoved: () -> Unit, onDismiss: () -> Unit) {
     val pal = LocalPalette.current
     var s by remember(app.id) { mutableStateOf(ShortcutPrefs.get(app.id)) }
     fun update(n: ShortcutPrefs.Settings) { s = n; ShortcutPrefs.save(app.id, n) }
@@ -293,6 +334,15 @@ private fun AppSettingsDialog(app: DesktopApps.App, onDismiss: () -> Unit) {
                         s = ShortcutPrefs.Settings()
                     }
                     DeckButton(stringResource(R.string.tc_close), Modifier.weight(1f), onClick = onDismiss)
+                }
+                // hanya shortcut .exe buatan pengguna yang bisa dihapus; aplikasi Linux tidak disentuh
+                if (ExeShortcuts.isExeShortcut(app.id)) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp)) {
+                        DeckButton(stringResource(R.string.tc_sc_remove), Modifier.weight(1f), primary = false) {
+                            ExeShortcuts.remove(app.id)
+                            onRemoved()
+                        }
+                    }
                 }
             }
         }
