@@ -150,6 +150,19 @@ object Cfg {
     var linuxDriver: String
         get() = TinyPrefs.getString("linuxDriver", "")
         set(v) = TinyPrefs.setString("linuxDriver", v)
+    /** Konten Wine (.wcp) aktif, id `<Tipe>/<nama>-<kode>`; kosong = tidak dipilih. */
+    var wineActive: String
+        get() = TinyPrefs.getString("wineActive", "")
+        set(v) = TinyPrefs.setString("wineActive", v)
+    var fexActive: String
+        get() = TinyPrefs.getString("fexActive", "")
+        set(v) = TinyPrefs.setString("fexActive", v)
+    var dxvkActive: String
+        get() = TinyPrefs.getString("dxvkActive", "")
+        set(v) = TinyPrefs.setString("dxvkActive", v)
+    var vkd3dActive: String
+        get() = TinyPrefs.getString("vkd3dActive", "")
+        set(v) = TinyPrefs.setString("vkd3dActive", v)
     /** 0 None 1 Linear 2 Nearest 3 SGSR 4 FSR 5 FSR Fit 6 Sharpen 7 NIS 8 SGSR HQ */
     var upscaler: Int
         get() = TinyPrefs.getInt("upscaler", 1)

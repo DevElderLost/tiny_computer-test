@@ -64,6 +64,8 @@ fun SettingsScreen() {
 
         DriverGroup()
 
+        WineGroup()
+
         Group(stringResource(R.string.tc_group_terminal)) {
             TextRow(stringResource(R.string.tc_ui_terminal_max_lines), Cfg.termMaxLines.toString(), number = true) { it.toIntOrNull()?.let { v -> Cfg.termMaxLines = v.coerceIn(100, 50000) } }
             Div()

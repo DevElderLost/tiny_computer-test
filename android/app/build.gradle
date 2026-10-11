@@ -129,6 +129,8 @@ dependencies {
     // Driver Turnip (bionic, lewat adrenotools) dikirim sebagai .tzst di assets.
     implementation 'com.github.luben:zstd-jni:1.5.2-3@aar'
     implementation 'org.apache.commons:commons-compress:1.27.1'
+    // dekompresi .wcp berformat xz (commons-compress hanya membungkus library ini)
+    implementation 'org.tukaani:xz:1.10'
 
     implementation "androidx.core:core-ktx:1.15.0"
     implementation "androidx.appcompat:appcompat:1.7.0"

@@ -333,4 +333,32 @@
     <string name="tc_sc_opt_off">Off</string>
     <string name="tc_sc_hide">Hide from the list</string>
     <string name="tc_sc_reset">Reset</string>
+    <!-- Wine / Proton arm64ec + FEXCore + DXVK (.wcp Winlator) -->
+    <string name="tc_wine_title">Wine / Proton (arm64ec)</string>
+    <string name="tc_wine_hint">Install Winlator content packages (.wcp): an arm64ec Wine or Proton, FEXCore to run x86/x64 programs, and DXVK or VKD3D for Direct3D. Import a file or download from the catalog, pick what to use, then run Prepare once.</string>
+    <string name="tc_wine_import">Import .wcp file</string>
+    <string name="tc_wine_download">Download from catalog</string>
+    <string name="tc_wine_pick_wine">Wine / Proton</string>
+    <string name="tc_wine_pick_fex">FEXCore (x86/x64 emulator)</string>
+    <string name="tc_wine_pick_dxvk">DXVK (Direct3D 8-11)</string>
+    <string name="tc_wine_pick_vkd3d">VKD3D (Direct3D 12)</string>
+    <string name="tc_wine_none">None</string>
+    <string name="tc_wine_remove">Remove selected</string>
+    <string name="tc_wine_no_wine">No Wine installed yet. Import a .wcp or download one from the catalog.</string>
+    <string name="tc_wine_setup">Install libraries and prepare Wine</string>
+    <string name="tc_wine_setup_hint">Installs the system libraries Wine needs (internet, once), creates the Wine prefix, and applies FEXCore / DXVK / VKD3D. The container must be running. After this, wine, winecfg, wineboot and regedit work in Terminal and in the Wine commands.</string>
+    <string name="tc_wine_stage_writing">Writing Wine environment…</string>
+    <string name="tc_wine_stage_deps">Installing libraries…</string>
+    <string name="tc_wine_stage_prefix">Creating Wine prefix…</string>
+    <string name="tc_wine_stage_applying">Applying FEXCore / DXVK / VKD3D…</string>
+    <string name="tc_wine_ready">Wine is ready.</string>
+    <string name="tc_wine_task">%1$s · %2$d%%</string>
+    <string name="tc_wine_task_unknown">%1$s…</string>
+    <string name="tc_wine_catalog_title">Wine content catalog</string>
+    <string name="tc_wine_catalog_loading">Loading list…</string>
+    <string name="tc_wine_catalog_empty">Nothing to show for this filter.</string>
+    <string name="tc_wine_installed_badge">installed</string>
+    <string name="tc_wine_close">Close</string>
+    <string name="tc_wine_filter_wine">Wine / Proton</string>
+    <string name="tc_wine_failed">Failed: %1$s</string>
 </resources>
