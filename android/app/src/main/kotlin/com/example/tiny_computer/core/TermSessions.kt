@@ -24,6 +24,7 @@ import com.termux.view.TerminalViewClient
  */
 class TermSession(private val context: Context) : TerminalSessionClient {
     @Volatile var view: TerminalView? = null
+    @Volatile var scroller: com.example.tiny_computer.ui.TerminalScroller? = null
     @Volatile var exitCode: Int? = null
     @Volatile var onExit: ((Int) -> Unit)? = null
 
@@ -40,19 +41,21 @@ class TermSession(private val context: Context) : TerminalSessionClient {
 
     fun write(text: String) {
         // mengetik / menekan tombol selalu membawa kembali ke baris terbawah
-        (view as? com.example.tiny_computer.ui.ScrollableTerminalView)?.scrollToBottom()
+        scroller?.scrollToBottom()
         session.write(text)
     }
+
+    private fun updateScreen() { scroller?.onScreenUpdated() ?: view?.onScreenUpdated() }
 
     /** `Util.termWrite`: tulis satu baris perintah. */
     fun writeLine(text: String) = session.write("$text\n")
 
-    override fun onTextChanged(changedSession: TerminalSession) { view?.onScreenUpdated() }
+    override fun onTextChanged(changedSession: TerminalSession) { updateScreen() }
     override fun onTitleChanged(changedSession: TerminalSession) = Unit
     override fun onSessionFinished(finishedSession: TerminalSession) {
         val code = finishedSession.exitStatus
         exitCode = code
-        view?.onScreenUpdated()
+        updateScreen()
         // sinyal -9 (batas proses anak Android 12+): tampilkan halaman petunjuk, seperti launchSignal9Page
         if (code == -9) {
             context.startActivity(Intent(context, Signal9Activity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))

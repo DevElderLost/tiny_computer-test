@@ -1,10 +1,10 @@
 package com.example.tiny_computer.ui
 
-import android.content.Context
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.util.Log
 import android.view.MotionEvent
+import android.view.View
 import android.view.ViewConfiguration
 import com.termux.view.TerminalView
 import java.lang.reflect.Field
@@ -12,7 +12,10 @@ import kotlin.math.abs
 import kotlin.math.ceil
 
 /**
- * TerminalView yang bisa digulir. Di versi lama dua hal menggagalkannya:
+ * Penggulir untuk [TerminalView]. `TerminalView` Termux adalah kelas `final` sehingga tidak bisa
+ * di-subclass; logika gulir dipasang lewat [View.OnTouchListener] dan pembungkus kecil ini.
+ *
+ * Di versi lama dua hal menggagalkan gulir:
  *  1. `update = { it.onScreenUpdated() }` di AndroidView dipanggil setiap rekomposisi, dan
  *     onScreenUpdated() Termux selalu mengembalikan tampilan ke baris terbawah;
  *  2. gerakan geser di dalam Compose hanya ditangani GestureDetector bawaan yang mudah dibatalkan.
@@ -21,9 +24,12 @@ import kotlin.math.ceil
  * transkrip), dan selama pengguna sedang menggulir ke atas, keluaran baru tidak menyeretnya kembali.
  * Buffer alternatif (vim, htop) dan mouse tracking tetap ditangani Termux. Bila refleksi ke
  * `mTopRow` gagal, perilaku kembali ke bawaan Termux.
+ *
+ * Pemakaian: `val s = TerminalScroller(view)` lalu panggil `s.setTextSize(px)` sebagai ganti
+ * `view.setTextSize(px)`, dan `s.onScreenUpdated()` sebagai ganti `view.onScreenUpdated()`.
  */
-class ScrollableTerminalView(context: Context) : TerminalView(context, null) {
-    private val slop = ViewConfiguration.get(context).scaledTouchSlop
+class TerminalScroller(private val view: TerminalView) : View.OnTouchListener {
+    private val slop = ViewConfiguration.get(view.context).scaledTouchSlop
     private val topRowField: Field? = runCatching {
         TerminalView::class.java.getDeclaredField("mTopRow").apply { isAccessible = true }
     }.onFailure { Log.w(TAG, "mTopRow tidak bisa diakses, gulir manual nonaktif", it) }.getOrNull()
@@ -35,8 +41,12 @@ class ScrollableTerminalView(context: Context) : TerminalView(context, null) {
     private var dragging = false
     private var userScrolled = false
 
-    private fun topRow(): Int = runCatching { topRowField?.getInt(this) }.getOrNull() ?: 0
-    private fun setTopRow(v: Int) { runCatching { topRowField?.setInt(this, v) } }
+    init {
+        view.setOnTouchListener(this)
+    }
+
+    private fun topRow(): Int = runCatching { topRowField?.getInt(view) }.getOrNull() ?: 0
+    private fun setTopRow(v: Int) { runCatching { topRowField?.setInt(view, v) } }
 
     private fun rowHeight(): Float {
         if (rowPx <= 0f) rowPx = 24f
@@ -44,8 +54,8 @@ class ScrollableTerminalView(context: Context) : TerminalView(context, null) {
     }
 
     // sama dengan TerminalRenderer: Typeface.MONOSPACE, tinggi baris = ceil(fontSpacing)
-    override fun setTextSize(textSize: Int) {
-        super.setTextSize(textSize)
+    fun setTextSize(textSize: Int) {
+        view.setTextSize(textSize)
         rowPx = ceil(Paint().apply { typeface = Typeface.MONOSPACE; this.textSize = textSize.toFloat() }.fontSpacing)
     }
 
@@ -54,21 +64,22 @@ class ScrollableTerminalView(context: Context) : TerminalView(context, null) {
         if (userScrolled || topRow() != 0) {
             setTopRow(0)
             userScrolled = false
-            invalidate()
+            view.invalidate()
         }
     }
 
-    override fun onScreenUpdated() {
-        if (userScrolled && topRow() < 0) { invalidate(); return }
+    /** Ganti `view.onScreenUpdated()`: jangan seret ke bawah saat pengguna sedang menggulir riwayat. */
+    fun onScreenUpdated() {
+        if (userScrolled && topRow() < 0) { view.invalidate(); return }
         userScrolled = false
-        super.onScreenUpdated()
+        view.onScreenUpdated()
     }
 
-    override fun onTouchEvent(event: MotionEvent): Boolean {
-        val emu = currentSession?.emulator
+    override fun onTouch(v: View, event: MotionEvent): Boolean {
+        val emu = view.currentSession?.emulator
         if (topRowField == null || emu == null || emu.isAlternateBufferActive || emu.isMouseTrackingActive || event.pointerCount > 1) {
             dragging = false
-            return super.onTouchEvent(event)
+            return false
         }
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
@@ -77,10 +88,10 @@ class ScrollableTerminalView(context: Context) : TerminalView(context, null) {
             MotionEvent.ACTION_MOVE -> {
                 if (!dragging && abs(event.y - downY) > slop) {
                     dragging = true
-                    parent?.requestDisallowInterceptTouchEvent(true)
+                    v.parent?.requestDisallowInterceptTouchEvent(true)
                     // batalkan gerakan di GestureDetector Termux agar tidak jadi ketukan / zoom
                     val cancel = MotionEvent.obtain(event).apply { action = MotionEvent.ACTION_CANCEL }
-                    super.onTouchEvent(cancel)
+                    view.onTouchEvent(cancel)
                     cancel.recycle()
                 }
                 if (dragging) {
@@ -94,7 +105,7 @@ class ScrollableTerminalView(context: Context) : TerminalView(context, null) {
                 return true
             }
         }
-        return super.onTouchEvent(event)
+        return false
     }
 
     /** Jari turun = isi bergerak turun = riwayat lebih lama terlihat (mTopRow makin negatif). */
@@ -107,8 +118,8 @@ class ScrollableTerminalView(context: Context) : TerminalView(context, null) {
         val next = (topRow() - rows).coerceIn(-history, 0)
         setTopRow(next)
         userScrolled = next < 0
-        invalidate()
+        view.invalidate()
     }
 
-    private companion object { const val TAG = "ScrollTerminalView" }
+    private companion object { const val TAG = "TerminalScroller" }
 }

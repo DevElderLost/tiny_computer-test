@@ -66,7 +66,8 @@ fun TerminalScreen() {
         AndroidView(
             modifier = Modifier.weight(1f).fillMaxWidth(),
             factory = { c ->
-                ScrollableTerminalView(c).also { v ->
+                TerminalView(c, null).also { v ->
+                    val scroller = TerminalScroller(v)
                     v.setTerminalViewClient(TermViewClient(
                         onTap = {
                             if (!Cfg.isTerminalWriteEnabled) return@TermViewClient
@@ -76,14 +77,15 @@ fun TerminalScreen() {
                         },
                         onScaleChange = { s ->
                             val next = (fontPx * s).toInt().coerceIn(16, 120)
-                            if (next != fontPx) { fontPx = next; v.setTextSize(next); Cfg.termFontScale = next / (14f * c.resources.displayMetrics.density).toDouble() }
+                            if (next != fontPx) { fontPx = next; scroller.setTextSize(next); Cfg.termFontScale = next / (14f * c.resources.displayMetrics.density).toDouble() }
                         },
                         onModifiersChanged = { ctrl = TermModifiers.ctrl; alt = TermModifiers.alt },
                     ))
-                    v.setTextSize(fontPx)
+                    scroller.setTextSize(fontPx)
                     v.isFocusable = Cfg.isTerminalWriteEnabled
                     v.isFocusableInTouchMode = Cfg.isTerminalWriteEnabled
                     term.view = v
+                    term.scroller = scroller
                     v.attachSession(term.session)
                     termView = v
                 }
