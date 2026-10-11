@@ -60,35 +60,34 @@ fun WineGroup() {
         if (uri != null) WineContents.importUri(ctx, uri)
     }
 
-    Group(stringResource(R.string.tc_wine_title)) {
-        HintText(stringResource(R.string.tc_wine_hint))
+    DeckGroup(stringResource(R.string.tc_wine_title)) {
+        DeckNote(stringResource(R.string.tc_wine_hint))
 
         val task = WineContents.taskText
         if (task.isNotEmpty()) {
             val pct = WineContents.taskPercent
-            HintText(if (pct >= 0) stringResource(R.string.tc_wine_task, task, pct) else stringResource(R.string.tc_wine_task_unknown, task))
+            DeckNote(if (pct >= 0) stringResource(R.string.tc_wine_task, task, pct) else stringResource(R.string.tc_wine_task_unknown, task))
         }
-        WineContents.taskError?.let {
-            Text(stringResource(R.string.tc_wine_failed, it), fontSize = 13.sp, color = pal.error,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+        WineContents.taskError?.let { DeckNote(stringResource(R.string.tc_wine_failed, it), pal.error) }
+        DeckActionRow(stringResource(R.string.tc_wine_import), null, stringResource(R.string.tc_btn_import)) {
+            if (!WineContents.isBusy) picker.launch(arrayOf("*/*"))
         }
-        ActionRow(stringResource(R.string.tc_wine_import)) { if (!WineContents.isBusy) picker.launch(arrayOf("*/*")) }
-        Div()
-        ActionRow(stringResource(R.string.tc_wine_download)) { if (!WineContents.isBusy) catalog = true }
-        Div()
+        DeckActionRow(stringResource(R.string.tc_wine_download), null, stringResource(R.string.tc_btn_download)) {
+            if (!WineContents.isBusy) catalog = true
+        }
 
-        if (wines.isEmpty()) HintText(stringResource(R.string.tc_wine_no_wine))
+        if (wines.isEmpty()) DeckNote(stringResource(R.string.tc_wine_no_wine))
         else Picker(R.string.tc_wine_pick_wine, Type.WINE, wines, false) { tick++ }
         Picker(R.string.tc_wine_pick_fex, Type.FEXCORE, fexes, true) { tick++ }
         Picker(R.string.tc_wine_pick_dxvk, Type.DXVK, dxvks, true) { tick++ }
         Picker(R.string.tc_wine_pick_vkd3d, Type.VKD3D, vkd3ds, true) { tick++ }
 
-        Div()
-        HintText(stringResource(R.string.tc_wine_setup_hint))
         val running = WineSetup.phase == WineSetup.Phase.RUNNING
-        ActionRow(stringResource(R.string.tc_wine_setup)) { if (!running && wines.isNotEmpty()) WineSetup.start(ctx) }
+        DeckActionRow(stringResource(R.string.tc_wine_setup), stringResource(R.string.tc_wine_setup_hint), stringResource(R.string.tc_btn_run)) {
+            if (!running && wines.isNotEmpty()) WineSetup.start(ctx)
+        }
         if (running) {
-            HintText(
+            DeckNote(
                 stringResource(
                     when (WineSetup.stage) {
                         "deps" -> R.string.tc_wine_stage_deps
@@ -100,11 +99,8 @@ fun WineGroup() {
             )
         }
         when (WineSetup.phase) {
-            WineSetup.Phase.DONE -> HintText(stringResource(R.string.tc_wine_ready))
-            WineSetup.Phase.FAILED -> Text(
-                stringResource(R.string.tc_wine_failed, WineSetup.message.orEmpty()), fontSize = 13.sp, color = pal.error,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-            )
+            WineSetup.Phase.DONE -> DeckNote(stringResource(R.string.tc_wine_ready))
+            WineSetup.Phase.FAILED -> DeckNote(stringResource(R.string.tc_wine_failed, WineSetup.message.orEmpty()), pal.error)
             else -> {}
         }
     }
@@ -121,19 +117,18 @@ private fun Picker(title: Int, type: Type, list: List<WineContents.Profile>, non
     val sel = WineContents.active(type)?.id ?: ""
     val none = stringResource(R.string.tc_wine_none)
     val options = (if (noneAllowed) listOf("" to none) else emptyList()) + list.map { it.id to it.title }
-    ChipChoiceRow(stringResource(title), options, if (sel.isEmpty() && !noneAllowed) options.first().first else sel) { id ->
+    DeckChoiceRow(stringResource(title), null, options, if (sel.isEmpty() && !noneAllowed) options.first().first else sel) { id ->
         WineContents.select(type, id)
         onChanged()
         Thread { runCatching { WineContents.onSelectionChanged() } }.start()
     }
     val chosen = list.firstOrNull { it.id == sel }
     if (chosen != null) {
-        ActionRow(stringResource(R.string.tc_wine_remove) + " · " + chosen.title) {
+        DeckActionRow(stringResource(R.string.tc_wine_remove), chosen.title, stringResource(R.string.tc_btn_remove)) {
             WineContents.remove(chosen)
             onChanged()
         }
     }
-    Div()
 }
 
 @Composable
@@ -156,17 +151,7 @@ private fun CatalogDialog(onDismiss: () -> Unit, onPick: (WineContents.Remote) -
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text(stringResource(R.string.tc_wine_catalog_title), fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = pal.onBackground)
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                filters.forEachIndexed { i, (label, _) ->
-                    val on = i == filter
-                    val pill = RoundedCornerShape(50)
-                    Box(
-                        Modifier.clip(pill).background(if (on) pal.signal.copy(alpha = 0.16f) else pal.surfaceVariant, pill)
-                            .border(1.dp, if (on) pal.signal else pal.line, pill)
-                            .clickableNoRipple { filter = i }.padding(horizontal = 14.dp, vertical = 8.dp),
-                    ) { Text(label, fontSize = 13.sp, color = if (on) pal.onBackground else pal.onSurfaceVariant) }
-                }
-            }
+            DeckChoiceRow(stringResource(R.string.tc_wine_filter_label), null, filters.mapIndexed { i, f -> i to f.first }, filter) { filter = it }
             val list = items
             if (list == null) {
                 Text(stringResource(R.string.tc_wine_catalog_loading), fontSize = 13.sp, color = pal.onSurfaceVariant)

@@ -58,6 +58,13 @@ import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
@@ -262,4 +269,87 @@ fun DeckSlider(
             drawCircle(pal.signal, radius = 7.dp.toPx(), center = thumb)
         }
     }
+}
+
+/** Catatan di dalam kartu [DeckGroup] (teks petunjuk + garis tipis), pengganti HintText di gaya DroidDeck. */
+@Composable
+fun DeckNote(text: String, color: Color? = null) {
+    val colors = MaterialTheme.colorScheme
+    val pal = LocalPalette.current
+    Column(Modifier.fillMaxWidth()) {
+        Text(
+            text, fontSize = 13.sp, lineHeight = 18.sp, color = color ?: colors.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
+        )
+        Box(Modifier.fillMaxWidth().height(1.dp).background(pal.line))
+    }
+}
+
+/** Kolom isian ringkas bergaya DroidDeck: kotak membulat, bingkai berubah warna sinyal saat fokus. */
+@Composable
+private fun DeckField(value: String, number: Boolean, multiline: Boolean, modifier: Modifier, onChange: (String) -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    val pal = LocalPalette.current
+    var focused by remember { mutableStateOf(false) }
+    val shape = RoundedCornerShape(10.dp)
+    BasicTextField(
+        value = value, onValueChange = onChange, singleLine = !multiline,
+        keyboardOptions = if (number) KeyboardOptions(keyboardType = KeyboardType.Number) else KeyboardOptions.Default,
+        textStyle = TextStyle(color = colors.onBackground, fontSize = 13.5.sp),
+        cursorBrush = SolidColor(pal.signal),
+        modifier = modifier.onFocusChanged { focused = it.isFocused },
+        decorationBox = { inner ->
+            Box(
+                Modifier.fillMaxWidth().heightIn(min = 44.dp).clip(shape).background(colors.surfaceVariant)
+                    .border(1.dp, if (focused) pal.signal else pal.line2, shape)
+                    .padding(horizontal = 12.dp, vertical = 11.dp),
+                contentAlignment = Alignment.CenterStart,
+            ) { inner() }
+        },
+    )
+}
+
+/**
+ * Isian teks sebagai baris pengaturan: label di kiri dan kolom isian ringkas di kanan; bila [multiline]
+ * kolomnya melebar di bawah label. Nilai langsung disimpan setiap diubah, sama seperti TextRow lama.
+ */
+@Composable
+fun DeckTextRow(label: String, value: String, hint: String? = null, number: Boolean = false, multiline: Boolean = false, onCommit: (String) -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    val pal = LocalPalette.current
+    var text by remember(value) { mutableStateOf(value) }
+    if (multiline) {
+        Column(Modifier.fillMaxWidth()) {
+            Column(Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, top = 11.dp, bottom = 12.dp)) {
+                Text(label, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = colors.onBackground)
+                if (hint != null) Text(hint, fontSize = 13.sp, color = colors.onSurfaceVariant, modifier = Modifier.padding(top = 2.dp))
+                DeckField(text, number, true, Modifier.fillMaxWidth().padding(top = 8.dp)) { text = it; onCommit(it) }
+            }
+            Box(Modifier.fillMaxWidth().height(1.dp).background(pal.line))
+        }
+    } else {
+        DeckRow(label, hint) {
+            DeckField(text, number, false, Modifier.widthIn(min = 150.dp, max = 220.dp)) { text = it; onCommit(it) }
+        }
+    }
+}
+
+/** Baris dengan tombol sekunder di kanan (pengganti ActionRow selebar kartu). */
+@Composable
+fun DeckActionRow(label: String, hint: String?, button: String, onClick: () -> Unit) {
+    DeckRow(label, hint) { DeckButton(button, Modifier.widthIn(min = 120.dp), primary = false, onClick = onClick) }
+}
+
+/** Saklar yang menyimpan posisinya sendiri: untuk nilai Cfg yang tidak memicu rekomposisi saat ditulis. */
+@Composable
+fun DeckSwitchRow(label: String, hint: String?, initial: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
+    var v by remember(initial) { mutableStateOf(initial) }
+    DeckToggleRow(label, hint, v, enabled) { v = it; onChange(it) }
+}
+
+/** Baris informasi baca-saja: label di kiri, nilai di kanan. */
+@Composable
+fun DeckInfoRow(label: String, value: String) {
+    val colors = MaterialTheme.colorScheme
+    DeckRow(label, null) { Text(value, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, color = colors.onBackground) }
 }

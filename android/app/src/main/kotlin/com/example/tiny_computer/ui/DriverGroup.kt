@@ -19,8 +19,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Impor + pilih driver seperti halaman Driver DroidDeck: satu tombol "Impor" menerima zip/tzst
- * (Linux, Android, atau bundel keduanya), lalu dua daftar pilihan:
+ * Impor + pilih driver seperti halaman Driver DroidDeck: satu tombol "Import" menerima zip/tzst
+ * (Linux, Android, atau bundel keduanya), lalu dua dropdown pilihan:
  * driver Vulkan di dalam kontainer (Linux/glibc) dan driver tampilan compositor (Android/Turnip).
  * Berlaku pada peluncuran berikutnya.
  */
@@ -52,31 +52,32 @@ fun DriverGroup() {
         }
     }
 
-    Group(stringResource(R.string.tc_drv_title)) {
-        HintText(stringResource(R.string.tc_drv_hint))
-        ActionRow(stringResource(if (busy) R.string.tc_drv_importing else R.string.tc_drv_import)) {
-            if (!busy) picker.launch(arrayOf("application/zip", "application/octet-stream", "application/x-zstd", "*/*"))
-        }
-        Div()
-        ChipChoiceRow(
-            stringResource(R.string.tc_drv_linux),
+    DeckGroup(stringResource(R.string.tc_drv_title)) {
+        DeckNote(stringResource(R.string.tc_drv_hint))
+        DeckActionRow(
+            stringResource(R.string.tc_drv_import), null,
+            stringResource(if (busy) R.string.tc_drv_importing else R.string.tc_btn_import),
+        ) { if (!busy) picker.launch(arrayOf("application/zip", "application/octet-stream", "application/x-zstd", "*/*")) }
+
+        DeckChoiceRow(
+            stringResource(R.string.tc_drv_linux), null,
             listOf("" to stringResource(R.string.tc_drv_auto)) + linux.map { it to VulkanDrivers.label(ctx, it, true) },
             if (linuxSel in linux) linuxSel else "",
         ) { linuxSel = it; Cfg.linuxDriver = it }
         if (linuxSel.isNotEmpty() && linuxSel in linux) {
-            ActionRow(stringResource(R.string.tc_drv_remove)) {
+            DeckActionRow(stringResource(R.string.tc_drv_remove), VulkanDrivers.label(ctx, linuxSel, true), stringResource(R.string.tc_btn_remove)) {
                 VulkanDrivers.removeLinux(ctx, linuxSel); linuxSel = ""; linux = VulkanDrivers.installedLinux(ctx)
             }
         }
-        Div()
-        ChipChoiceRow(
-            stringResource(R.string.tc_drv_android),
+
+        DeckChoiceRow(
+            stringResource(R.string.tc_drv_android), null,
             listOf("" to stringResource(R.string.tc_drv_auto)) + android.map { it to VulkanDrivers.label(ctx, it, false) },
             if (androidSel in android) androidSel else "",
         ) { androidSel = it; Cfg.androidDriver = it }
         // driver bawaan APK (turnip25.1.0 / turnip-sdk36) tidak dihapus; hanya hasil impor
         if (androidSel.isNotEmpty() && androidSel in android && androidSel !in BUNDLED) {
-            ActionRow(stringResource(R.string.tc_drv_remove)) {
+            DeckActionRow(stringResource(R.string.tc_drv_remove), VulkanDrivers.label(ctx, androidSel, false), stringResource(R.string.tc_btn_remove)) {
                 VulkanDrivers.removeAndroid(ctx, androidSel); androidSel = ""; android = VulkanDrivers.installedAndroid(ctx)
             }
         }

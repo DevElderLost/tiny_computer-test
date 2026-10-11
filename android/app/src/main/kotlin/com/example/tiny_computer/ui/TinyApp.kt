@@ -242,14 +242,11 @@ private fun HomeScreen(onOpen: () -> Unit, onSettings: () -> Unit) {
         }
     }
     val session: @Composable () -> Unit = {
-        Group(stringResource(R.string.tc_group_session)) {
-            InfoRow(stringResource(R.string.tc_home_resolution), "$w × $h")
-            Div()
-            InfoRow(stringResource(R.string.tc_home_pad), stringResource(if (Cfg.padIdentity == "deck") R.string.tc_ctrl_deck else R.string.tc_ctrl_xbox))
-            Div()
-            InfoRow(stringResource(R.string.tc_home_driver), Cfg.androidDriver.ifEmpty { stringResource(R.string.tc_home_driver_auto) })
-            Div()
-            InfoRow(stringResource(R.string.tc_home_linux_driver), Cfg.linuxDriver.ifEmpty { stringResource(R.string.tc_home_driver_auto) })
+        DeckGroup(stringResource(R.string.tc_group_session)) {
+            DeckInfoRow(stringResource(R.string.tc_home_resolution), "$w × $h")
+            DeckInfoRow(stringResource(R.string.tc_home_pad), stringResource(if (Cfg.padIdentity == "deck") R.string.tc_ctrl_deck else R.string.tc_ctrl_xbox))
+            DeckInfoRow(stringResource(R.string.tc_home_driver), Cfg.androidDriver.ifEmpty { stringResource(R.string.tc_home_driver_auto) })
+            DeckInfoRow(stringResource(R.string.tc_home_linux_driver), Cfg.linuxDriver.ifEmpty { stringResource(R.string.tc_home_driver_auto) })
         }
     }
     val note: @Composable () -> Unit = {

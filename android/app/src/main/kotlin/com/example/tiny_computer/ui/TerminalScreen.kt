@@ -126,8 +126,8 @@ private fun CommandsDialog(onDismiss: () -> Unit, onRun: (String) -> Unit) {
         text = {
             if (adding) {
                 Column {
-                    TextRow(stringResource(R.string.tc_ui_command_name), name) { name = it }
-                    TextRow(stringResource(R.string.tc_ui_command_content), cmd, multiline = true) { cmd = it }
+                    DeckTextRow(stringResource(R.string.tc_ui_command_name), name) { name = it }
+                    DeckTextRow(stringResource(R.string.tc_ui_command_content), cmd, multiline = true) { cmd = it }
                 }
             } else {
                 LazyColumn {

@@ -136,7 +136,7 @@ fun ShortcutScreen(onLaunch: (String) -> Unit) {
             if (ready && list != null) stringResource(R.string.tc_sc_count, list.count { !it.system }) else stringResource(R.string.tc_sc_hint),
         )
         when {
-            !ready -> Group { HintText(stringResource(R.string.tc_sc_not_ready)) }
+            !ready -> DeckGroup(stringResource(R.string.tc_nav_shortcut)) { DeckNote(stringResource(R.string.tc_sc_not_ready)) }
             list == null -> Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = pal.signal)
             }
@@ -296,15 +296,15 @@ private fun AppSettingsDialog(app: DesktopApps.App, onRemoved: () -> Unit, onDis
                 }
                 HintText(stringResource(R.string.tc_sc_settings_hint))
 
-                Group(stringResource(R.string.tc_sc_group_launch)) {
-                    TextRow(stringResource(R.string.tc_sc_name), s.name) { update(s.copy(name = it)) }
-                    TextRow(stringResource(R.string.tc_sc_args), s.args) { update(s.copy(args = it)) }
-                    TextRow(stringResource(R.string.tc_sc_workdir), s.workDir) { update(s.copy(workDir = it)) }
-                    TextRow(stringResource(R.string.tc_sc_env), s.env, multiline = true) { update(s.copy(env = it)) }
+                DeckGroup(stringResource(R.string.tc_sc_group_launch)) {
+                    DeckTextRow(stringResource(R.string.tc_sc_name), s.name) { update(s.copy(name = it)) }
+                    DeckTextRow(stringResource(R.string.tc_sc_args), s.args) { update(s.copy(args = it)) }
+                    DeckTextRow(stringResource(R.string.tc_sc_workdir), s.workDir) { update(s.copy(workDir = it)) }
+                    DeckTextRow(stringResource(R.string.tc_sc_env), s.env, multiline = true) { update(s.copy(env = it)) }
                 }
-                Group(stringResource(R.string.tc_sc_group_display)) {
-                    ChipChoiceRow(
-                        stringResource(R.string.tc_sc_gpu),
+                DeckGroup(stringResource(R.string.tc_sc_group_display)) {
+                    DeckChoiceRow(
+                        stringResource(R.string.tc_sc_gpu), null,
                         listOf(
                             ShortcutPrefs.DEFAULT to def,
                             ShortcutPrefs.GPU_SOFTWARE to stringResource(R.string.tc_sc_gpu_software),
@@ -312,21 +312,17 @@ private fun AppSettingsDialog(app: DesktopApps.App, onRemoved: () -> Unit, onDis
                         ),
                         s.gpu,
                     ) { update(s.copy(gpu = it)) }
-                    Div()
-                    ChipChoiceRow(
-                        stringResource(R.string.tc_sc_hidpi),
+                    DeckChoiceRow(
+                        stringResource(R.string.tc_sc_hidpi), null,
                         listOf(ShortcutPrefs.DEFAULT to def, ShortcutPrefs.ON to on, ShortcutPrefs.OFF to off),
                         s.hidpi,
                     ) { update(s.copy(hidpi = it)) }
-                    Div()
-                    ChipChoiceRow(
-                        stringResource(R.string.tc_pad_overlay),
+                    DeckChoiceRow(
+                        stringResource(R.string.tc_pad_overlay), null,
                         listOf(ShortcutPrefs.DEFAULT to def, ShortcutPrefs.ON to on, ShortcutPrefs.OFF to off),
                         s.pad,
                     ) { update(s.copy(pad = it)) }
-                }
-                Group {
-                    SwitchRow(stringResource(R.string.tc_sc_hide), s.hidden) { update(s.copy(hidden = it)) }
+                    DeckToggleRow(stringResource(R.string.tc_sc_hide), null, s.hidden) { update(s.copy(hidden = it)) }
                 }
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     DeckButton(stringResource(R.string.tc_sc_reset), Modifier.weight(1f), primary = false) {

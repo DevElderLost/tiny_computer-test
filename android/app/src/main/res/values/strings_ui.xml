@@ -368,4 +368,16 @@
     <string name="tc_wine_close">Close</string>
     <string name="tc_wine_filter_wine">Wine / Proton</string>
     <string name="tc_wine_failed">Failed: %1$s</string>
+    <!-- Pengaturan bergaya DroidDeck -->
+    <string name="tc_btn_import">Import</string>
+    <string name="tc_btn_download">Download</string>
+    <string name="tc_btn_remove">Remove</string>
+    <string name="tc_btn_reset">Reset</string>
+    <string name="tc_btn_run">Run</string>
+    <string name="tc_opt_panel_rate">Panel rate</string>
+    <string name="tc_opt_custom">Custom</string>
+    <string name="tc_opt_automatic">Automatic</string>
+    <string name="tc_theme_label">Theme</string>
+    <string name="tc_disp_resolution">Output resolution</string>
+    <string name="tc_wine_filter_label">Type</string>
 </resources>
