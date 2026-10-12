@@ -67,7 +67,7 @@
     <string name="tc_ui_turnip_env_var">Turnip Environment Variables</string>
     <string name="tc_ui_enable_turnip_zink">Enable Turnip+Zink Drivers</string>
     <string name="tc_ui_enable_d_r_i3">Enable DRI3</string>
-    <string name="tc_ui_dri3_requirement">DRI3 requires Termux:X11 and Turnip</string>
+    <string name="tc_ui_dri3_requirement">DRI3 requires Turnip, and Termux:X11 or the bundled DRM-less Xwayland (patch.tzst)</string>
     <string name="tc_ui_windows_app_support">Windows App Support</string>
     <string name="tc_ui_hangover_description">Run Windows apps using Hangover (running cross-arch apps on native Wine)!\n\nRunning Windows programs requires two layers of emulation (arch + system) - don\'t expect good performance!\n\nFor better speed, try enabling Graphics Acceleration. Crashes or failures are normal.\n\nRecommend moving Windows programs to desktop before running.\n\nBe patient. Even if GUI shows nothing. Check terminal - is it still running or stopped with error?\n\nOr check if the Windows app has official Linux arm64 version.</string>
     <string name="tc_ui_install_hangover_stable">Install Hangover</string>

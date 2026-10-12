@@ -1,0 +1,700 @@
+From: DevElderLost
+Subject: [PATCH] xwayland: DRI3 without DRM (wl_shm + optional linux-dmabuf zero-copy)
+
+Xwayland only exposes DRI3 through glamor/GBM, which needs a DRM render
+node. Without /dev/dri (proot on Android) clients get no DRI3 at all.
+
+Register DRI3 1.2 on the plain wl_shm path when glamor is unavailable:
+ - DRI3Open is refused, only DRM_FORMAT_MOD_LINEAR is advertised
+ - PixmapFromBuffers mmap()s the client's dma-buf as pixmap storage,
+   so Present can always copy it (DMA_BUF_IOCTL_SYNC around CPU reads)
+ - if the compositor offers linux-dmabuf with LINEAR for the format, a
+   wl_buffer is also created asynchronously so Present can flip with
+   zero copies; on failure the copy path is kept
+ - env XWL_NODRM_DRI3=0 disables, XWL_NODRM_DRI3_ZEROCOPY=0 copy only
+
+Base: xwayland 24.1.6 (Debian trixie). Apply with: patch -p1
+---
+diff -urN -x build xwayland-24.1.6.orig/hw/xwayland/meson.build xwayland-24.1.6/hw/xwayland/meson.build
+--- a/hw/xwayland/meson.build
++++ b/hw/xwayland/meson.build
+@@ -6,6 +6,8 @@
+     'xwayland-cursor.h',
+     'xwayland-drm-lease.h',
+     'xwayland-drm-lease.c',
++    'xwayland-dri3-nodrm.c',
++    'xwayland-dri3-nodrm.h',
+     'xwayland-glamor.h',
+     'xwayland-pixmap.c',
+     'xwayland-pixmap.h',
+diff -urN -x build xwayland-24.1.6.orig/hw/xwayland/xwayland-dri3-nodrm.c xwayland-24.1.6/hw/xwayland/xwayland-dri3-nodrm.c
+--- /dev/null
++++ b/hw/xwayland/xwayland-dri3-nodrm.c
+@@ -0,0 +1,540 @@
++/*
++ * Copyright © 2026 DevElderLost
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a
++ * copy of this software and associated documentation files (the "Software"),
++ * to deal in the Software without restriction, including without limitation
++ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
++ * and/or sell copies of the Software, and to permit persons to whom the
++ * Software is furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice (including the next
++ * paragraph) shall be included in all copies or substantial portions of the
++ * Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
++ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
++ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
++ * IN THE SOFTWARE.
++ */
++
++#include <xwayland-config.h>
++
++#include "xwayland-dri3-nodrm.h"
++
++#ifdef DRI3
++
++#include <errno.h>
++#include <fcntl.h>
++#include <stdlib.h>
++#include <string.h>
++#include <unistd.h>
++#include <sys/ioctl.h>
++#include <sys/mman.h>
++#include <linux/dma-buf.h>
++#include <drm_fourcc.h>
++
++#include <dri3.h>
++#include <fb.h>
++#include <os.h>
++#include <privates.h>
++#include <scrnintstr.h>
++
++#include "xwayland-pixmap.h"
++#include "xwayland-screen.h"
++
++#include "linux-dmabuf-unstable-v1-client-protocol.h"
++
++/*
++ * Per-pixmap state of a pixmap created by DRI3 PixmapFromBuffers.
++ */
++struct xwl_nodrm_pixmap {
++    PixmapPtr pixmap;           /* only valid while !orphan */
++    int fd;                     /* our own (CLOEXEC) dup of the client's dma-buf */
++    void *map;                  /* mmap() of the whole range [0, offset + stride * height) */
++    size_t map_len;
++    uint32_t offset;
++    uint32_t stride;
++    uint32_t format;            /* DRM fourcc used for the wl_buffer */
++    struct wl_buffer *buffer;   /* zero-copy buffer, NULL until the compositor accepted it */
++    struct zwp_linux_buffer_params_v1 *params;  /* create request in flight */
++    Bool orphan;                /* pixmap destroyed while @params was in flight */
++    Bool cpu_access;            /* DMA_BUF_SYNC_START without a matching END */
++};
++
++#define MAX_LINEAR_FORMATS 16
++
++static struct {
++    DevPrivateKeyRec key;
++    DestroyPixmapProcPtr DestroyPixmap;
++    SourceValidateProcPtr SourceValidate;
++
++    /* The linux-dmabuf global, recorded while the registry is enumerated */
++    Bool have_global;
++    uint32_t global_id;
++    uint32_t global_version;
++
++    /* Our own binding (version 3: format/modifier events, no DRM device needed) */
++    struct zwp_linux_dmabuf_v1 *dmabuf;
++    uint32_t linear_formats[MAX_LINEAR_FORMATS];
++    int num_linear_formats;
++
++    Bool zerocopy;
++    Bool warned_modifier;
++} nodrm;
++
++static struct xwl_nodrm_pixmap *
++xwl_nodrm_pixmap_get(PixmapPtr pixmap)
++{
++    if (!nodrm.key.initialized)
++        return NULL;
++
++    return dixLookupPrivate(&pixmap->devPrivates, &nodrm.key);
++}
++
++Bool
++xwl_nodrm_dri3_is_pixmap(PixmapPtr pixmap)
++{
++    return xwl_nodrm_pixmap_get(pixmap) != NULL;
++}
++
++/* ---------------------------------------------------------------------- */
++/* CPU access to the dma-buf                                              */
++/* ---------------------------------------------------------------------- */
++
++static void
++xwl_nodrm_sync(struct xwl_nodrm_pixmap *priv, uint64_t flags)
++{
++    struct dma_buf_sync sync = { .flags = flags };
++    int ret;
++
++    do {
++        ret = ioctl(priv->fd, DMA_BUF_IOCTL_SYNC, &sync);
++    } while (ret < 0 && errno == EINTR);
++    /* Failure is not fatal: not every exporter implements the sync ioctl
++     * and the ones that do not are coherent anyway. */
++}
++
++/*
++ * Present falls back to CopyArea() from the client's pixmap into the window
++ * when it cannot flip. That reads the dma-buf through the CPU mapping, so
++ * bracket it with DMA_BUF_IOCTL_SYNC. There is no hook after the copy, so
++ * the END of one access is issued right before the START of the next one
++ * (and when the pixmap goes away); the access is read-only, so END has
++ * nothing to flush.
++ */
++static void
++xwl_nodrm_source_validate(DrawablePtr drawable, int x, int y, int w, int h,
++                          unsigned int subWindowMode)
++{
++    if (drawable->type == DRAWABLE_PIXMAP) {
++        struct xwl_nodrm_pixmap *priv =
++            xwl_nodrm_pixmap_get((PixmapPtr) drawable);
++
++        if (priv) {
++            if (priv->cpu_access)
++                xwl_nodrm_sync(priv, DMA_BUF_SYNC_END | DMA_BUF_SYNC_READ);
++            xwl_nodrm_sync(priv, DMA_BUF_SYNC_START | DMA_BUF_SYNC_READ);
++            priv->cpu_access = TRUE;
++        }
++    }
++
++    if (nodrm.SourceValidate)
++        nodrm.SourceValidate(drawable, x, y, w, h, subWindowMode);
++}
++
++/* ---------------------------------------------------------------------- */
++/* linux-dmabuf (compositor side, zero-copy flips)                        */
++/* ---------------------------------------------------------------------- */
++
++static void
++xwl_nodrm_dmabuf_format(void *data, struct zwp_linux_dmabuf_v1 *dmabuf,
++                        uint32_t format)
++{
++}
++
++static void
++xwl_nodrm_dmabuf_modifier(void *data, struct zwp_linux_dmabuf_v1 *dmabuf,
++                          uint32_t format, uint32_t modifier_hi,
++                          uint32_t modifier_lo)
++{
++    int i;
++
++    if (((uint64_t) modifier_hi << 32 | modifier_lo) != DRM_FORMAT_MOD_LINEAR)
++        return;
++
++    for (i = 0; i < nodrm.num_linear_formats; i++)
++        if (nodrm.linear_formats[i] == format)
++            return;
++
++    if (nodrm.num_linear_formats < MAX_LINEAR_FORMATS)
++        nodrm.linear_formats[nodrm.num_linear_formats++] = format;
++}
++
++static const struct zwp_linux_dmabuf_v1_listener xwl_nodrm_dmabuf_listener = {
++    .format = xwl_nodrm_dmabuf_format,
++    .modifier = xwl_nodrm_dmabuf_modifier,
++};
++
++static Bool
++xwl_nodrm_compositor_takes_linear(uint32_t format)
++{
++    int i;
++
++    for (i = 0; i < nodrm.num_linear_formats; i++)
++        if (nodrm.linear_formats[i] == format)
++            return TRUE;
++
++    return FALSE;
++}
++
++static void
++xwl_nodrm_free_priv(struct xwl_nodrm_pixmap *priv)
++{
++    free(priv);
++}
++
++static const struct wl_buffer_listener xwl_nodrm_buffer_listener = {
++    xwl_pixmap_buffer_release_cb,
++};
++
++static void
++xwl_nodrm_params_created(void *data, struct zwp_linux_buffer_params_v1 *params,
++                         struct wl_buffer *buffer)
++{
++    struct xwl_nodrm_pixmap *priv = data;
++
++    zwp_linux_buffer_params_v1_destroy(params);
++    priv->params = NULL;
++
++    if (priv->orphan) {
++        /* The pixmap died while the request was in flight */
++        wl_buffer_destroy(buffer);
++        xwl_nodrm_free_priv(priv);
++        return;
++    }
++
++    priv->buffer = buffer;
++    wl_buffer_add_listener(buffer, &xwl_nodrm_buffer_listener, priv->pixmap);
++}
++
++static void
++xwl_nodrm_params_failed(void *data, struct zwp_linux_buffer_params_v1 *params)
++{
++    struct xwl_nodrm_pixmap *priv = data;
++
++    zwp_linux_buffer_params_v1_destroy(params);
++    priv->params = NULL;
++
++    /* Not fatal: Present keeps copying through the CPU mapping */
++    if (priv->orphan)
++        xwl_nodrm_free_priv(priv);
++}
++
++static const struct zwp_linux_buffer_params_v1_listener xwl_nodrm_params_listener = {
++    .created = xwl_nodrm_params_created,
++    .failed = xwl_nodrm_params_failed,
++};
++
++/*
++ * Ask the compositor to wrap the dma-buf. Uses the asynchronous create so a
++ * buffer the compositor cannot import costs nothing but the zero-copy
++ * path (create_immed would raise a fatal protocol error instead).
++ */
++static void
++xwl_nodrm_request_wl_buffer(struct xwl_nodrm_pixmap *priv, PixmapPtr pixmap)
++{
++    struct zwp_linux_buffer_params_v1 *params;
++
++    if (!nodrm.zerocopy || !nodrm.dmabuf ||
++        !xwl_nodrm_compositor_takes_linear(priv->format))
++        return;
++
++    params = zwp_linux_dmabuf_v1_create_params(nodrm.dmabuf);
++    if (!params)
++        return;
++
++    zwp_linux_buffer_params_v1_add(params, priv->fd, 0, priv->offset,
++                                   priv->stride, 0, 0 /* LINEAR */);
++    zwp_linux_buffer_params_v1_add_listener(params,
++                                            &xwl_nodrm_params_listener, priv);
++    zwp_linux_buffer_params_v1_create(params,
++                                      pixmap->drawable.width,
++                                      pixmap->drawable.height,
++                                      priv->format, 0);
++    priv->params = params;
++}
++
++struct wl_buffer *
++xwl_nodrm_dri3_pixmap_get_wl_buffer(PixmapPtr pixmap)
++{
++    struct xwl_nodrm_pixmap *priv = xwl_nodrm_pixmap_get(pixmap);
++
++    /* NULL until the compositor accepted the dma-buf: Present then copies */
++    return priv ? priv->buffer : NULL;
++}
++
++/* ---------------------------------------------------------------------- */
++/* DRI3 callbacks                                                         */
++/* ---------------------------------------------------------------------- */
++
++static PixmapPtr
++xwl_nodrm_pixmap_from_fds(ScreenPtr screen, CARD8 num_fds, const int *fds,
++                          CARD16 width, CARD16 height,
++                          const CARD32 *strides, const CARD32 *offsets,
++                          CARD8 depth, CARD8 bpp, CARD64 modifier)
++{
++    struct xwl_nodrm_pixmap *priv;
++    PixmapPtr pixmap;
++    uint64_t needed;
++
++    /* Single plane, 32 bits per pixel (XRGB8888 / ARGB8888) only */
++    if (num_fds != 1 || width == 0 || height == 0 ||
++        (depth != 24 && depth != 32) || bpp != 32 ||
++        strides[0] < (uint32_t) width * 4 || (strides[0] & 3) ||
++        (offsets[0] & 3))
++        return NULL;
++
++    /*
++     * Only LINEAR was advertised, so a conforming client cannot have used
++     * anything else. Some clients (Mesa patched for DRM-less X servers)
++     * send a private placeholder value instead of the negotiated one; the
++     * layout is still the advertised linear one, so accept it.
++     */
++    if (modifier != DRM_FORMAT_MOD_LINEAR &&
++        modifier != DRM_FORMAT_MOD_INVALID && !nodrm.warned_modifier) {
++        LogMessage(X_INFO, "xwayland: dri3 without DRM: client sent modifier "
++                   "0x%llx, treating the buffer as linear\n",
++                   (unsigned long long) modifier);
++        nodrm.warned_modifier = TRUE;
++    }
++
++    needed = (uint64_t) offsets[0] + (uint64_t) strides[0] * height;
++    if (needed > INT32_MAX)
++        return NULL;
++
++    priv = calloc(1, sizeof(*priv));
++    if (!priv)
++        return NULL;
++
++    priv->fd = fcntl(fds[0], F_DUPFD_CLOEXEC, 3);
++    if (priv->fd < 0)
++        goto err_free;
++
++    priv->offset = offsets[0];
++    priv->stride = strides[0];
++    priv->map_len = needed;
++    priv->format = depth == 24 ? DRM_FORMAT_XRGB8888 : DRM_FORMAT_ARGB8888;
++
++    priv->map = mmap(NULL, priv->map_len, PROT_READ | PROT_WRITE, MAP_SHARED,
++                     priv->fd, 0);
++    if (priv->map == MAP_FAILED) {
++        ErrorF("xwayland: dri3 without DRM: mmap of the client buffer failed "
++               "(%s); the buffer must be CPU-mappable\n", strerror(errno));
++        goto err_close;
++    }
++
++    pixmap = fbCreatePixmap(screen, 0, 0, depth, 0);
++    if (!pixmap)
++        goto err_unmap;
++
++    if (!(*screen->ModifyPixmapHeader)(pixmap, width, height, depth, bpp,
++                                       priv->stride,
++                                       (char *) priv->map + priv->offset)) {
++        fbDestroyPixmap(pixmap);
++        goto err_unmap;
++    }
++
++    priv->pixmap = pixmap;
++    dixSetPrivate(&pixmap->devPrivates, &nodrm.key, priv);
++    xwl_nodrm_request_wl_buffer(priv, pixmap);
++
++    return pixmap;
++
++ err_unmap:
++    munmap(priv->map, priv->map_len);
++ err_close:
++    close(priv->fd);
++ err_free:
++    free(priv);
++    return NULL;
++}
++
++static int
++xwl_nodrm_fds_from_pixmap(ScreenPtr screen, PixmapPtr pixmap, int *fds,
++                          uint32_t *strides, uint32_t *offsets,
++                          uint64_t *modifier)
++{
++    struct xwl_nodrm_pixmap *priv = xwl_nodrm_pixmap_get(pixmap);
++
++    /* Pixmaps made by the server itself have no dma-buf */
++    if (!priv)
++        return 0;
++
++    fds[0] = fcntl(priv->fd, F_DUPFD_CLOEXEC, 3);
++    if (fds[0] < 0)
++        return 0;
++
++    strides[0] = priv->stride;
++    offsets[0] = priv->offset;
++    *modifier = DRM_FORMAT_MOD_LINEAR;
++    return 1;
++}
++
++static Bool
++xwl_nodrm_format_supported(uint32_t format)
++{
++    return format == DRM_FORMAT_XRGB8888 || format == DRM_FORMAT_ARGB8888;
++}
++
++static int
++xwl_nodrm_get_formats(ScreenPtr screen, CARD32 *num_formats, CARD32 **formats)
++{
++    CARD32 *list = calloc(2, sizeof(CARD32));
++
++    if (!list)
++        return FALSE;
++
++    list[0] = DRM_FORMAT_XRGB8888;
++    list[1] = DRM_FORMAT_ARGB8888;
++    *num_formats = 2;
++    *formats = list;
++    return TRUE;
++}
++
++static int
++xwl_nodrm_get_modifiers(ScreenPtr screen, uint32_t format,
++                        uint32_t *num_modifiers, uint64_t **modifiers)
++{
++    uint64_t *list;
++
++    if (!xwl_nodrm_format_supported(format))
++        return FALSE;
++
++    list = calloc(1, sizeof(uint64_t));
++    if (!list)
++        return FALSE;
++
++    list[0] = DRM_FORMAT_MOD_LINEAR;
++    *num_modifiers = 1;
++    *modifiers = list;
++    return TRUE;
++}
++
++static int
++xwl_nodrm_get_drawable_modifiers(DrawablePtr drawable, uint32_t format,
++                                 uint32_t *num_modifiers, uint64_t **modifiers)
++{
++    /* No per-window restriction: the screen-wide list applies */
++    *num_modifiers = 0;
++    *modifiers = NULL;
++    return TRUE;
++}
++
++static dri3_screen_info_rec xwl_nodrm_dri3_info = {
++    .version = 2,
++    .open = NULL,               /* no DRM fd to hand out */
++    .open_client = NULL,
++    .pixmap_from_fds = xwl_nodrm_pixmap_from_fds,
++    .fds_from_pixmap = xwl_nodrm_fds_from_pixmap,
++    .get_formats = xwl_nodrm_get_formats,
++    .get_modifiers = xwl_nodrm_get_modifiers,
++    .get_drawable_modifiers = xwl_nodrm_get_drawable_modifiers,
++};
++
++/* ---------------------------------------------------------------------- */
++/* Pixmap lifetime                                                        */
++/* ---------------------------------------------------------------------- */
++
++static Bool
++xwl_nodrm_destroy_pixmap(PixmapPtr pixmap)
++{
++    struct xwl_nodrm_pixmap *priv = xwl_nodrm_pixmap_get(pixmap);
++
++    if (priv && pixmap->refcnt == 1) {
++        xwl_pixmap_del_buffer_release_cb(pixmap);
++        dixSetPrivate(&pixmap->devPrivates, &nodrm.key, NULL);
++
++        if (priv->buffer)
++            wl_buffer_destroy(priv->buffer);
++        priv->buffer = NULL;
++
++        if (priv->cpu_access)
++            xwl_nodrm_sync(priv, DMA_BUF_SYNC_END | DMA_BUF_SYNC_READ);
++
++        munmap(priv->map, priv->map_len);
++        close(priv->fd);
++
++        if (priv->params)
++            priv->orphan = TRUE;    /* freed by the created/failed event */
++        else
++            xwl_nodrm_free_priv(priv);
++    }
++
++    return nodrm.DestroyPixmap(pixmap);
++}
++
++/* ---------------------------------------------------------------------- */
++/* Setup                                                                  */
++/* ---------------------------------------------------------------------- */
++
++void
++xwl_nodrm_dri3_registry_global(struct xwl_screen *xwl_screen,
++                               const char *interface,
++                               uint32_t id, uint32_t version)
++{
++    if (strcmp(interface, zwp_linux_dmabuf_v1_interface.name) == 0 &&
++        version >= 3) {
++        nodrm.have_global = TRUE;
++        nodrm.global_id = id;
++        nodrm.global_version = version;
++    }
++}
++
++Bool
++xwl_nodrm_dri3_init(struct xwl_screen *xwl_screen)
++{
++    ScreenPtr screen = xwl_screen->screen;
++    const char *env;
++
++    env = getenv("XWL_NODRM_DRI3");
++    if (env && strcmp(env, "0") == 0)
++        return FALSE;
++
++    if (!dixRegisterPrivateKey(&nodrm.key, PRIVATE_PIXMAP, 0))
++        return FALSE;
++
++    if (!dri3_screen_init(screen, &xwl_nodrm_dri3_info)) {
++        ErrorF("xwayland: failed to initialize DRI3 without DRM\n");
++        return FALSE;
++    }
++
++    nodrm.DestroyPixmap = screen->DestroyPixmap;
++    screen->DestroyPixmap = xwl_nodrm_destroy_pixmap;
++
++    nodrm.SourceValidate = screen->SourceValidate;
++    screen->SourceValidate = xwl_nodrm_source_validate;
++
++    /* Zero-copy flips are optional: they need the compositor's linux-dmabuf */
++    env = getenv("XWL_NODRM_DRI3_ZEROCOPY");
++    nodrm.zerocopy = !(env && strcmp(env, "0") == 0);
++
++    if (nodrm.zerocopy && nodrm.have_global && xwl_screen->registry) {
++        nodrm.dmabuf = wl_registry_bind(xwl_screen->registry,
++                                        nodrm.global_id,
++                                        &zwp_linux_dmabuf_v1_interface, 3);
++        if (nodrm.dmabuf)
++            zwp_linux_dmabuf_v1_add_listener(nodrm.dmabuf,
++                                             &xwl_nodrm_dmabuf_listener, NULL);
++    }
++
++    LogMessage(X_INFO, "xwayland: DRI3 enabled without DRM (%s)\n",
++               nodrm.dmabuf ? "copy, zero-copy flips when the compositor "
++                              "accepts linear dma-bufs" : "copy only");
++    return TRUE;
++}
++
++#endif /* DRI3 */
+diff -urN -x build xwayland-24.1.6.orig/hw/xwayland/xwayland-dri3-nodrm.h xwayland-24.1.6/hw/xwayland/xwayland-dri3-nodrm.h
+--- /dev/null
++++ b/hw/xwayland/xwayland-dri3-nodrm.h
+@@ -0,0 +1,70 @@
++/*
++ * Copyright © 2026 DevElderLost
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a
++ * copy of this software and associated documentation files (the "Software"),
++ * to deal in the Software without restriction, including without limitation
++ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
++ * and/or sell copies of the Software, and to permit persons to whom the
++ * Software is furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice (including the next
++ * paragraph) shall be included in all copies or substantial portions of the
++ * Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
++ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
++ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
++ * IN THE SOFTWARE.
++ */
++
++#ifndef XWAYLAND_DRI3_NODRM_H
++#define XWAYLAND_DRI3_NODRM_H
++
++#include <xwayland-config.h>
++
++#include <wayland-client.h>
++
++#include "pixmapstr.h"
++#include "xwayland-types.h"
++
++/*
++ * DRI3 without a DRM device.
++ *
++ * Stock Xwayland only offers DRI3 through glamor/GBM, which needs a DRM
++ * render node. Environments without /dev/dri (proot on Android, containers)
++ * therefore get no DRI3 at all and clients fall back to MIT-SHM / DRI2.
++ *
++ * This backend registers DRI3 1.2 on top of the plain wl_shm code path:
++ *  - DRI3Open is refused (there is no DRM fd to hand out); clients that
++ *    skip it (Mesa Vulkan WSI) keep working.
++ *  - Only DRM_FORMAT_MOD_LINEAR is advertised, so every client buffer is
++ *    CPU-readable.
++ *  - PixmapFromBuffers wraps the client's dma-buf: the fd is mmap()ed and
++ *    becomes the pixmap storage, so Present can always copy it.
++ *  - When the compositor advertises linux-dmabuf for that format with
++ *    LINEAR, a wl_buffer is also created from the same fd so Present can
++ *    flip it with zero copies. If that fails the copy path is used.
++ */
++
++#ifdef DRI3
++Bool xwl_nodrm_dri3_init(struct xwl_screen *xwl_screen);
++void xwl_nodrm_dri3_registry_global(struct xwl_screen *xwl_screen,
++                                    const char *interface,
++                                    uint32_t id, uint32_t version);
++Bool xwl_nodrm_dri3_is_pixmap(PixmapPtr pixmap);
++struct wl_buffer *xwl_nodrm_dri3_pixmap_get_wl_buffer(PixmapPtr pixmap);
++#else
++static inline Bool xwl_nodrm_dri3_init(struct xwl_screen *s) { return FALSE; }
++static inline void xwl_nodrm_dri3_registry_global(struct xwl_screen *s,
++                                                  const char *i,
++                                                  uint32_t id, uint32_t v) { }
++static inline Bool xwl_nodrm_dri3_is_pixmap(PixmapPtr p) { return FALSE; }
++static inline struct wl_buffer *
++xwl_nodrm_dri3_pixmap_get_wl_buffer(PixmapPtr p) { return NULL; }
++#endif /* DRI3 */
++
++#endif /* XWAYLAND_DRI3_NODRM_H */
+diff -urN -x build xwayland-24.1.6.orig/hw/xwayland/xwayland-pixmap.c xwayland-24.1.6/hw/xwayland/xwayland-pixmap.c
+--- a/hw/xwayland/xwayland-pixmap.c
++++ b/hw/xwayland/xwayland-pixmap.c
+@@ -36,6 +36,7 @@
+ #ifdef XWL_HAS_GLAMOR
+ #include "xwayland-glamor.h"
+ #endif
++#include "xwayland-dri3-nodrm.h"
+ #include "xwayland-types.h"
+ #include "xwayland-pixmap.h"
+ #include "xwayland-screen.h"
+@@ -72,6 +73,9 @@
+         return xwl_glamor_pixmap_get_wl_buffer(pixmap);
+     else
+ #endif
++    if (xwl_nodrm_dri3_is_pixmap(pixmap))
++        return xwl_nodrm_dri3_pixmap_get_wl_buffer(pixmap);
++    else
+         return xwl_shm_pixmap_get_wl_buffer(pixmap);
+ }
+ 
+diff -urN -x build xwayland-24.1.6.orig/hw/xwayland/xwayland-screen.c xwayland-24.1.6/hw/xwayland/xwayland-screen.c
+--- a/hw/xwayland/xwayland-screen.c
++++ b/hw/xwayland/xwayland-screen.c
+@@ -46,6 +46,7 @@
+ #include <xserver_poll.h>
+ 
+ #include "xwayland-cursor.h"
++#include "xwayland-dri3-nodrm.h"
+ #include "xwayland-screen.h"
+ #include "xwayland-window.h"
+ #include "xwayland-input.h"
+@@ -484,6 +485,10 @@
+ {
+     struct xwl_screen *xwl_screen = data;
+ 
++    /* Remember linux-dmabuf for DRI3 without DRM, whether or not glamor
++     * binds it too (glamor may still fail to initialize later on) */
++    xwl_nodrm_dri3_registry_global(xwl_screen, interface, id, version);
++
+     if (strcmp(interface, wl_compositor_interface.name) == 0) {
+         uint32_t request_version = 1;
+ 
+@@ -1119,6 +1124,9 @@
+         pScreen->CreateScreenResources = xwl_shm_create_screen_resources;
+         pScreen->CreatePixmap = xwl_shm_create_pixmap;
+         pScreen->DestroyPixmap = xwl_shm_destroy_pixmap;
++
++        /* No glamor: offer DRI3 on top of the wl_shm path instead */
++        xwl_nodrm_dri3_init(xwl_screen);
+     }
+ 
+     xwl_screen->RealizeWindow = pScreen->RealizeWindow;

@@ -42,6 +42,8 @@ jobs:
       BUILD_TYPE: ${{ github.event_name == 'push' && 'release' || (inputs.build_type || 'release') }}
       NAME_SUFFIX: ${{ github.event_name == 'push' && '' || (inputs.name_suffix || '') }}
       RELEASE_TAG: ${{ inputs.release_tag || 'v1.1.0' }}
+      # Suite Debian rootfs; harus sama dengan rootfs yang dipakai app (sumber paket xwayland diambil dari sini)
+      XWAYLAND_SUITE: trixie
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -100,13 +102,55 @@ jobs:
           mkdir -p android/app/src/main/jniLibs/arm64-v8a
           unzip -o /tmp/dl/jniLibs.zip -d android/app/src/main/jniLibs/arm64-v8a
 
+      # ---- Xwayland dengan DRI3 tanpa DRM (extra/xwayland-dri3-nodrm) ----
+      # Dibangun di kontainer Debian arm64 (QEMU) dari sumber paket xwayland milik Debian + patch kita, supaya
+      # cocok dengan library rootfs. Hasil di-cache berdasarkan isi folder extra/xwayland-dri3-nodrm dan suite
+      # Debian, jadi build berikutnya melewati langkah lama ini. Bila gagal, APK tetap dibuat tanpa biner itu
+      # (Launcher otomatis memakai Xwayland bawaan rootfs).
+      - name: Cache Xwayland (DRI3 tanpa DRM)
+        id: xwl-cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/xwl-out
+          key: xwayland-nodrm-${{ env.XWAYLAND_SUITE }}-${{ hashFiles('extra/xwayland-dri3-nodrm/**') }}
+
+      - name: Setup QEMU (arm64)
+        if: steps.xwl-cache.outputs.cache-hit != 'true'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Build Xwayland (aarch64, DRI3 tanpa DRM)
+        if: steps.xwl-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        run: |
+          mkdir -p /tmp/xwl-out
+          if sh extra/xwayland-dri3-nodrm/build.sh /tmp/xwl-out; then
+            ls -lh /tmp/xwl-out
+          else
+            rm -rf /tmp/xwl-out/*
+            echo "::warning::Build Xwayland DRI3-tanpa-DRM gagal; APK dibuat tanpa tiny/extra/Xwayland (cek log langkah ini)."
+          fi
+
       # AGP/AAPT meng-gunzip asset berakhiran .gz lalu membuang akhiran-nya (patch.tar.gz -> patch.tar).
       # Supaya tidak bergantung pada perilaku itu, patch dari rilis dikonversi di sini: tar.gz -> tar.zst,
       # disimpan sebagai assets/patch.tzst (lebih kecil dari gzip). Rootfs mengenali zstd dari magic number.
-      - name: Convert patch.tar.gz -> assets/patch.tzst
+      # Xwayland hasil build di atas disisipkan ke tar yang sama sebagai tiny/extra/Xwayland sebelum dikompres,
+      # sehingga ikut terpasang bersama berkas extra lain (libvulkan_freedreno.so dst).
+      - name: Convert patch.tar.gz -> assets/patch.tzst (+ Xwayland)
         run: |
           sudo apt-get install -y zstd
-          gunzip -c /tmp/dl/patch.tar.gz | zstd -19 -T0 -q -f -o android/app/src/main/assets/patch.tzst
+          gunzip -c /tmp/dl/patch.tar.gz > /tmp/patch.tar
+          if [ -s /tmp/xwl-out/Xwayland ]; then
+            P=""; tar tf /tmp/patch.tar | grep -q '^\./' && P="./"
+            mkdir -p /tmp/xwl-stage/tiny/extra
+            cp /tmp/xwl-out/Xwayland /tmp/xwl-stage/tiny/extra/Xwayland
+            tar --append -f /tmp/patch.tar -C /tmp/xwl-stage --owner=0 --group=0 --mode=755 "${P}tiny/extra/Xwayland"
+            echo "Xwayland disisipkan: $(cat /tmp/xwl-out/Xwayland.version 2>/dev/null)"
+          else
+            echo "::warning::tiny/extra/Xwayland tidak ada; patch.tzst dibuat tanpa Xwayland DRI3-tanpa-DRM."
+          fi
+          zstd -19 -T0 -q -f /tmp/patch.tar -o android/app/src/main/assets/patch.tzst
           zstd -t android/app/src/main/assets/patch.tzst
           zstd -dc android/app/src/main/assets/patch.tzst | tar tf - | grep -q "tiny/extra/libvulkan_freedreno.so"
           ls -lh android/app/src/main/assets/patch.tzst
