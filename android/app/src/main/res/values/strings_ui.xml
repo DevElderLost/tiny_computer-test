@@ -385,6 +385,9 @@
     <!-- Wayland untuk Vulkan (Turnip) di desktop dan Wine -->
     <string name="tc_ui_desktop_wayland">Wayland for Vulkan apps in the desktop</string>
     <string name="tc_ui_desktop_wayland_hint">Open desktop exports WAYLAND_DISPLAY so SDL/Vulkan apps draw straight to the compositor (X11 via Xwayland has no DRI3 and fails on Turnip). GTK, Qt, Firefox and Electron stay on X11. Applies on next desktop start.</string>
+    <string name="tc_group_logs">Logs</string>
+    <string name="tc_ui_launch_log">Launch log (.txt)</string>
+    <string name="tc_ui_launch_log_hint">Writes a new log file for every proot session to Download/Wayland-logs (launch-*.log, next to the Wayland session logs): apps and .exe files started from Shortcut or Open desktop, with their output. Applies from the next container start.</string>
     <string name="tc_wine_display">Wine display driver</string>
     <string name="tc_wine_display_hint">Wayland draws straight to the compositor so Vulkan and DXVK work with Turnip; X11 is the fallback when the compositor is not running.</string>
     <string name="tc_wine_display_unsupported">This Wine build has no winewayland driver, so X11 (Xwayland) is used.</string>

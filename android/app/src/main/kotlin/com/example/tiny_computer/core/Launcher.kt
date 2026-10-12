@@ -37,6 +37,10 @@ object Launcher {
     /** True selama proot sesi aplikasi (Xwayland) masih hidup. */
     val appSessionStarted: Boolean get() = appSession?.isAlive == true
 
+    /** Berkas log peluncuran ([LaunchLog]) per sesi proot: shell kontainer (+ Open desktop) dan sesi aplikasi Shortcut. */
+    @Volatile private var containerLog: LaunchLog.Session? = null
+    @Volatile private var appSessionLog: LaunchLog.Session? = null
+
     /** Layanan sisi Android (getifaddrs bridge, virgl) yang dinyalakan sekali per proses aplikasi. */
     private val services = HashMap<String, Process>()
     private val spawnLock = Any()
@@ -350,7 +354,7 @@ pactl list short modules | grep 'module-loopback.*AndroidMic' | cut -f1 | xargs 
      * menyalakan layanan sisi Android yang dibutuhkannya bila belum berjalan. Dipakai bersama oleh shell
      * kontainer ([launchCurrentContainer]) dan proot terpisah milik Shortcut ([launchApp]).
      */
-    private fun guestSpec(ctx: Context): GuestSpec {
+    private fun guestSpec(ctx: Context, log: LaunchLog.Session? = null): GuestSpec {
         val data = TinyEnv.dataPath
         val idx = TinyEnv.currentContainer
         var extraMount = ""
@@ -415,6 +419,8 @@ $data/bin/virgl_test_server ${Cfg.defaultVirglCommand}""".trimIndent(),
         if (File(extraDir, "tiny_virtual_mic").isFile) {
             extraMount += "--mount=\$DATA_DIR/tiny/extra/tiny_virtual_mic:/home/tiny/.local/bin/tiny_virtual_mic "
         }
+        // log peluncuran: jalur berkas sesi untuk skrip Shortcut, shim Wine, dan Xsession desktop
+        extraOpt.append(LaunchLog.envFor(log))
         return GuestSpec(extraMount, extraOpt.toString())
     }
 
@@ -439,7 +445,11 @@ export PROOT_LOADER_32=${'$'}DATA_DIR/applib/libproot-loader32.so""".trimIndent(
         val idx = TinyEnv.currentContainer
         // pad virtual disiapkan ulang hanya bila tidak ada aplikasi Shortcut yang sedang memakainya
         if (!appSessionStarted) padCache = null
-        val spec = guestSpec(ctx)
+        LaunchLog.write(containerLog, "session", "diganti oleh sesi proot kontainer baru")
+        val log = LaunchLog.begin("container")
+        containerLog = log
+        LaunchLog.write(log, "session", "proot kontainer #$idx dimulai (shell kontainer + Open desktop)")
+        val spec = guestSpec(ctx, log)
         val boot = Containers.boot(idx, TinyEnv.defaultBoot)
         val term = TermSessions.forCurrent(ctx)
         term.writeLine(guestEnvScript(spec) + "\n" + boot + "\n" + TinyEnv.postCommand + "\nclear")
@@ -475,7 +485,11 @@ for i in ${'$'}(seq 1 150); do [ -S /tmp/wayland-0 ] && break; sleep 0.2; done
 # mencetak "Failed to attach to x11 shm" berulang bila X mengiklankan ekstensi ini.
 (XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0 Xwayland :4 -fullscreen -geometry ${w}x$h -noreset -ac +iglx -extension MIT-SHM > "${'$'}HOME/.vnc/xwayland.log" 2>&1 &)
 for i in ${'$'}(seq 1 150); do [ -S /tmp/.X11-unix/X4 ] && break; sleep 0.2; done
+if [ -n "${'$'}TINY_LAUNCH_LOG" ] && [ -w "${'$'}TINY_LAUNCH_LOG" ]; then
+(${sessionEnv}bash /etc/X11/xinit/Xsession 2>&1 | tee "${'$'}HOME/.vnc/x.log" >> "${'$'}TINY_LAUNCH_LOG") &
+else
 ${sessionEnv}bash /etc/X11/xinit/Xsession &> "${'$'}HOME/.vnc/x.log" &
+fi
 ${WsiWayland.probeForDesktop(sessionEnv)}
 """.trimIndent()
     }
@@ -487,6 +501,7 @@ ${WsiWayland.probeForDesktop(sessionEnv)}
         // mematikan anak-anaknya); `pkill` di guiCommand hanya jaring pengaman + jeda.
         if (replace) stopAppSession()
         guiStarted = true
+        LaunchLog.write(containerLog, "desktop", "Open desktop: Xwayland + Xsession dinyalakan" + if (replace) " (menggantikan sesi aplikasi Shortcut)" else "")
         // syarat ikon muncul di menu Shortcut: desktop pernah dibuka sekali
         Cfg.desktopOpenedOnce = true
         WsiWayland.install() // pembungkus vkcube/vkcubepp: --wsi wayland
@@ -502,6 +517,8 @@ ${WsiWayland.probeForDesktop(sessionEnv)}
     fun markStopped() {
         started = false
         guiStarted = false
+        LaunchLog.write(containerLog, "session", "shell kontainer berakhir")
+        containerLog = null
     }
 
     // ------------------------------------------------------------------ Shortcut: proot terpisah
@@ -540,8 +557,8 @@ ${WsiWayland.probeForDesktop(sessionEnv)}
      * Electron terlepas lalu keluar); dengan `--kill-on-exit`, Electron ikut dibunuh begitu peluncurnya
      * selesai dan layar langsung kembali ke menu Shortcut.
      */
-    private fun appProotScript(ctx: Context, guestScript: String, killOnExit: Boolean): String {
-        val spec = guestSpec(ctx)
+    private fun appProotScript(ctx: Context, guestScript: String, killOnExit: Boolean, log: LaunchLog.Session? = null): String {
+        val spec = guestSpec(ctx, log)
         val tail = Regex("""/bin/bash(\s+-l)?\s*$""")
         val custom = Containers.boot(TinyEnv.currentContainer, TinyEnv.defaultBoot).trim()
         val base = if (tail.containsMatchIn(custom)) custom else TinyEnv.defaultBoot.trim()
@@ -636,12 +653,16 @@ ${WsiWayland.probeForDesktop(sessionEnv)}
             advanceStage(1)
             val size = displaySize(ctx, appId)
             appSessionSize = size
-            val session = spawnDetached(appProotScript(ctx, ShortcutRunner.prepareSession(ctx, size), killOnExit = true), "TinyAppSession")
+            val sLog = LaunchLog.begin("shortcut")
+            appSessionLog = sLog
+            LaunchLog.write(sLog, "session", "sesi aplikasi Shortcut dimulai (Xwayland ${size.first}x${size.second}), dipicu oleh $appId")
+            val session = spawnDetached(appProotScript(ctx, ShortcutRunner.prepareSession(ctx, size), killOnExit = true, log = sLog), "TinyAppSession")
             appSession = session
             // Xwayland mati sendiri (crash): aplikasinya ikut putus, tutup sesi dan kembali ke Shortcut
             watch("tiny-session-wait") {
                 runCatching { session.waitFor() }
                 pids.remove(session)
+                LaunchLog.write(sLog, "session", "proot sesi aplikasi berakhir (Xwayland keluar)")
                 if (appSession === session) scheduleIdleCheck(0)
             }
             // proot aplikasi tidak lagi berhenti sendiri saat aplikasinya selesai (tanpa --kill-on-exit),
@@ -660,7 +681,11 @@ ${WsiWayland.probeForDesktop(sessionEnv)}
             // desktop yang menyala memegang X: hanya pastikan sisa proses lama sudah hilang
             waitGone(gone, 2000)
         }
-        val proc = spawnDetached(appProotScript(ctx, script, killOnExit = false), "TinyApp-$appId")
+        // aplikasi ikut berkas log sesi tempatnya berjalan: shell kontainer bila desktop menyala, kalau tidak sesi Shortcut
+        // (saklar baru dinyalakan saat sesi Shortcut sudah berjalan: aplikasi ini membuka berkas log baru sendiri)
+        val appLog = if (guiStarted) containerLog else (appSessionLog ?: LaunchLog.begin("shortcut")?.also { appSessionLog = it })
+        LaunchLog.write(appLog, "launch", LaunchLog.describe(appId))
+        val proc = spawnDetached(appProotScript(ctx, script, killOnExit = false, log = appLog), "TinyApp-$appId")
         synchronized(appProcs) {
             appProcs.removeAll { !it.isAlive }
             appProcs.add(proc)
@@ -683,6 +708,7 @@ ${WsiWayland.probeForDesktop(sessionEnv)}
         watch("tiny-app-wait-$appId") {
             val code = runCatching { proc.waitFor() }.getOrDefault(-1)
             pids.remove(proc)
+            LaunchLog.write(appLog, "exit", "$appId keluar dengan kode $code")
             // galat dalam 5 detik pertama = gagal start; appSession null = kita sendiri yang mematikannya
             if (code != 0 && SystemClock.elapsedRealtime() - startedAt < 5000 && appSession != null) lastFailedApp = appId
             scheduleIdleCheck(2000)
@@ -697,6 +723,8 @@ ${WsiWayland.probeForDesktop(sessionEnv)}
      */
     fun stopAppSession(): List<Int> {
         mainHandler.removeCallbacks(idleCheck)
+        LaunchLog.write(appSessionLog, "session", "sesi aplikasi dihentikan")
+        appSessionLog = null
         lastFailedApp = null
         val guests = ArrayList<Process>()
         synchronized(appProcs) {

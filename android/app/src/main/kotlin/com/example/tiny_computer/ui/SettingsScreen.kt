@@ -23,6 +23,7 @@ import com.example.tiny_computer.AudioStream
 import com.example.tiny_computer.R
 import com.example.tiny_computer.core.Cfg
 import com.example.tiny_computer.core.Containers
+import com.example.tiny_computer.core.LaunchLog
 import com.example.tiny_computer.core.Launcher
 import com.example.tiny_computer.core.TermSessions
 import com.example.tiny_computer.core.TinyEnv
@@ -122,6 +123,13 @@ fun SettingsScreen() {
             DeckSwitchRow(stringResource(R.string.tc_ui_enable_turnip_zink), stringResource(R.string.tc_ui_apply_on_next_launch), Cfg.turnip) { Cfg.turnip = it }
             DeckSwitchRow(stringResource(R.string.tc_ui_enable_d_r_i3), null, Cfg.dri3) { Cfg.dri3 = it }
             DeckSwitchRow(stringResource(R.string.tc_ui_desktop_wayland), stringResource(R.string.tc_ui_desktop_wayland_hint), Cfg.desktopWayland) { Cfg.desktopWayland = it }
+        }
+
+        DeckGroup(stringResource(R.string.tc_group_logs)) {
+            DeckSwitchRow(stringResource(R.string.tc_ui_launch_log), stringResource(R.string.tc_ui_launch_log_hint), Cfg.launchLog) {
+                Cfg.launchLog = it
+                LaunchLog.onToggled()
+            }
         }
 
         DeckGroup(stringResource(R.string.tc_group_audio)) {

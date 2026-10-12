@@ -109,6 +109,10 @@ object Cfg {
     var desktopWayland: Boolean
         get() = TinyPrefs.getBool("desktopWayland", true)
         set(v) = TinyPrefs.setBool("desktopWayland", v)
+    /** Catat peluncuran aplikasi/.exe (Shortcut + Open desktop) ke Download/Wayland-logs, satu berkas per sesi proot. */
+    var launchLog: Boolean
+        get() = TinyPrefs.getBool("launchLog", false)
+        set(v) = TinyPrefs.setBool("launchLog", v)
     /** Driver tampilan Wine: "wayland" (Wayland dulu, X11 sebagai cadangan) atau "x11". */
     var wineDisplay: String
         get() = TinyPrefs.getString("wineDisplay", "wayland")

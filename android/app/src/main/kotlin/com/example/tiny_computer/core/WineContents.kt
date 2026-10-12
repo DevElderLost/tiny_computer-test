@@ -484,6 +484,26 @@ object WineContents {
         revision++
     }
 
+    /**
+     * Isi shim di /usr/local/bin. Bila TINY_LAUNCH_LOG ada (log peluncuran menyala, lihat [LaunchLog]) satu baris
+     * dicatat ke berkas sesi dan, jika stderr bukan terminal dan skrip Shortcut belum menyalurkan keluaran ke log
+     * (TINY_LAUNCH_TEE), stderr Wine ikut ditambahkan ke sana. stdout tidak diubah supaya `$(wine ...)` tetap jalan.
+     * wineserver (dijalankan otomatis oleh wine) tidak dicatat.
+     */
+    private fun shimText(wine: Profile, n: String): String {
+        val real = "\"\$TINY_WINE_ROOT/${wine.wineBin}/$n\""
+        val head = "#!/bin/sh\n$SHIM_MARK\n. $GUEST_ROOT/env.sh\n"
+        if (n == "wineserver") return head + "exec $real \"\$@\"\n"
+        return head +
+            "if [ -n \"\$TINY_LAUNCH_LOG\" ]; then\n" +
+            "  echo \"\$(date +%H:%M:%S.%3N)  wine      $n \$*\" >> \"\$TINY_LAUNCH_LOG\" 2>/dev/null\n" +
+            "  if [ -z \"\$TINY_LAUNCH_TEE\" ] && [ ! -t 2 ] && [ -w \"\$TINY_LAUNCH_LOG\" ]; then\n" +
+            "    exec $real \"\$@\" 2>> \"\$TINY_LAUNCH_LOG\"\n" +
+            "  fi\n" +
+            "fi\n" +
+            "exec $real \"\$@\"\n"
+    }
+
     private fun runtimeDir() = root().apply { mkdirs() }
     private fun shimDir() = File(TinyEnv.containerDir(), "usr/local/bin")
     private const val SHIM_MARK = "# tiny-wine-shim"
@@ -605,9 +625,7 @@ object WineContents {
         for (n in names) {
             val f = File(dir, n)
             if (f.exists() && !f.readText().contains(SHIM_MARK)) continue // jangan timpa berkas milik sistem/paket lain
-            f.writeText(
-                "#!/bin/sh\n$SHIM_MARK\n. $GUEST_ROOT/env.sh\nexec \"\$TINY_WINE_ROOT/${wine.wineBin}/$n\" \"\$@\"\n",
-            )
+            f.writeText(shimText(wine, n))
             f.setReadable(true, false); f.setExecutable(true, false)
         }
         listFile.writeText(names.joinToString("\n"))

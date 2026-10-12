@@ -59,7 +59,26 @@ object ShortcutRunner {
         sb.append("# Ditulis ulang oleh menu Shortcut Tiny Computer setiap kali aplikasi dijalankan.\n")
         // proot terpisah tidak punya terminal: keluaran aplikasi masuk ke berkas log
         sb.append("mkdir -p \"\$HOME/.vnc\"\n")
-        sb.append("exec > \"\$HOME/.vnc/shortcut-$id.log\" 2>&1\n")
+        // Log peluncuran aktif (TINY_LAUNCH_LOG diisi Launcher): keluaran aplikasi juga ditulis ke berkas sesi di
+        // Download/Wayland-logs lewat tee + FIFO. ~/.vnc/shortcut-<id>.log tetap ditulis (dipakai pesan galat start).
+        sb.append(
+            """
+if [ -n "${'$'}TINY_LAUNCH_LOG" ] && [ -w "${'$'}TINY_LAUNCH_LOG" ] && command -v mkfifo >/dev/null 2>&1 && command -v tee >/dev/null 2>&1; then
+  TINY_FIFO="${'$'}HOME/.vnc/.shortcut-$id.fifo"
+  rm -f "${'$'}TINY_FIFO"
+  if mkfifo "${'$'}TINY_FIFO" 2>/dev/null; then
+    tee "${'$'}HOME/.vnc/shortcut-$id.log" < "${'$'}TINY_FIFO" >> "${'$'}TINY_LAUNCH_LOG" &
+    exec > "${'$'}TINY_FIFO" 2>&1
+  else
+    exec > "${'$'}HOME/.vnc/shortcut-$id.log" 2>&1
+  fi
+  rm -f "${'$'}TINY_FIFO"
+  export TINY_LAUNCH_TEE=1
+else
+  exec > "${'$'}HOME/.vnc/shortcut-$id.log" 2>&1
+fi
+""".trimStart(),
+        )
         sb.append("export DISPLAY=:4\n")
         // sesi X (Xwayland milik desktop atau milik sesi aplikasi) bisa baru menyala: tunggu soketnya
         sb.append("i=0; while [ \$i -lt 150 ] && [ ! -S /tmp/.X11-unix/X4 ]; do sleep 0.2; i=\$((i+1)); done\n")
@@ -74,6 +93,12 @@ object ShortcutRunner {
             else -> Cfg.turnip
         }
 
+        // Bawaan: semua aplikasi Shortcut (Linux dan .exe Wine) mendapat XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0
+        // seperti Open desktop (Cfg.desktopWayland, bawaan aktif). Hanya dua variabel itu; pengaturan GPU dan env
+        // buatan pengguna di bawah tetap bisa menimpanya.
+        if (Cfg.desktopWayland) {
+            sb.append("if [ -S /tmp/wayland-0 ]; then export XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0; fi\n")
+        }
         // grafis khusus aplikasi ini
         when (s.gpu) {
             ShortcutPrefs.GPU_SOFTWARE -> {
