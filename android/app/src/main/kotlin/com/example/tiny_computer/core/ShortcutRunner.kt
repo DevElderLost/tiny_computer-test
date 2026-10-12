@@ -111,23 +111,22 @@ fi
         var cmd = cleanExec(app.exec)
         if (s.args.isNotBlank()) cmd += " " + s.args.trim()
         if (app.terminal) cmd = "x-terminal-emulator -e sh -c ${q("exec $cmd")}"
-        // Wine: matikan XRandR di driver X11. Xwayland menawarkan daftar mode "emulasi" sampai 5K/8K, sehingga
-        // Wine melaporkan mode saat ini jauh melebihi layar (mis. 5120x2880 pada layar 960x544) dan game
-        // membuka jendela sebesar itu. Dengan UseXRandR=N Wine hanya melihat satu mode = ukuran layar X
-        // sesi ini (-geometry dari prepareSession). Idempoten: hanya menulis bila belum ada di prefix.
-        if (Regex("^(\\S*/)?wine(64)?(\\s|$)").containsMatchIn(cmd)) {
-            sb.append(
-                """
-WPFX="${'$'}{WINEPREFIX:-${'$'}HOME/.wine}"
-if ! grep -qs '"UseXRandR"="N"' "${'$'}WPFX/user.reg" 2>/dev/null; then
-  echo "[tiny] Wine: UseXRandR=N (ukuran layar mengikuti sesi X)"
-  wine reg add 'HKCU\Software\Wine\X11 Driver' /v UseXRandR /t REG_SZ /d N /f
-  wineserver -w 2>/dev/null
-fi
-""".trimStart(),
-            )
+        // Wine: jalankan di dalam virtual desktop seukuran layar X sesi. Xwayland rootful menawarkan mode XRandR
+        // "emulasi" sampai 5120x2880 (mode pilihannya malah yang terbesar), dan Wine versi baru mengabaikan
+        // UseXRandR=N, sehingga game memilih 5K. Di virtual desktop Wine tidak memakai XRandR: game hanya
+        // melihat satu mode = ukuran desktop ini. Penutup shell explorer tidak digambar oleh compositor.
+        // Nonaktifkan dengan variabel lingkungan TINY_WINE_VDESKTOP=0 (Pengaturan shortcut > Env).
+        val wineRe = Regex("^((?:\\S*/)?wine(?:64)?)(\\s.*)?$")
+        val wm = wineRe.matchEntire(cmd)
+        if (wm != null && !Regex("^\\s*explorer(\\s|$)").containsMatchIn(wm.groupValues[2]) && !app.terminal) {
+            val (vw, vh) = Launcher.sessionSize(ctx, app.id)
+            val rest = wm.groupValues[2]
+            val vd = "${wm.groupValues[1]} explorer /desktop=tiny,${vw}x$vh$rest"
+            sb.append("echo \"[tiny] Wine virtual desktop ${vw}x$vh\"\n")
+            sb.append("if [ \"\${TINY_WINE_VDESKTOP:-1}\" = 0 ]; then TINY_CMD=${q(cmd)}; else TINY_CMD=${q(vd)}; fi\n")
+        } else {
+            sb.append("TINY_CMD=${q(cmd)}\n")
         }
-        sb.append("TINY_CMD=${q(cmd)}\n")
         sb.append(
             """
 if [ -z "${'$'}DBUS_SESSION_BUS_ADDRESS" ] && command -v dbus-launch >/dev/null 2>&1; then
