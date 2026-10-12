@@ -357,7 +357,7 @@ pactl list short modules | grep 'module-loopback.*AndroidMic' | cut -f1 | xargs 
         val extraOpt = StringBuilder()
         val preload = ArrayList<String>()
 
-        // Isi folder `extra` berasal dari patch.tar.gz; berkas yang tidak ada TIDAK boleh masuk
+        // Isi folder `extra` berasal dari patch.tzst; berkas yang tidak ada TIDAK boleh masuk
         // LD_PRELOAD karena setiap proses guest lalu mencetak "cannot be preloaded" (lihat terminal).
         val extraDir = File(data, "tiny/extra")
         if (Cfg.getifaddrsBridge) {

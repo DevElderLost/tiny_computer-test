@@ -28,4 +28,4 @@ chmod -R +x bin/*
 chmod -R +x libexec/proot/*
 chmod 1777 tmp
 # patch (folder tiny) diekstrak oleh Rootfs.extractPatch() dari Kotlin
-$DATA_DIR/bin/busybox rm -rf assets.zip patch.tar.gz patch.tar
+$DATA_DIR/bin/busybox rm -rf assets.zip patch.tzst patch.tar.gz patch.tar

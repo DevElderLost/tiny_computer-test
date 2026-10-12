@@ -6,6 +6,7 @@ import android.util.DisplayMetrics
 import android.util.Log
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream
+import org.apache.commons.compress.compressors.zstandard.ZstdCompressorInputStream
 import org.json.JSONObject
 import java.io.BufferedInputStream
 import java.io.File
@@ -53,9 +54,9 @@ object Rootfs {
         val script = asset(ctx, "tiny/setup_bootstrap.sh").replace("@DATA_PATH@", data)
         val code = Shell.execute(script)
         if (code != 0) Log.w(TAG, "setup_bootstrap.sh exit=$code")
-        // patch (folder tiny -> ~/.local/share/tiny) diekstrak dari Kotlin, bukan lagi `tar zxf patch.tar.gz`
-        // di skrip: Android Gradle Plugin menggunduh `.gz` di assets dan menghapus akhiran-nya, jadi di APK
-        // berkasnya bernama `patch.tar`. Pemasangan ulang paket boot juga memulihkan berkas yang sudah ada.
+        // patch (folder tiny -> ~/.local/share/tiny) diekstrak dari Kotlin, bukan dari skrip shell.
+        // Di assets APK berkasnya `patch.tzst` (tar + zstd); ekstensi `.gz` sengaja dihindari karena AGP/AAPT
+        // meng-gunzip-nya dan membuang akhiran. Pemasangan ulang paket boot juga memulihkan berkas yang sudah ada.
         extractPatch(ctx, overwrite = true)
         ensureFakeInput(ctx)
     }
@@ -69,26 +70,31 @@ object Rootfs {
         "tiny/extra/tiny_virtual_mic", "tiny/extra/getifaddrs_bridge_client_lib.so",
     )
 
-    /** Asset patch (`patch.tar`, atau `patch.tar.gz`) tidak ada di APK: CI gagal menyalinnya dari rilis tiny_container. */
+    /** Asset patch (`patch.tzst`, atau nama lama `patch.tar` / `patch.tar.gz`) tidak ada di APK: CI gagal membuatnya dari rilis tiny_container. */
     @Volatile
     var patchAssetMissing = false
         private set
 
     /**
-     * Membuka asset patch. Nama di APK TIDAK sama dengan nama di CI: AGP/AAPT meng-gunzip asset berakhiran
-     * `.gz` dan membuang akhiran itu, jadi `patch.tar.gz` menjadi `patch.tar` (tar polos). Dicoba keduanya, dan
-     * gzip dikenali dari byte awalnya (1f 8b), bukan dari nama.
+     * Membuka asset patch. Nama utama: `patch.tzst` (tar yang dikompres zstd). Nama lama `patch.tar` dan
+     * `patch.tar.gz` tetap dicoba supaya APK/CI lama tetap bisa dipakai. Format dikenali dari byte awalnya
+     * (magic number), bukan dari nama berkas: zstd = 28 b5 2f fd, gzip = 1f 8b, selain itu dianggap tar polos.
      */
     private fun openPatchAsset(ctx: Context): InputStream? {
-        for (name in listOf("patch.tar", "patch.tar.gz")) {
+        for (name in listOf("patch.tzst", "patch.tar", "patch.tar.gz")) {
             val raw = runCatching { ctx.assets.open(name) }.getOrNull() ?: continue
             val b = BufferedInputStream(raw, 1 shl 16)
-            b.mark(2)
-            val b0 = b.read()
-            val b1 = b.read()
+            b.mark(4)
+            val head = IntArray(4) { b.read() }
             b.reset()
-            Log.i(TAG, "asset patch: $name (${if (b0 == 0x1f && b1 == 0x8b) "gzip" else "tar polos"})")
-            return if (b0 == 0x1f && b1 == 0x8b) GzipCompressorInputStream(b) else b
+            val zstd = head[0] == 0x28 && head[1] == 0xB5 && head[2] == 0x2F && head[3] == 0xFD
+            val gzip = head[0] == 0x1f && head[1] == 0x8b
+            Log.i(TAG, "asset patch: $name (${if (zstd) "zstd" else if (gzip) "gzip" else "tar polos"})")
+            return when {
+                zstd -> ZstdCompressorInputStream(b)
+                gzip -> GzipCompressorInputStream(b)
+                else -> b
+            }
         }
         return null
     }
@@ -111,7 +117,7 @@ object Rootfs {
         val input = openPatchAsset(ctx)
         if (input == null) {
             patchAssetMissing = true
-            Log.w(TAG, "patch.tar / patch.tar.gz tidak ada di assets APK (CI menyalinnya dari rilis tiny_container)")
+            Log.w(TAG, "patch.tzst tidak ada di assets APK (CI membuatnya dari patch.tar.gz rilis tiny_container)")
             return
         }
         patchAssetMissing = false

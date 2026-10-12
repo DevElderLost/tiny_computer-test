@@ -24,6 +24,11 @@ android {
         jvmTarget = '17'
     }
 
+    // patch.tzst sudah terkompresi zstd; jangan di-deflate lagi oleh AAPT (percuma dan memperlambat build/instal).
+    androidResources {
+        noCompress += ['tzst']
+    }
+
     sourceSets {
         main.java.srcDirs += 'src/main/kotlin'
         main.java.srcDirs += 'src/main/java'

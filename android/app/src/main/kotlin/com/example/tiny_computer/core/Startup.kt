@@ -48,10 +48,10 @@ object Startup {
     var pendingApp by mutableStateOf<String?>(null)
         private set
 
-    /** APK tanpa asset patch (patch.tar): beri tahu di Beranda apa yang hilang dan cara memperbaikinya. */
+    /** APK tanpa asset patch (patch.tzst): beri tahu di Beranda apa yang hilang dan cara memperbaikinya. */
     private fun patchWarning() {
         if (Rootfs.patchAssetMissing) {
-            notice = "This APK has no patch.tar (assets), so the bundled Turnip driver, virtual microphone and getifaddrs bridge are missing. " +
+            notice = "This APK has no patch.tzst (assets), so the bundled Turnip driver, virtual microphone and getifaddrs bridge are missing. " +
                 "Rebuild the APK with release_tag v1.1.0 (not latest)."
         }
     }
