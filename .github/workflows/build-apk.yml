@@ -100,8 +100,13 @@ jobs:
           mkdir -p android/app/src/main/jniLibs/arm64-v8a
           unzip -o /tmp/dl/jniLibs.zip -d android/app/src/main/jniLibs/arm64-v8a
 
-      - name: Copy patch.tar.gz ke assets
-        run: cp /tmp/dl/patch.tar.gz android/app/src/main/assets/patch.tar.gz
+      # AGP/AAPT meng-gunzip asset berakhiran .gz lalu membuang akhiran-nya, jadi di APK berkasnya jadi
+      # "patch.tar" (52 MB, bukan 24 MB) dan assets.open("patch.tar.gz") selalu gagal. Gunzip di sini supaya
+      # namanya eksplisit dan tidak bergantung pada perilaku plugin; Rootfs membaca "patch.tar" (juga .tar.gz).
+      - name: Copy patch ke assets (gunzip -> patch.tar)
+        run: |
+          gunzip -c /tmp/dl/patch.tar.gz > android/app/src/main/assets/patch.tar
+          tar tf android/app/src/main/assets/patch.tar | grep -q "tiny/extra/libvulkan_freedreno.so"
 
       # Rootfs (android/app/src/main/assets/xa*) sengaja di-skip biar build cepat.
       # APK hasil build ini BELUM ada rootfs di dalamnya -- perlu ditambahkan manual

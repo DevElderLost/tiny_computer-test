@@ -9,6 +9,7 @@ import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream
 import org.json.JSONObject
 import java.io.BufferedInputStream
 import java.io.File
+import java.io.InputStream
 import java.nio.file.Files
 import java.nio.file.Paths
 import kotlin.math.max
@@ -17,7 +18,7 @@ import kotlin.math.roundToInt
 
 /**
  * Port `Workflow.setupBootstrap`, `initForFirstTime` dan `initData` dari workflow.dart.
- * Logika Linux/Debian (proot, rootfs `xa*`, assets.zip, patch.tar.gz) tidak diubah:
+ * Logika Linux/Debian (proot, rootfs `xa*`, assets.zip, patch) tidak diubah:
  * skrip shell diekstrak langsung dari kode Dart (berkas .sh di assets/tiny).
  */
 object Rootfs {
@@ -49,17 +50,18 @@ object Rootfs {
         for (d in listOf("share", "bin", "lib", "tmp", "proot_tmp", "pulseaudio_tmp")) File(data, d).mkdirs()
         // assets.zip: bin/ (proot, pulseaudio, tar, ...) dan libexec/ (proot loader)
         copyAsset(ctx, "assets.zip", File(data, "assets.zip"))
-        // patch.tar.gz: folder tiny yang dimount ke ~/.local/share/tiny. Disalin CI dari rilis tiny_container.
-        runCatching { copyAsset(ctx, "patch.tar.gz", File(data, "patch.tar.gz")) }
-            .onFailure { Log.w(TAG, "patch.tar.gz tidak ada di assets (CI menyalinnya dari rilis tiny_container): ${it.message}") }
         val script = asset(ctx, "tiny/setup_bootstrap.sh").replace("@DATA_PATH@", data)
         val code = Shell.execute(script)
         if (code != 0) Log.w(TAG, "setup_bootstrap.sh exit=$code")
+        // patch (folder tiny -> ~/.local/share/tiny) diekstrak dari Kotlin, bukan lagi `tar zxf patch.tar.gz`
+        // di skrip: Android Gradle Plugin menggunduh `.gz` di assets dan menghapus akhiran-nya, jadi di APK
+        // berkasnya bernama `patch.tar`. Pemasangan ulang paket boot juga memulihkan berkas yang sudah ada.
+        extractPatch(ctx, overwrite = true)
         ensureFakeInput(ctx)
     }
 
     /**
-     * Berkas yang HARUS ada setelah `patch.tar.gz` diekstrak (`tiny/extra`): driver Vulkan Linux bawaan
+     * Berkas yang HARUS ada setelah patch diekstrak (`tiny/extra`): driver Vulkan Linux bawaan
      * (Turnip + ICD-nya), klien mikrofon virtual, dan jembatan getifaddrs.
      */
     private val PATCH_MARKERS = listOf(
@@ -67,32 +69,56 @@ object Rootfs {
         "tiny/extra/tiny_virtual_mic", "tiny/extra/getifaddrs_bridge_client_lib.so",
     )
 
-    /** `patch.tar.gz` tidak ada di APK (CI gagal menyalinnya dari rilis tiny_container). */
+    /** Asset patch (`patch.tar`, atau `patch.tar.gz`) tidak ada di APK: CI gagal menyalinnya dari rilis tiny_container. */
     @Volatile
     var patchAssetMissing = false
         private set
 
     /**
-     * Memastikan isi `patch.tar.gz` (folder `tiny`: extra, font, dst.) benar-benar ada di data aplikasi.
-     * Dulu hanya diekstrak oleh setup_bootstrap.sh saat pemasangan pertama; kontainer yang dipasang oleh
-     * APK tanpa patch itu (atau saat ekstraksi gagal tanpa suara) tidak pernah memperolehnya lagi, sehingga
-     * `tiny/extra` hanya berisi libfakeinput.so: Vulkan jatuh ke llvmpipe, mikrofon dan getifaddrs hilang.
-     * Dipanggil di setiap peluncuran lewat [initData]. Cukup memeriksa penanda; bila lengkap tidak
-     * melakukan apa-apa. Berkas yang sudah ada tidak ditimpa (mis. driver hasil modifikasi pengguna).
+     * Membuka asset patch. Nama di APK TIDAK sama dengan nama di CI: AGP/AAPT meng-gunzip asset berakhiran
+     * `.gz` dan membuang akhiran itu, jadi `patch.tar.gz` menjadi `patch.tar` (tar polos). Dicoba keduanya, dan
+     * gzip dikenali dari byte awalnya (1f 8b), bukan dari nama.
+     */
+    private fun openPatchAsset(ctx: Context): InputStream? {
+        for (name in listOf("patch.tar", "patch.tar.gz")) {
+            val raw = runCatching { ctx.assets.open(name) }.getOrNull() ?: continue
+            val b = BufferedInputStream(raw, 1 shl 16)
+            b.mark(2)
+            val b0 = b.read()
+            val b1 = b.read()
+            b.reset()
+            Log.i(TAG, "asset patch: $name (${if (b0 == 0x1f && b1 == 0x8b) "gzip" else "tar polos"})")
+            return if (b0 == 0x1f && b1 == 0x8b) GzipCompressorInputStream(b) else b
+        }
+        return null
+    }
+
+    /**
+     * Memastikan isi patch (folder `tiny`: extra, font, dst.) benar-benar ada di data aplikasi. Dipanggil di
+     * setiap peluncuran lewat [initData]: kontainer yang dipasang oleh APK tanpa patch itu (atau saat ekstraksi
+     * gagal tanpa suara) tidak pernah memperolehnya lagi, sehingga `tiny/extra` hanya berisi libfakeinput.so:
+     * Vulkan jatuh ke llvmpipe, mikrofon dan getifaddrs hilang. Bila semua penanda ada tidak melakukan apa-apa.
      */
     fun ensurePatch(ctx: Context) {
         val data = File(TinyEnv.dataPath)
         if (PATCH_MARKERS.all { File(data, it).isFile }) { patchAssetMissing = false; return }
-        val input = runCatching { ctx.assets.open("patch.tar.gz") }.getOrElse {
+        extractPatch(ctx, overwrite = false)
+    }
+
+    /** Mengekstrak patch ke data aplikasi; [overwrite] false = hanya berkas yang belum ada (jangan timpa buatan pengguna). */
+    private fun extractPatch(ctx: Context, overwrite: Boolean) {
+        val data = File(TinyEnv.dataPath)
+        val input = openPatchAsset(ctx)
+        if (input == null) {
             patchAssetMissing = true
-            Log.w(TAG, "tiny/extra tidak lengkap dan patch.tar.gz tidak ada di APK: ${it.message}")
+            Log.w(TAG, "patch.tar / patch.tar.gz tidak ada di assets APK (CI menyalinnya dari rilis tiny_container)")
             return
         }
         patchAssetMissing = false
         runCatching {
             val root = data.canonicalFile
             var written = 0
-            TarArchiveInputStream(GzipCompressorInputStream(BufferedInputStream(input, 1 shl 16))).use { tar ->
+            TarArchiveInputStream(input).use { tar ->
                 val buf = ByteArray(1 shl 16)
                 var e = tar.nextTarEntry
                 while (e != null) {
@@ -103,12 +129,14 @@ object Rootfs {
                         (canon.path == root.path || canon.path.startsWith(root.path + File.separator))
                     if (safe) when {
                         e.isDirectory -> out.mkdirs()
-                        e.isSymbolicLink -> if (!out.exists()) {
+                        e.isSymbolicLink -> if (!out.exists() || overwrite) {
                             out.parentFile?.mkdirs()
+                            Files.deleteIfExists(out.toPath())
                             Files.createSymbolicLink(out.toPath(), Paths.get(e.linkName))
                         }
-                        e.isFile -> if (!out.exists()) {
+                        e.isFile -> if (!out.exists() || overwrite) {
                             out.parentFile?.mkdirs()
+                            if (out.exists()) out.delete()
                             out.outputStream().use { o ->
                                 while (true) { val r = tar.read(buf); if (r < 0) break; o.write(buf, 0, r) }
                             }
@@ -120,8 +148,8 @@ object Rootfs {
                     e = tar.nextTarEntry
                 }
             }
-            Log.i(TAG, "patch.tar.gz: $written berkas diekstrak ke $root")
-        }.onFailure { Log.w(TAG, "ekstraksi patch.tar.gz gagal: ${it.message}", it) }
+            Log.i(TAG, "patch: $written berkas diekstrak ke $root")
+        }.onFailure { Log.w(TAG, "ekstraksi patch gagal: ${it.message}", it) }
         val still = PATCH_MARKERS.filter { !File(data, it).isFile }
         if (still.isNotEmpty()) Log.w(TAG, "masih hilang setelah ekstraksi: $still")
     }

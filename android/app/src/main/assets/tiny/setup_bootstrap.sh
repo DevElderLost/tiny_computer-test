@@ -27,5 +27,5 @@ $DATA_DIR/bin/busybox unzip -o assets.zip
 chmod -R +x bin/*
 chmod -R +x libexec/proot/*
 chmod 1777 tmp
-$DATA_DIR/bin/tar zxf patch.tar.gz
-$DATA_DIR/bin/busybox rm -rf assets.zip patch.tar.gz
+# patch (folder tiny) diekstrak oleh Rootfs.extractPatch() dari Kotlin
+$DATA_DIR/bin/busybox rm -rf assets.zip patch.tar.gz patch.tar
