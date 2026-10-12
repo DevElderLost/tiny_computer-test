@@ -476,6 +476,7 @@ for i in ${'$'}(seq 1 150); do [ -S /tmp/wayland-0 ] && break; sleep 0.2; done
 (XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0 Xwayland :4 -fullscreen -geometry ${w}x$h -noreset -ac +iglx -extension MIT-SHM > "${'$'}HOME/.vnc/xwayland.log" 2>&1 &)
 for i in ${'$'}(seq 1 150); do [ -S /tmp/.X11-unix/X4 ] && break; sleep 0.2; done
 ${sessionEnv}bash /etc/X11/xinit/Xsession &> "${'$'}HOME/.vnc/x.log" &
+${WsiWayland.probeForDesktop(sessionEnv)}
 """.trimIndent()
     }
 
@@ -488,6 +489,7 @@ ${sessionEnv}bash /etc/X11/xinit/Xsession &> "${'$'}HOME/.vnc/x.log" &
         guiStarted = true
         // syarat ikon muncul di menu Shortcut: desktop pernah dibuka sekali
         Cfg.desktopOpenedOnce = true
+        WsiWayland.install() // pembungkus vkcube/vkcubepp: --wsi wayland
         term.writeLine(guiCommand(ctx, replace))
         term.writeLine("clear")
     }

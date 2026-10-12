@@ -64,6 +64,16 @@ object ShortcutRunner {
         // sesi X (Xwayland milik desktop atau milik sesi aplikasi) bisa baru menyala: tunggu soketnya
         sb.append("i=0; while [ \$i -lt 150 ] && [ ! -S /tmp/.X11-unix/X4 ]; do sleep 0.2; i=\$((i+1)); done\n")
 
+        // Aplikasi Wine? (dipakai untuk memilih jalur Wayland di bawah)
+        val prog = cleanExec(app.exec).substringBefore(' ').substringAfterLast('/')
+        val isWine = prog == "wine" || prog == "wine64"
+        // Turnip aktif bila dipilih untuk aplikasi ini, atau (GPU "default") bila Turnip global menyala
+        val turnipOn = when (s.gpu) {
+            ShortcutPrefs.GPU_TURNIP -> true
+            ShortcutPrefs.GPU_SOFTWARE -> false
+            else -> Cfg.turnip
+        }
+
         // grafis khusus aplikasi ini
         when (s.gpu) {
             ShortcutPrefs.GPU_SOFTWARE -> {
@@ -74,15 +84,22 @@ object ShortcutRunner {
                 for ((k, v) in pairs(Launcher.turnipOpt(ctx))) sb.append("export $k=${q(v)}\n")
                 // lihat alasan di Launcher.guestSpec: Xwayland tanpa DRI3
                 if (!Cfg.dri3) sb.append("export MESA_VK_WSI_DEBUG=sw LIBGL_KOPPER_DRI2=true\n")
-                // Program Vulkan/SDL memakai WSI Wayland langsung ke compositor, bukan X11 lewat Xwayland (tanpa DRI3):
-                // itu jalur yang terbukti jalan (vkcube --wsi wayland dengan Turnip). Variabel ini hanya untuk proses
-                // aplikasi ini, tidak diekspor ke seluruh guest (GTK/Qt/Firefox tetap X11 lewat GDK_BACKEND/QT_QPA_PLATFORM).
-                // Wine ikut: shim `wine` (env.sh) memilih driver winewayland.drv dengan X11 sebagai cadangan, sehingga
-                // Vulkan/DXVK memakai surface Wayland. SDL_VIDEODRIVER tidak diatur untuk Wine (dipakai winebus).
-                val prog = cleanExec(app.exec).substringBefore(' ').substringAfterLast('/')
-                val sdl = if (prog == "wine" || prog == "wine64") "" else " SDL_VIDEODRIVER=wayland"
-                sb.append("if [ -S /tmp/wayland-0 ]; then export XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0$sdl; fi\n")
             }
+        }
+        // Program Vulkan/SDL memakai WSI Wayland langsung ke compositor, bukan X11 lewat Xwayland (tanpa DRI3):
+        // itu jalur yang terbukti jalan (vkcube --wsi wayland dengan Turnip). Berlaku untuk GPU Turnip yang dipilih
+        // per aplikasi DAN untuk GPU "default" saat Turnip global menyala (dulu hanya yang pertama, sehingga aplikasi
+        // dengan GPU default tetap lewat X11 dan Vulkan-nya gagal). Variabel ini hanya untuk proses aplikasi ini, tidak
+        // diekspor ke seluruh guest (GTK/Qt/Firefox tetap X11 lewat GDK_BACKEND/QT_QPA_PLATFORM). vkcube/vkcubepp
+        // mendapat `--wsi wayland` dari pembungkus [WsiWayland]. Wine: shim `wine` (env.sh) memilih driver
+        // winewayland.drv dengan X11 sebagai cadangan; SDL_VIDEODRIVER tidak diatur untuk Wine (dipakai winebus).
+        if (turnipOn) {
+            val sdl = if (isWine) "" else " SDL_VIDEODRIVER=wayland"
+            sb.append("if [ -S /tmp/wayland-0 ]; then export XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0$sdl; fi\n")
+            // WSI Wayland memakai dmabuf langsung; jalur WSI software (MESA_VK_WSI_DEBUG=sw) hanya untuk X11 tanpa DRI3
+            // dan akan memaksa Vulkan/DXVK Wine menyalin lewat shm.
+            if (isWine && WineContents.displayWayland())
+                sb.append("if [ -S /tmp/wayland-0 ]; then unset MESA_VK_WSI_DEBUG LIBGL_KOPPER_DRI2; fi\n")
         }
         // HiDPI khusus aplikasi ini
         when (s.hidpi) {
@@ -116,6 +133,9 @@ if [ -z "${'$'}DBUS_SESSION_BUS_ADDRESS" ]; then
 fi
 """.trimStart(),
         )
+
+        // tanda driver Vulkan: 20 baris pertama ringkasan vulkaninfo masuk ke log shortcut (lihat WsiWayland)
+        if (turnipOn) sb.append(WsiWayland.probeForScript())
 
         var cmd = cleanExec(app.exec)
         if (s.args.isNotBlank()) cmd += " " + s.args.trim()
@@ -158,6 +178,7 @@ exec sh -c "${'$'}TINY_CMD"
             Log.w(TAG, "aplikasi $appId tidak ditemukan")
             return null
         }
+        WsiWayland.install() // pembungkus vkcube/vkcubepp: --wsi wayland
         val id = safe(appId)
         write("run-$id.sh", script(ctx, app, ShortcutPrefs.get(appId), id))
         return "$GUEST_DIR/run-$id.sh"

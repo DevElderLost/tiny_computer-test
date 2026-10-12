@@ -583,7 +583,8 @@ object WineContents {
             if (displayWayland()) {
                 // Vulkan/DXVK lewat Xwayland (xcb) gagal di Turnip karena tanpa DRI3; surface Wayland langsung ke
                 // compositor DroidDeck jalan. Hanya bila soketnya ada; selain itu Wine memakai X11 (cadangan di registri).
-                append("if [ -S /tmp/wayland-0 ]; then export XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0; fi\n")
+                // MESA_VK_WSI_DEBUG=sw (jalur X11 tanpa DRI3) memaksa Vulkan Wayland menyalin lewat shm: dilepas di sini.
+                append("if [ -S /tmp/wayland-0 ]; then export XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0; unset MESA_VK_WSI_DEBUG LIBGL_KOPPER_DRI2; fi\n")
             }
             append("export LD_LIBRARY_PATH=\"\$TINY_WINE_ROOT/${wine.wineLib}\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}\"\n")
             append("export PATH=\"\$TINY_WINE_ROOT/${wine.wineBin}:\$PATH\"\n")
