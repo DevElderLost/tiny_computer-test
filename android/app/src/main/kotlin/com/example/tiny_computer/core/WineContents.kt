@@ -98,6 +98,16 @@ object WineContents {
     fun dirOf(p: Profile) = File(typeDir(p.type), p.dirName)
     fun guestDirOf(p: Profile) = "$GUEST_ROOT/contents/${p.type.label}/${p.dirName}"
     fun prefixDir() = File(TinyEnv.dataPath, "share/.wine")
+    /** Build Wine ini punya driver tampilan Wayland (`winewayland.so`)? Tidak semua build menyertakannya. */
+    fun supportsWayland(p: Profile?): Boolean =
+        p != null && File(dirOf(p), "${p.wineLib}/wine/aarch64-unix/winewayland.so").isFile
+
+    /** Wayland dipakai bila dipilih pengguna DAN didukung build Wine aktif. */
+    fun displayWayland(): Boolean = Cfg.wineDisplay != "x11" && supportsWayland(activeWine())
+
+    /** Nilai registri `HKCU\Software\Wine\Drivers\Graphics`: daftar dicoba berurutan, jadi X11 menjadi cadangan. */
+    fun displayDriverValue(): String = if (displayWayland()) "wayland,x11" else "x11"
+
     fun prefixReady() = File(prefixDir(), "system.reg").isFile && File(prefixDir(), "drive_c/windows/system32").isDirectory
 
     private fun safeName(s: String) = s.trim().replace(Regex("[^A-Za-z0-9._+-]+"), "_").trim('.', '_').take(80).ifEmpty { "content" }
@@ -570,6 +580,11 @@ object WineContents {
             append("export WINEESYNC=\"\${WINEESYNC:-0}\" WINEFSYNC=\"\${WINEFSYNC:-0}\"\n")
             append("export WINEDLLOVERRIDES=\"\${WINEDLLOVERRIDES:-$overrides}\"\n")
             if (fex != null) append("export HODLL=libwow64fex.dll\n")
+            if (displayWayland()) {
+                // Vulkan/DXVK lewat Xwayland (xcb) gagal di Turnip karena tanpa DRI3; surface Wayland langsung ke
+                // compositor DroidDeck jalan. Hanya bila soketnya ada; selain itu Wine memakai X11 (cadangan di registri).
+                append("if [ -S /tmp/wayland-0 ]; then export XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0; fi\n")
+            }
             append("export LD_LIBRARY_PATH=\"\$TINY_WINE_ROOT/${wine.wineLib}\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}\"\n")
             append("export PATH=\"\$TINY_WINE_ROOT/${wine.wineBin}:\$PATH\"\n")
         }

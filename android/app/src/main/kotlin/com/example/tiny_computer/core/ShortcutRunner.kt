@@ -77,11 +77,11 @@ object ShortcutRunner {
                 // Program Vulkan/SDL memakai WSI Wayland langsung ke compositor, bukan X11 lewat Xwayland (tanpa DRI3):
                 // itu jalur yang terbukti jalan (vkcube --wsi wayland dengan Turnip). Variabel ini hanya untuk proses
                 // aplikasi ini, tidak diekspor ke seluruh guest (GTK/Qt/Firefox tetap X11 lewat GDK_BACKEND/QT_QPA_PLATFORM).
-                // Wine dikecualikan: perilaku jendela, virtual desktop dan driver Wayland-nya belum diuji.
+                // Wine ikut: shim `wine` (env.sh) memilih driver winewayland.drv dengan X11 sebagai cadangan, sehingga
+                // Vulkan/DXVK memakai surface Wayland. SDL_VIDEODRIVER tidak diatur untuk Wine (dipakai winebus).
                 val prog = cleanExec(app.exec).substringBefore(' ').substringAfterLast('/')
-                if (prog != "wine" && prog != "wine64") {
-                    sb.append("if [ -S /tmp/wayland-0 ]; then export XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0 SDL_VIDEODRIVER=wayland; fi\n")
-                }
+                val sdl = if (prog == "wine" || prog == "wine64") "" else " SDL_VIDEODRIVER=wayland"
+                sb.append("if [ -S /tmp/wayland-0 ]; then export XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0$sdl; fi\n")
             }
         }
         // HiDPI khusus aplikasi ini

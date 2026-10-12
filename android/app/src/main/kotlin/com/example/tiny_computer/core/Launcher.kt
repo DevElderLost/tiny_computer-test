@@ -454,6 +454,15 @@ export PROOT_LOADER_32=${'$'}DATA_DIR/applib/libproot-loader32.so""".trimIndent(
      */
     fun guiCommand(ctx: Context, replaceAppSession: Boolean = false): String {
         val (w, h) = displaySize(ctx)
+        // Aplikasi Vulkan/SDL di dalam desktop memakai WSI Wayland langsung ke compositor: lewat Xwayland (xcb)
+        // Turnip gagal ("demo_select_physical_device"), sedangkan `vkcube --wsi wayland` jalan. Variabel ini
+        // hanya dipasang pada proses Xsession (bukan shell terminal), dan toolkit lain dipaku ke X11 supaya
+        // GTK/Qt/Firefox/Electron tidak ikut pindah ke Wayland (compositor tanpa wlr-layer-shell).
+        // SDL: "wayland,x11" = Wayland dulu, X11 sebagai cadangan.
+        val sessionEnv = if (Cfg.desktopWayland) {
+            "XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0 SDL_VIDEODRIVER=wayland,x11 " +
+                "GDK_BACKEND=x11 QT_QPA_PLATFORM=xcb MOZ_ENABLE_WAYLAND=0 ELECTRON_OZONE_PLATFORM_HINT=x11 CLUTTER_BACKEND=x11 "
+        } else ""
         // sesi aplikasi dari menu Shortcut memegang display :4; hentikan dulu sebelum desktop memakainya
         val stopApps = if (replaceAppSession) "pkill -x Xwayland 2>/dev/null; sleep 1\n" else ""
         return stopApps + """
@@ -466,7 +475,7 @@ for i in ${'$'}(seq 1 150); do [ -S /tmp/wayland-0 ] && break; sleep 0.2; done
 # mencetak "Failed to attach to x11 shm" berulang bila X mengiklankan ekstensi ini.
 (XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0 Xwayland :4 -fullscreen -geometry ${w}x$h -noreset -ac +iglx -extension MIT-SHM > "${'$'}HOME/.vnc/xwayland.log" 2>&1 &)
 for i in ${'$'}(seq 1 150); do [ -S /tmp/.X11-unix/X4 ] && break; sleep 0.2; done
-bash /etc/X11/xinit/Xsession &> "${'$'}HOME/.vnc/x.log" &
+${sessionEnv}bash /etc/X11/xinit/Xsession &> "${'$'}HOME/.vnc/x.log" &
 """.trimIndent()
     }
 

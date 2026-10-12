@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.tiny_computer.R
+import com.example.tiny_computer.core.Cfg
 import com.example.tiny_computer.core.WineContents
 import com.example.tiny_computer.core.WineContents.Type
 import com.example.tiny_computer.core.WineSetup
@@ -81,6 +82,22 @@ fun WineGroup() {
         Picker(R.string.tc_wine_pick_fex, Type.FEXCORE, fexes, true) { tick++ }
         Picker(R.string.tc_wine_pick_dxvk, Type.DXVK, dxvks, true) { tick++ }
         Picker(R.string.tc_wine_pick_vkd3d, Type.VKD3D, vkd3ds, true) { tick++ }
+
+        val activeWine = WineContents.activeWine()
+        if (activeWine != null) {
+            val wayland = WineContents.supportsWayland(activeWine)
+            var disp by remember(revision, tick) { mutableStateOf(if (Cfg.wineDisplay == "x11" || !wayland) "x11" else "wayland") }
+            DeckChoiceRow(
+                stringResource(R.string.tc_wine_display),
+                stringResource(if (wayland) R.string.tc_wine_display_hint else R.string.tc_wine_display_unsupported),
+                listOf("wayland" to stringResource(R.string.tc_wine_display_wayland), "x11" to stringResource(R.string.tc_wine_display_x11)),
+                disp,
+            ) { id ->
+                disp = id
+                Cfg.wineDisplay = id
+                Thread { runCatching { WineContents.onSelectionChanged() }; WineSetup.applyDisplayAsync(ctx) }.start()
+            }
+        }
 
         val running = WineSetup.phase == WineSetup.Phase.RUNNING
         DeckActionRow(stringResource(R.string.tc_wine_setup), stringResource(R.string.tc_wine_setup_hint), stringResource(R.string.tc_btn_run)) {

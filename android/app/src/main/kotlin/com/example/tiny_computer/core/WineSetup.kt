@@ -28,6 +28,8 @@ object WineSetup {
         "libxinerama1" to "libXinerama.so.1", "libxkbcommon0" to "libxkbcommon.so.0",
         "libvulkan1" to "libvulkan.so.1", "libasound2t64" to "libasound.so.2", "libpulse0" to "libpulse.so.0",
         "libgnutls30t64" to "libgnutls.so.30", "libunwind8" to "libunwind.so.8", "libsdl2-2.0-0" to "libSDL2-2.0.so.0",
+        // winewayland.so
+        "libwayland-client0" to "libwayland-client.so.0", "libwayland-cursor0" to "libwayland-cursor.so.0",
     )
 
     /** Pustaka tambahan (fitur Wine: USB, kamera, cetak, GStreamer, dll). Gagal memasangnya tidak menggagalkan setup. */
@@ -35,7 +37,7 @@ object WineSetup {
         "libxxf86vm1", "libxkbcommon-x11-0", "libgl1", "libglu1-mesa", "libopenal1", "libusb-1.0-0", "libudev1",
         "libdbus-1-3", "libcups2t64", "libpcap0.8t64", "libv4l-0t64", "libpng16-16t64", "libjpeg62-turbo", "libtiff6",
         "libxml2", "libxslt1.1", "libgstreamer1.0-0", "libgstreamer-plugins-base1.0-0", "libodbc2", "libsane1",
-        "libgphoto2-6t64", "libldap2", "libkrb5-3", "libgssapi-krb5-2", "libcap2", "libwayland-client0", "fonts-liberation",
+        "libgphoto2-6t64", "libldap2", "libkrb5-3", "libgssapi-krb5-2", "libcap2", "fonts-liberation",
         "cabextract",
     )
 
@@ -140,7 +142,28 @@ object WineSetup {
         }
 
         stage = "applying"
+        applyDisplayDriver(ctx)
         WineContents.applyAll()
         return null
+    }
+
+    /**
+     * Menulis driver tampilan Wine ke registri prefix: "wayland,x11" (Wayland dulu, X11 cadangan bila compositor
+     * belum menyala) atau "x11". Memakai shell kontainer, jadi hanya jalan saat kontainer menyala dan prefix ada.
+     */
+    private fun applyDisplayDriver(ctx: Context) {
+        val value = WineContents.displayDriverValue()
+        val cmd = ". ~/.local/share/tiny/wine/env.sh; unset HODLL; " +
+            "wine reg add 'HKCU\\Software\\Wine\\Drivers' /v Graphics /d $value /f; wineserver -w"
+        guestRun(ctx, cmd, 5 * 60_000L)
+    }
+
+    /** Dipanggil UI saat pengguna mengganti driver tampilan Wine; bila belum bisa dijalankan, berlaku di "Run" berikutnya. */
+    fun applyDisplayAsync(ctx: Context) {
+        val app = ctx.applicationContext
+        Thread({
+            if (phase == Phase.RUNNING || !Launcher.isStarted || !WineContents.prefixReady()) return@Thread
+            runCatching { applyDisplayDriver(app) }
+        }, "tiny-wine-display").start()
     }
 }
