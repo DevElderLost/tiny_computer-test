@@ -38,6 +38,7 @@
 #include <wayland-server.h>
 
 #include "xdg-shell-server-protocol.h"
+#include "wlr-layer-shell-unstable-v1-server-protocol.h"
 #include "linux-dmabuf-v1-server-protocol.h"
 #include "sc_layer.h"
 #include "ahb_swapchain.h"
@@ -216,7 +217,18 @@ static void on_client_created(struct wl_listener *l, void *data) {
 
 /* ------------------------------------------------------------------ surfaces */
 
-enum surface_role { ROLE_NONE, ROLE_TOPLEVEL, ROLE_SUBSURFACE, ROLE_DESKTOP, ROLE_CURSOR };
+enum surface_role { ROLE_NONE, ROLE_TOPLEVEL, ROLE_SUBSURFACE, ROLE_DESKTOP, ROLE_CURSOR, ROLE_LAYER };
+
+/* zwlr_layer_surface_v1 state. Requests fill `layer_pend`; a commit makes it `layer_cur`. Plain 32-bit
+ * fields only (no padding): a commit compares the two with memcmp to see whether to configure again. */
+struct layer_state {
+    uint32_t anchor;                        /* ZWLR_LAYER_SURFACE_V1_ANCHOR_* bits */
+    int32_t zone;                           /* exclusive zone (kept; toplevels are not resized for it) */
+    int32_t margin[4];                      /* top, right, bottom, left */
+    uint32_t kbd;                           /* ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_* */
+    uint32_t width, height;                 /* requested size, 0 = decided by the compositor */
+    uint32_t level;                         /* ZWLR_LAYER_SHELL_V1_LAYER_*: 0 background .. 3 overlay */
+};
 
 struct surface {
     struct wl_resource *resource;
@@ -257,11 +269,20 @@ struct surface {
     struct wl_resource *xdg_surface, *xdg_toplevel;
     struct wl_resource *viewport;
 
-    /* Toplevel placement on the scene. */
+    /* Toplevel placement on the scene. A mapped layer surface reuses x, y and placed for its own
+     * scene position, so the input paths that offset by them need no special case. */
     int mapped;                             /* in g_toplevels */
     struct wl_list toplevel_link;
     int x, y, placed;
     uint32_t hwnd;
+
+    /* wlr-layer-shell (see the "wlr-layer-shell" section). */
+    struct wl_resource *layer_res;          /* the zwlr_layer_surface_v1, NULL once it is destroyed */
+    struct wl_list layer_link;              /* g_layers[layer_cur.level] while mapped */
+    struct layer_state layer_pend, layer_cur;
+    int layer_configured;                   /* the configure for the current state was sent */
+    int layer_mapped;                       /* in g_layers */
+    char *layer_ns;                         /* the client's namespace string, for the log */
 
     /* Subsurface tree. */
     struct surface *parent;
@@ -280,6 +301,10 @@ struct surface {
 
 static struct wl_list g_surfaces;           /* every surface */
 static struct wl_list g_toplevels;          /* mapped toplevels, bottom to top */
+static struct wl_list g_layers[4];          /* mapped layer surfaces per layer (background..overlay), bottom to top */
+static void layer_surface_commit(struct surface *s);
+static void layer_surface_gone(struct surface *s);
+static struct surface *layer_exclusive_focus(void);
 static struct surface *g_desktop;
 static uint32_t *g_zorder;                  /* last reported Windows stacking order, top first */
 static size_t g_zorder_count;
@@ -1159,6 +1184,7 @@ static void surface_commit(struct wl_client *c, struct wl_resource *r) {
         if (s->has_content) map_toplevel(s);
         else unmap_toplevel(s);
     }
+    if (s->role == ROLE_LAYER) layer_surface_commit(s);
     schedule_render();
 }
 static void surface_set_buffer_transform(struct wl_client *c, struct wl_resource *r, int32_t t) {}
@@ -1207,6 +1233,7 @@ static void surface_resource_destroy(struct wl_resource *r) {
     if (g_desktop == s) { g_desktop = NULL; droiddeck_log("desktop", "the desktop closed"); }
     if (g_hud_surface == s) { g_hud_surface = NULL; droiddeck_on_game_surface(NULL, NULL); }
     constraints_surface_gone(s);
+    layer_surface_gone(s);
 
     unmap_toplevel(s);
     detach_from_parent(s);
@@ -1280,6 +1307,7 @@ static void compositor_create_surface(struct wl_client *c, struct wl_resource *r
     wl_list_init(&s->children);
     wl_list_init(&s->child_link);
     wl_list_init(&s->toplevel_link);
+    wl_list_init(&s->layer_link);
     wl_list_init(&s->pending_buffer_destroy.link);
     wl_list_init(&s->idle_buffer_destroy.link);
     wl_list_insert(&g_surfaces, &s->link);
@@ -1808,6 +1836,267 @@ static void scene_size(int *w, int *h) {
     if (*w <= 0 || *h <= 0) { *w = INPUT_SPACE_W; *h = INPUT_SPACE_H; }
 }
 
+/* ------------------------------------------------------------------ wlr-layer-shell
+ *
+ * zwlr_layer_shell_v1 lets a Wayland client (a panel, a notification daemon, a launcher, a lock screen)
+ * put a surface on one of four layers of the output: background and bottom go below every toplevel,
+ * top and overlay above. Position comes from the anchor and margins, relative to the scene (the same
+ * area the toplevels are drawn in, see scene_size). Not done: the exclusive zone does not shrink
+ * toplevels, and the input region is ignored (a layer surface takes input over its whole rectangle,
+ * like toplevel_at does for windows).
+ */
+
+static void layer_size(const struct layer_state *st, int W, int H, uint32_t *w, uint32_t *h) {
+    int left = !!(st->anchor & ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT);
+    int right = !!(st->anchor & ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
+    int top = !!(st->anchor & ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP);
+    int bottom = !!(st->anchor & ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM);
+    long cw = st->width, ch = st->height;
+    /* An axis asked for as 0: the scene minus the margins when anchored to both of its edges, else
+     * the whole axis (the spec leaves it to the compositor). */
+    if (cw == 0) cw = (left && right) ? (long)W - st->margin[3] - st->margin[1] : W;
+    if (ch == 0) ch = (top && bottom) ? (long)H - st->margin[0] - st->margin[2] : H;
+    if (cw < 1) cw = 1;
+    if (ch < 1) ch = 1;
+    *w = (uint32_t)cw;
+    *h = (uint32_t)ch;
+}
+
+static void layer_send_configure(struct surface *s) {
+    int W, H;
+    uint32_t w, h;
+    if (!s->layer_res) return;
+    scene_size(&W, &H);
+    layer_size(&s->layer_cur, W, H, &w, &h);
+    zwlr_layer_surface_v1_send_configure(s->layer_res, wl_display_next_serial(g_display), w, h);
+}
+
+/* Scene position from the anchor and margins; kept in x, y, placed (see struct surface). */
+static void layer_place(struct surface *s) {
+    int W, H, w, h, x, y;
+    const uint32_t a = s->layer_cur.anchor;
+    const int32_t *m = s->layer_cur.margin;
+    scene_size(&W, &H);
+    surface_size(s, &w, &h);
+    if ((a & ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT) && (a & ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT)) x = m[3];
+    else if (a & ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT) x = W - w - m[1];
+    else if (a & ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT) x = m[3];
+    else x = (W - w) / 2;
+    if ((a & ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP) && (a & ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM)) y = m[0];
+    else if (a & ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM) y = H - h - m[2];
+    else if (a & ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP) y = m[0];
+    else y = (H - h) / 2;
+    s->x = x;
+    s->y = y;
+    s->placed = 1;
+}
+
+static void layer_map(struct surface *s) {
+    if (s->layer_mapped) return;
+    s->layer_mapped = 1;
+    wl_list_insert(g_layers[s->layer_cur.level].prev, &s->layer_link); /* new surfaces start on top of their layer */
+    droiddeck_log("layer", "opened layer surface \"%s\" (%s) on layer %u", s->layer_ns ? s->layer_ns : "",
+                  client_name(wl_resource_get_client(s->resource)), s->layer_cur.level);
+}
+
+static void layer_unmap(struct surface *s) {
+    if (!s->layer_mapped) return;
+    s->layer_mapped = 0;
+    wl_list_remove(&s->layer_link);
+    wl_list_init(&s->layer_link);
+    s->placed = 0;
+    if (g_grab == s) g_grab = NULL;
+    if (g_key_target == s) g_key_target = NULL;
+    if (g_ime_click == s) g_ime_click = NULL;
+    droiddeck_log("layer", "closed layer surface \"%s\"", s->layer_ns ? s->layer_ns : "");
+    schedule_render();
+}
+
+/* Called from surface_commit for a surface with the layer role. The first commit (no buffer yet) is
+ * answered with a configure; the surface maps once it has content. A commit that changes the state
+ * is answered with a new configure; one that removes the buffer unmaps it and starts over. */
+static void layer_surface_commit(struct surface *s) {
+    if (!s->layer_res) return;
+    if (!s->layer_configured || memcmp(&s->layer_pend, &s->layer_cur, sizeof(s->layer_cur)) != 0) {
+        int relink = s->layer_mapped && s->layer_pend.level != s->layer_cur.level;
+        if (relink) { wl_list_remove(&s->layer_link); }
+        s->layer_cur = s->layer_pend;
+        if (relink) wl_list_insert(g_layers[s->layer_cur.level].prev, &s->layer_link);
+        s->layer_configured = 1;
+        layer_send_configure(s);
+    }
+    if (s->has_content) {
+        layer_map(s);
+        layer_place(s);
+    } else if (s->layer_mapped) {
+        layer_unmap(s);
+        s->layer_configured = 0;
+    }
+}
+
+/* The wl_surface is going away: drop the layer surface's links and let its resource outlive us inert. */
+static void layer_surface_gone(struct surface *s) {
+    layer_unmap(s);
+    if (s->layer_res) wl_resource_set_user_data(s->layer_res, NULL);
+    s->layer_res = NULL;
+    free(s->layer_ns);
+    s->layer_ns = NULL;
+}
+
+static void layer_surface_resource_destroy(struct wl_resource *r) {
+    struct surface *s = wl_resource_get_user_data(r);
+    if (!s) return;
+    layer_unmap(s);
+    s->layer_res = NULL;
+    s->layer_configured = 0;
+    free(s->layer_ns);
+    s->layer_ns = NULL;
+    schedule_render();
+}
+
+static void layer_surface_set_size(struct wl_client *c, struct wl_resource *r, uint32_t w, uint32_t h) {
+    struct surface *s = wl_resource_get_user_data(r);
+    if (!s) return;
+    s->layer_pend.width = w;
+    s->layer_pend.height = h;
+}
+static void layer_surface_set_anchor(struct wl_client *c, struct wl_resource *r, uint32_t anchor) {
+    struct surface *s = wl_resource_get_user_data(r);
+    if (anchor & ~15u) {
+        wl_resource_post_error(r, ZWLR_LAYER_SURFACE_V1_ERROR_INVALID_ANCHOR, "invalid anchor %u", anchor);
+        return;
+    }
+    if (s) s->layer_pend.anchor = anchor;
+}
+static void layer_surface_set_exclusive_zone(struct wl_client *c, struct wl_resource *r, int32_t zone) {
+    struct surface *s = wl_resource_get_user_data(r);
+    if (s) s->layer_pend.zone = zone;
+}
+static void layer_surface_set_margin(struct wl_client *c, struct wl_resource *r,
+                                     int32_t top, int32_t right, int32_t bottom, int32_t left) {
+    struct surface *s = wl_resource_get_user_data(r);
+    if (!s) return;
+    s->layer_pend.margin[0] = top;
+    s->layer_pend.margin[1] = right;
+    s->layer_pend.margin[2] = bottom;
+    s->layer_pend.margin[3] = left;
+}
+static void layer_surface_set_keyboard_interactivity(struct wl_client *c, struct wl_resource *r, uint32_t k) {
+    struct surface *s = wl_resource_get_user_data(r);
+    if (k > ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_ON_DEMAND) {
+        wl_resource_post_error(r, ZWLR_LAYER_SURFACE_V1_ERROR_INVALID_KEYBOARD_INTERACTIVITY,
+                               "invalid keyboard interactivity %u", k);
+        return;
+    }
+    if (s) s->layer_pend.kbd = k;
+}
+/* The popup was already dismissed by xdg_surface.get_popup (popups are not drawn here). */
+static void layer_surface_get_popup(struct wl_client *c, struct wl_resource *r, struct wl_resource *popup) {}
+static void layer_surface_ack_configure(struct wl_client *c, struct wl_resource *r, uint32_t serial) {}
+static void layer_surface_destroy_req(struct wl_client *c, struct wl_resource *r) { wl_resource_destroy(r); }
+static void layer_surface_set_layer(struct wl_client *c, struct wl_resource *r, uint32_t layer) {
+    struct surface *s = wl_resource_get_user_data(r);
+    if (layer > ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY) {
+        wl_resource_post_error(r, ZWLR_LAYER_SHELL_V1_ERROR_INVALID_LAYER, "invalid layer %u", layer);
+        return;
+    }
+    if (s) s->layer_pend.level = layer;
+}
+static void layer_surface_set_exclusive_edge(struct wl_client *c, struct wl_resource *r, uint32_t edge) {}
+
+static const struct zwlr_layer_surface_v1_interface layer_surface_impl = {
+    .set_size = layer_surface_set_size,
+    .set_anchor = layer_surface_set_anchor,
+    .set_exclusive_zone = layer_surface_set_exclusive_zone,
+    .set_margin = layer_surface_set_margin,
+    .set_keyboard_interactivity = layer_surface_set_keyboard_interactivity,
+    .get_popup = layer_surface_get_popup,
+    .ack_configure = layer_surface_ack_configure,
+    .destroy = layer_surface_destroy_req,
+    .set_layer = layer_surface_set_layer,
+    .set_exclusive_edge = layer_surface_set_exclusive_edge,
+};
+
+static void layer_shell_get_layer_surface(struct wl_client *c, struct wl_resource *r, uint32_t id,
+                                          struct wl_resource *surface, struct wl_resource *output,
+                                          uint32_t layer, const char *ns) {
+    struct surface *s = wl_resource_get_user_data(surface);
+    if (layer > ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY) {
+        wl_resource_post_error(r, ZWLR_LAYER_SHELL_V1_ERROR_INVALID_LAYER, "invalid layer %u", layer);
+        return;
+    }
+    struct wl_resource *ls = wl_resource_create(c, &zwlr_layer_surface_v1_interface, wl_resource_get_version(r), id);
+    if (!ls) { wl_client_post_no_memory(c); return; }
+    /* A resource without an implementation makes libwayland abort on its first request, so every
+     * path below gives it one, even when the request is refused. */
+    if (!s || (s->role != ROLE_NONE && s->role != ROLE_LAYER) || s->layer_res) {
+        wl_resource_set_implementation(ls, &layer_surface_impl, NULL, NULL);
+        wl_resource_post_error(r, ZWLR_LAYER_SHELL_V1_ERROR_ROLE, "wl_surface already has a role");
+        return;
+    }
+    if (s->has_content || s->idle_buffer) {
+        wl_resource_set_implementation(ls, &layer_surface_impl, NULL, NULL);
+        wl_resource_post_error(r, ZWLR_LAYER_SHELL_V1_ERROR_ALREADY_CONSTRUCTED,
+                               "wl_surface already has a buffer attached or committed");
+        return;
+    }
+    wl_resource_set_implementation(ls, &layer_surface_impl, s, layer_surface_resource_destroy);
+    s->role = ROLE_LAYER;
+    s->layer_res = ls;
+    memset(&s->layer_pend, 0, sizeof(s->layer_pend));
+    s->layer_pend.level = layer;
+    s->layer_cur = s->layer_pend;
+    s->layer_configured = 0;
+    free(s->layer_ns);
+    s->layer_ns = ns ? strdup(ns) : NULL;
+}
+static void layer_shell_destroy(struct wl_client *c, struct wl_resource *r) { wl_resource_destroy(r); }
+static const struct zwlr_layer_shell_v1_interface layer_shell_impl = {
+    .get_layer_surface = layer_shell_get_layer_surface,
+    .destroy = layer_shell_destroy,
+};
+static void bind_layer_shell(struct wl_client *c, void *data, uint32_t ver, uint32_t id) {
+    struct wl_resource *r = wl_resource_create(c, &zwlr_layer_shell_v1_interface, ver, id);
+    if (!r) { wl_client_post_no_memory(c); return; }
+    wl_resource_set_implementation(r, &layer_shell_impl, NULL, NULL);
+}
+
+/* Draw the layers lo..hi (inclusive) in order; each surface is placed again so a change of scene
+ * size is followed without waiting for the client's next commit. */
+static void layers_add(struct draw_list *dl, int lo, int hi) {
+    for (int l = lo; l <= hi; l++) {
+        struct surface *s;
+        wl_list_for_each(s, &g_layers[l], layer_link) {
+            layer_place(s);
+            add_tree(dl, s, s->x, s->y, 0);
+        }
+    }
+}
+
+/* Topmost mapped layer surface under the point among the layers hi down to lo. */
+static struct surface *layer_at(double x, double y, int hi, int lo) {
+    for (int l = hi; l >= lo; l--) {
+        struct surface *s;
+        wl_list_for_each_reverse(s, &g_layers[l], layer_link) {
+            int w, h;
+            surface_size(s, &w, &h);
+            if (x >= s->x && y >= s->y && x < s->x + w && y < s->y + h) return s;
+        }
+    }
+    return NULL;
+}
+
+/* A layer surface on top or overlay that asked for exclusive keyboard focus (a lock screen, a
+ * launcher): while one is mapped every key goes to it. */
+static struct surface *layer_exclusive_focus(void) {
+    for (int l = ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY; l >= ZWLR_LAYER_SHELL_V1_LAYER_TOP; l--) {
+        struct surface *s;
+        wl_list_for_each_reverse(s, &g_layers[l], layer_link)
+            if (s->layer_cur.kbd == ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE) return s;
+    }
+    return NULL;
+}
+
 static void fire_all_frames(void) {
     struct surface *s;
     wl_list_for_each(s, &g_surfaces, link) fire_frames(&s->frames);
@@ -2061,12 +2350,14 @@ static void render_scene(void) {
         g_scene_w = w;
         g_scene_h = h;
     }
+    layers_add(&dl, ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND, ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM);
     if (g_desktop && !g_hide_shell) add_tree(&dl, g_desktop, 0, 0, 0);
     wl_list_for_each(s, &g_toplevels, toplevel_link) {
         if (g_desktop && !s->placed) continue; /* wait for its position */
         if (g_hide_shell && !strcmp(client_name(wl_resource_get_client(s->resource)), "explorer.exe")) continue;
         add_tree(&dl, s, s->placed ? s->x : 0, s->placed ? s->y : 0, 0);
     }
+    layers_add(&dl, ZWLR_LAYER_SHELL_V1_LAYER_TOP, ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY);
 
     int rendered = 0;
     int fx_on = vkp_effects_active();
@@ -2434,6 +2725,15 @@ static struct surface *toplevel_at(double x, double y) {
         if (x >= sx && y >= sy && x < sx + w && y < sy + h) return s;
     }
     return NULL;
+}
+
+/* What the pointer or a finger is over without a Wine desktop: top and overlay layer surfaces, then
+ * the windows, then the bottom and background layers. */
+static struct surface *surface_at(double x, double y) {
+    struct surface *s = layer_at(x, y, ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY, ZWLR_LAYER_SHELL_V1_LAYER_TOP);
+    if (!s) s = toplevel_at(x, y);
+    if (!s) s = layer_at(x, y, ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM, ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND);
+    return s;
 }
 
 static void pointer_focus(struct wl_resource *target, wl_fixed_t fx, wl_fixed_t fy) {
@@ -2887,8 +3187,14 @@ static void pointer_input(double x, double y, int relative, uint32_t button, int
         } else if (g_desktop) {
             target = g_desktop;
         } else {
-            target = g_grab ? g_grab : toplevel_at(x, y);
-            if (button && pressed) { g_grab = target; g_key_target = target; }
+            target = g_grab ? g_grab : surface_at(x, y);
+            if (button && pressed) {
+                g_grab = target;
+                /* a layer surface that asked for no keyboard (a panel, a notification) must not take the keys */
+                if (!target || target->role != ROLE_LAYER ||
+                    target->layer_cur.kbd != ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE)
+                    g_key_target = target;
+            }
             if (button && !pressed) g_grab = NULL;
         }
     }
@@ -3029,7 +3335,7 @@ static void touch_cancel_surface(struct surface *surface) {
 }
 
 static struct surface *touch_target_at(double x, double y) {
-    struct surface *target = toplevel_at(x, y);
+    struct surface *target = surface_at(x, y);
     if (target) return target;
     if (g_desktop) return g_desktop;
     return g_grab ? g_grab : g_key_target;
@@ -3204,10 +3510,12 @@ static void key_event(uint32_t evdev, int pressed) {
      * holds keyboard focus, and a key handed to explorer's desktop hwnd is queued to explorer's
      * thread, not to the foreground program (X11 delivers keys to the focused app window, so
      * this mirrors it). The desktop itself is the last resort. */
-    struct surface *target = NULL;
-    struct wl_resource *ime = droiddeck_ime_target();
+    struct surface *target = layer_exclusive_focus(); /* a lock screen or launcher holding the keyboard */
+    struct wl_resource *ime = target ? NULL : droiddeck_ime_target();
     if (ime) target = wl_resource_get_user_data(ime);
-    if (!target && g_key_target && g_key_target->mapped && g_key_target != g_desktop) target = g_key_target;
+    if (!target && g_key_target && (g_key_target->mapped || g_key_target->layer_mapped) &&
+        g_key_target != g_desktop)
+        target = g_key_target;
     if (!target) target = g_desktop;
     if (!target) {
         struct surface *s;
@@ -3241,6 +3549,8 @@ static void output_resized(void) {
     }
     wl_list_for_each(s, &g_surfaces, link)
         if (s->xdg_toplevel && s->toplevel_committed) send_toplevel_configure(s);
+    wl_list_for_each(s, &g_surfaces, link)
+        if (s->layer_res && s->layer_configured) layer_send_configure(s);
     droiddeck_log("display", "output resized to %dx%d", g_output_w, g_output_h);
     wl_display_flush_clients(g_display);
 }
@@ -3493,6 +3803,7 @@ static struct wl_listener g_client_created = { .notify = on_client_created };
 int droiddeck_wayland_run(void) {
     wl_list_init(&g_surfaces);
     wl_list_init(&g_toplevels);
+    for (int i = 0; i < 4; i++) wl_list_init(&g_layers[i]);
     wl_list_init(&g_outputs);
     wl_list_init(&g_constraints);
     wl_list_init(&g_relative_pointers);
@@ -3533,6 +3844,7 @@ int droiddeck_wayland_run(void) {
     /* libdecor binds wl_output at 4; a lower version is a protocol error for the client. */
     wl_global_create(display, &wl_output_interface, 4, NULL, bind_output);
     wl_global_create(display, &xdg_wm_base_interface, 1, NULL, bind_xdg_wm_base);
+    wl_global_create(display, &zwlr_layer_shell_v1_interface, 5, NULL, bind_layer_shell);
     wl_global_create(display, &zwp_linux_dmabuf_v1_interface, 4, NULL, bind_dmabuf);
     /* gamescope's Wayland backend refuses a seat older than 8. */
     wl_global_create(display, &wl_seat_interface, 9, NULL, bind_seat);

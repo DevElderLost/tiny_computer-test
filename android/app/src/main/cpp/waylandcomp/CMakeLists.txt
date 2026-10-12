@@ -23,6 +23,7 @@ add_library(droiddeckwayland SHARED
         src/blend_pass.c
         generated/color-management-v1-protocol.c
         generated/xdg-shell-protocol.c
+        generated/wlr-layer-shell-unstable-v1-protocol.c
         generated/linux-dmabuf-v1-protocol.c
         generated/viewporter-protocol.c
         generated/banner-desktop-v1-protocol.c
