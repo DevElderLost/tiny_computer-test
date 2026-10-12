@@ -397,7 +397,12 @@ $data/bin/virgl_test_server ${Cfg.defaultVirglCommand}""".trimIndent(),
         }
         if (Cfg.turnip) {
             extraOpt.append(turnipOpt(ctx)).append(' ')
-            if (!Cfg.dri3) extraOpt.append("MESA_VK_WSI_DEBUG=sw ")
+            // Xwayland (X server desktop) tidak punya DRI3. Tanpa dua variabel ini Zink gagal membuat swapchain
+            // ("No DRI3 support detected ... zink: could not create swapchain", glxinfo "couldn't find RGB GLX visual").
+            // MESA_VK_WSI_DEBUG=sw: presentasi WSI Vulkan lewat jalur software; LIBGL_KOPPER_DRI2: Kopper (GL di atas
+            // Vulkan) memakai jalur DRI2 tanpa DRI3, seperti DroidDeck. Diuji: glxgears ~110-140 FPS.
+            // Toggle "Enable DRI3" harus OFF; bila ON keduanya tidak dipasang.
+            if (!Cfg.dri3) extraOpt.append("MESA_VK_WSI_DEBUG=sw LIBGL_KOPPER_DRI2=true ")
         }
         // GTK4 (mis. pavucontrol "Volume Control" di Debian 13) memakai renderer GL secara bawaan; di
         // Xwayland/proot tanpa EGL yang sehat jendelanya tampil kosong. Paksa renderer cairo (perangkat lunak).

@@ -67,12 +67,21 @@ object ShortcutRunner {
         // grafis khusus aplikasi ini
         when (s.gpu) {
             ShortcutPrefs.GPU_SOFTWARE -> {
-                sb.append("unset MESA_LOADER_DRIVER_OVERRIDE VK_ICD_FILENAMES VK_DRIVER_FILES MESA_VK_WSI_DEBUG GALLIUM_DRIVER\n")
+                sb.append("unset MESA_LOADER_DRIVER_OVERRIDE VK_ICD_FILENAMES VK_DRIVER_FILES MESA_VK_WSI_DEBUG LIBGL_KOPPER_DRI2 GALLIUM_DRIVER\n")
                 sb.append("export LIBGL_ALWAYS_SOFTWARE=1\n")
             }
             ShortcutPrefs.GPU_TURNIP -> {
                 for ((k, v) in pairs(Launcher.turnipOpt(ctx))) sb.append("export $k=${q(v)}\n")
-                if (!Cfg.dri3) sb.append("export MESA_VK_WSI_DEBUG=sw\n")
+                // lihat alasan di Launcher.guestSpec: Xwayland tanpa DRI3
+                if (!Cfg.dri3) sb.append("export MESA_VK_WSI_DEBUG=sw LIBGL_KOPPER_DRI2=true\n")
+                // Program Vulkan/SDL memakai WSI Wayland langsung ke compositor, bukan X11 lewat Xwayland (tanpa DRI3):
+                // itu jalur yang terbukti jalan (vkcube --wsi wayland dengan Turnip). Variabel ini hanya untuk proses
+                // aplikasi ini, tidak diekspor ke seluruh guest (GTK/Qt/Firefox tetap X11 lewat GDK_BACKEND/QT_QPA_PLATFORM).
+                // Wine dikecualikan: perilaku jendela, virtual desktop dan driver Wayland-nya belum diuji.
+                val prog = cleanExec(app.exec).substringBefore(' ').substringAfterLast('/')
+                if (prog != "wine" && prog != "wine64") {
+                    sb.append("if [ -S /tmp/wayland-0 ]; then export XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0 SDL_VIDEODRIVER=wayland; fi\n")
+                }
             }
         }
         // HiDPI khusus aplikasi ini
