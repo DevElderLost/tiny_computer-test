@@ -48,6 +48,14 @@ object Startup {
     var pendingApp by mutableStateOf<String?>(null)
         private set
 
+    /** APK tanpa patch.tar.gz: beri tahu di Beranda apa yang hilang dan cara memperbaikinya. */
+    private fun patchWarning() {
+        if (Rootfs.patchAssetMissing) {
+            notice = "This APK has no patch.tar.gz, so the bundled Turnip driver, virtual microphone and getifaddrs bridge are missing. " +
+                "Rebuild the APK with release_tag v1.1.0 (not latest)."
+        }
+    }
+
     /** Data sistem sudah pernah dipasang (penanda yang sama dengan `Rootfs.initData`). */
     val installed: Boolean get() = TinyPrefs.contains("defaultContainer")
 
@@ -64,6 +72,7 @@ object Startup {
         val app = ctx.applicationContext
         Thread({
             runCatching { Rootfs.initData(app) }.onFailure { Log.e(TAG, "initData gagal", it) }
+            patchWarning()
             dataReady.set(true)
             Handler(Looper.getMainLooper()).post { onReady() }
         }, "tiny-app-prepare").start()
@@ -103,6 +112,7 @@ object Startup {
             try {
                 if (!Launcher.isStarted) {
                     Rootfs.initData(app)
+                    patchWarning()
                     dataReady.set(true)
                     Rootfs.percent = -1
                     Rootfs.statusText = "startingContainer"

@@ -4,8 +4,13 @@ import android.content.Context
 import android.os.Build
 import android.util.DisplayMetrics
 import android.util.Log
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
+import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream
 import org.json.JSONObject
+import java.io.BufferedInputStream
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.Paths
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -51,6 +56,74 @@ object Rootfs {
         val code = Shell.execute(script)
         if (code != 0) Log.w(TAG, "setup_bootstrap.sh exit=$code")
         ensureFakeInput(ctx)
+    }
+
+    /**
+     * Berkas yang HARUS ada setelah `patch.tar.gz` diekstrak (`tiny/extra`): driver Vulkan Linux bawaan
+     * (Turnip + ICD-nya), klien mikrofon virtual, dan jembatan getifaddrs.
+     */
+    private val PATCH_MARKERS = listOf(
+        "tiny/extra/libvulkan_freedreno.so", "tiny/extra/freedreno_icd.aarch64.json",
+        "tiny/extra/tiny_virtual_mic", "tiny/extra/getifaddrs_bridge_client_lib.so",
+    )
+
+    /** `patch.tar.gz` tidak ada di APK (CI gagal menyalinnya dari rilis tiny_container). */
+    @Volatile
+    var patchAssetMissing = false
+        private set
+
+    /**
+     * Memastikan isi `patch.tar.gz` (folder `tiny`: extra, font, dst.) benar-benar ada di data aplikasi.
+     * Dulu hanya diekstrak oleh setup_bootstrap.sh saat pemasangan pertama; kontainer yang dipasang oleh
+     * APK tanpa patch itu (atau saat ekstraksi gagal tanpa suara) tidak pernah memperolehnya lagi, sehingga
+     * `tiny/extra` hanya berisi libfakeinput.so: Vulkan jatuh ke llvmpipe, mikrofon dan getifaddrs hilang.
+     * Dipanggil di setiap peluncuran lewat [initData]. Cukup memeriksa penanda; bila lengkap tidak
+     * melakukan apa-apa. Berkas yang sudah ada tidak ditimpa (mis. driver hasil modifikasi pengguna).
+     */
+    fun ensurePatch(ctx: Context) {
+        val data = File(TinyEnv.dataPath)
+        if (PATCH_MARKERS.all { File(data, it).isFile }) { patchAssetMissing = false; return }
+        val input = runCatching { ctx.assets.open("patch.tar.gz") }.getOrElse {
+            patchAssetMissing = true
+            Log.w(TAG, "tiny/extra tidak lengkap dan patch.tar.gz tidak ada di APK: ${it.message}")
+            return
+        }
+        patchAssetMissing = false
+        runCatching {
+            val root = data.canonicalFile
+            var written = 0
+            TarArchiveInputStream(GzipCompressorInputStream(BufferedInputStream(input, 1 shl 16))).use { tar ->
+                val buf = ByteArray(1 shl 16)
+                var e = tar.nextTarEntry
+                while (e != null) {
+                    val rel = e.name.removePrefix("./").trimStart('/').trimEnd('/')
+                    val out = File(root, rel)
+                    val canon = (if (e.isSymbolicLink) out.parentFile ?: root else out).canonicalFile
+                    val safe = rel.isNotEmpty() && rel.split('/').none { it == ".." } &&
+                        (canon.path == root.path || canon.path.startsWith(root.path + File.separator))
+                    if (safe) when {
+                        e.isDirectory -> out.mkdirs()
+                        e.isSymbolicLink -> if (!out.exists()) {
+                            out.parentFile?.mkdirs()
+                            Files.createSymbolicLink(out.toPath(), Paths.get(e.linkName))
+                        }
+                        e.isFile -> if (!out.exists()) {
+                            out.parentFile?.mkdirs()
+                            out.outputStream().use { o ->
+                                while (true) { val r = tar.read(buf); if (r < 0) break; o.write(buf, 0, r) }
+                            }
+                            out.setReadable(true, false)
+                            if (e.mode and 0x49 != 0 || rel.startsWith("tiny/extra/") || rel.endsWith(".so")) out.setExecutable(true, false)
+                            written++
+                        }
+                    }
+                    e = tar.nextTarEntry
+                }
+            }
+            Log.i(TAG, "patch.tar.gz: $written berkas diekstrak ke $root")
+        }.onFailure { Log.w(TAG, "ekstraksi patch.tar.gz gagal: ${it.message}", it) }
+        val still = PATCH_MARKERS.filter { !File(data, it).isFile }
+        if (still.isNotEmpty()) Log.w(TAG, "masih hilang setelah ekstraksi: $still")
     }
 
     /**
@@ -194,6 +267,7 @@ object Rootfs {
             Cfg.reinstallBootstrap = false
         }
         ensureFakeInput(ctx)
+        ensurePatch(ctx)
         return first
     }
 }
