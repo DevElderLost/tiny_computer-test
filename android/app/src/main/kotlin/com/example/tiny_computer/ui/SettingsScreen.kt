@@ -122,6 +122,7 @@ fun SettingsScreen() {
             DeckTextRow(stringResource(R.string.tc_ui_turnip_env_var), Cfg.defaultTurnipOpt, multiline = true) { Cfg.defaultTurnipOpt = it }
             DeckSwitchRow(stringResource(R.string.tc_ui_enable_turnip_zink), stringResource(R.string.tc_ui_apply_on_next_launch), Cfg.turnip) { Cfg.turnip = it }
             DeckSwitchRow(stringResource(R.string.tc_ui_enable_d_r_i3), null, Cfg.dri3) { Cfg.dri3 = it }
+            DeckSwitchRow(stringResource(R.string.tc_ui_fake_drm), stringResource(R.string.tc_ui_fake_drm_hint), Cfg.fakeDrm) { Cfg.fakeDrm = it }
             DeckSwitchRow(stringResource(R.string.tc_ui_desktop_wayland), stringResource(R.string.tc_ui_desktop_wayland_hint), Cfg.desktopWayland) { Cfg.desktopWayland = it }
         }
 

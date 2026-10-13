@@ -219,6 +219,11 @@ static dev_t dmabuf_render_node(void) {
     if (g_no_render_node) return 0;
     for (size_t i = 0; i < sizeof(nodes) / sizeof(nodes[0]); i++)
         if (!stat(nodes[i], &st) && S_ISCHR(st.st_mode)) return st.st_rdev;
+    /* Tiny Computer "fake DRM" (extra/fakedrm/libfakedrm.so in the container): a phone has no node of
+     * its own, so name the userspace one Xwayland's glamor opens there. Major 1000 cannot clash with a
+     * real DRM major. Only when no real node exists; set by the app (DROIDDECK_WAYLAND_FAKE_RENDER_NODE). */
+    const char *fake = getenv("DROIDDECK_WAYLAND_FAKE_RENDER_NODE");
+    if (fake && *fake && strcmp(fake, "0") != 0) return makedev(1000, 128);
     return 0;
 }
 

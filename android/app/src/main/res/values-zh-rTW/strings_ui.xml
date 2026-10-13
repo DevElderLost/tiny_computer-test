@@ -67,6 +67,8 @@
     <string name="tc_ui_turnip_env_var">Turnip 環境變數</string>
     <string name="tc_ui_enable_turnip_zink">啟用 Turnip+Zink 驅動</string>
     <string name="tc_ui_enable_d_r_i3">啟用 DRI3</string>
+    <string name="tc_ui_fake_drm">虛擬 DRM(實驗性)</string>
+    <string name="tc_ui_fake_drm_hint">為 Xwayland glamor 提供使用者空間 DRM 渲染節點(libfakedrm.so)。需要 DRI3 與 Turnip,下次啟動桌面時生效。</string>
     <string name="tc_ui_dri3_requirement">DRI3 必須配合 Termux:X11 與 Turnip 使用</string>
     <string name="tc_ui_windows_app_support">Windows 應用支援</string>
     <string name="tc_ui_hangover_description">使用 Hangover（於原生 Wine 執行跨架構應用）來執行 Windows 應用！\n\n執行 Windows 程式需經過架構與系統雙層模擬，請勿對速度抱太大期望。</string>

@@ -105,6 +105,10 @@ object Cfg {
     var dri3: Boolean
         get() = TinyPrefs.getBool("dri3", false)
         set(v) = TinyPrefs.setBool("dri3", v)
+    /** DRM palsu (extra/fakedrm/libfakedrm.so) supaya glamor Xwayland punya render node. Eksperimental; butuh DRI3 + Turnip. */
+    var fakeDrm: Boolean
+        get() = TinyPrefs.getBool("fakeDrm", false)
+        set(v) = TinyPrefs.setBool("fakeDrm", v)
     /** Desktop (Open desktop): aplikasi SDL/Vulkan memakai WSI Wayland ke compositor (Xwayland tanpa DRI3 gagal di Turnip). */
     var desktopWayland: Boolean
         get() = TinyPrefs.getBool("desktopWayland", true)

@@ -1,0 +1,160 @@
+From: DevElderLost
+Subject: [PATCH 2/2] xwayland: glamor on a userspace "fake DRM" node (libfakedrm.so)
+
+Apply after xwayland-dri3-nodrm.patch. With extra/fakedrm/libfakedrm.so preloaded
+(FAKEDRM_ROOT set) Xwayland's glamor finds a render node and can start on a phone that has
+no /dev/dri. The node is only an identity, so:
+ - DRI3Open is refused (a client could do nothing with the fd)
+ - only DRM_FORMAT_MOD_LINEAR is offered, for the screen and for every window
+ - whatever modifier a client names in PixmapFromBuffers is taken as LINEAR (Mesa for
+   DRM-less X servers sends a placeholder value)
+ - XWL_FAKEDRM_ANY_MODIFIER=1 turns the LINEAR-only handling off
+If glamor still fails to start, the DRI3-without-DRM fallback of patch 1 takes over.
+
+Base: xwayland 24.1.6 (Debian trixie) + xwayland-dri3-nodrm.patch. Apply with: patch -p1
+---
+diff --git a/hw/xwayland/xwayland-dmabuf.c b/hw/xwayland/xwayland-dmabuf.c
+--- a/hw/xwayland/xwayland-dmabuf.c
++++ b/hw/xwayland/xwayland-dmabuf.c
+@@ -31,6 +31,7 @@
+ #include <wayland-util.h>
+ 
+ #include "xwayland-dmabuf.h"
++#include "xwayland-dri3-nodrm.h"
+ #include "xwayland-glamor-gbm.h"
+ #include "xwayland-screen.h"
+ #include "xwayland-types.h"
+@@ -325,18 +326,42 @@
+     *num_modifiers = 0;
+     *modifiers = NULL;
+ 
++    Bool ret;
++
+     if (!xwl_screen->dmabuf)
+         return FALSE;
+ 
+     if (xwl_screen->dmabuf_protocol_version >= 4) {
+         main_dev = xwl_gbm_get_main_device(xwl_screen);
+ 
+-        return xwl_dmabuf_get_modifiers_for_device(&xwl_screen->default_feedback, main_dev,
+-                                                   format, num_modifiers, modifiers, NULL);
++        ret = xwl_dmabuf_get_modifiers_for_device(&xwl_screen->default_feedback, main_dev,
++                                                  format, num_modifiers, modifiers, NULL);
+     } else {
+-        return xwl_dmabuf_get_modifiers_for_format(xwl_screen->formats, xwl_screen->num_formats,
+-                                                   format, num_modifiers, modifiers);
++        ret = xwl_dmabuf_get_modifiers_for_format(xwl_screen->formats, xwl_screen->num_formats,
++                                                  format, num_modifiers, modifiers);
++    }
++
++    /* Fake DRM: offer LINEAR only, if the compositor takes it for this format */
++    if (ret && xwl_fakedrm_linear_only()) {
++        Bool has_linear = FALSE;
++        uint32_t i;
++
++        for (i = 0; i < *num_modifiers; i++)
++            if ((*modifiers)[i] == DRM_FORMAT_MOD_LINEAR)
++                has_linear = TRUE;
++        free(*modifiers);
++        *modifiers = NULL;
++        *num_modifiers = 0;
++        if (!has_linear)
++            return FALSE;
++        *modifiers = calloc(1, sizeof(uint64_t));
++        if (!*modifiers)
++            return FALSE;
++        (*modifiers)[0] = DRM_FORMAT_MOD_LINEAR;
++        *num_modifiers = 1;
+     }
++
++    return ret;
+ }
+ 
+ Bool
+@@ -359,6 +384,10 @@
+     if (xwl_screen->dmabuf_protocol_version < 4)
+         return TRUE;
+ 
++    /* Fake DRM: no per-window lists, the LINEAR-only screen list applies */
++    if (xwl_fakedrm_linear_only())
++        return TRUE;
++
+     if (drawable->type != DRAWABLE_WINDOW || !xwl_screen->dmabuf)
+         return FALSE;
+ 
+diff --git a/hw/xwayland/xwayland-dri3-nodrm.h b/hw/xwayland/xwayland-dri3-nodrm.h
+--- a/hw/xwayland/xwayland-dri3-nodrm.h
++++ b/hw/xwayland/xwayland-dri3-nodrm.h
+@@ -26,6 +26,8 @@
+ 
+ #include <xwayland-config.h>
+ 
++#include <stdlib.h>
++#include <string.h>
+ #include <wayland-client.h>
+ 
+ #include "pixmapstr.h"
+@@ -50,6 +52,28 @@
+  *    flip it with zero copies. If that fails the copy path is used.
+  */
+ 
++/*
++ * Fake DRM (extra/fakedrm/libfakedrm.so, LD_PRELOAD): the "render node" glamor opens is only an
++ * identity, so clients cannot use the fd DRI3Open would hand out, and only LINEAR buffers make
++ * sense (Mesa for DRM-less X servers sends a placeholder modifier). FAKEDRM_ROOT is the switch;
++ * XWL_FAKEDRM_ANY_MODIFIER=1 turns the LINEAR-only handling off for experiments.
++ */
++static inline Bool
++xwl_fakedrm_active(void)
++{
++    const char *r = getenv("FAKEDRM_ROOT");
++
++    return r && *r;
++}
++
++static inline Bool
++xwl_fakedrm_linear_only(void)
++{
++    const char *a = getenv("XWL_FAKEDRM_ANY_MODIFIER");
++
++    return xwl_fakedrm_active() && !(a && *a && strcmp(a, "0") != 0);
++}
++
+ #ifdef DRI3
+ Bool xwl_nodrm_dri3_init(struct xwl_screen *xwl_screen);
+ void xwl_nodrm_dri3_registry_global(struct xwl_screen *xwl_screen,
+diff --git a/hw/xwayland/xwayland-glamor-gbm.c b/hw/xwayland/xwayland-glamor-gbm.c
+--- a/hw/xwayland/xwayland-glamor-gbm.c
++++ b/hw/xwayland/xwayland-glamor-gbm.c
+@@ -57,6 +57,7 @@
+ 
+ #include "xwayland-glamor.h"
+ #include "xwayland-glamor-gbm.h"
++#include "xwayland-dri3-nodrm.h"
+ #include "xwayland-pixmap.h"
+ #include "xwayland-screen.h"
+ #include "xwayland-window-buffers.h"
+@@ -721,6 +722,10 @@
+     drm_magic_t magic;
+     int fd;
+ 
++    /* Fake DRM: the node is only an identity, a client could do nothing with its fd */
++    if (xwl_fakedrm_active())
++        return BadMatch;
++
+     fd = open(xwl_gbm->device_name, O_RDWR | O_CLOEXEC);
+     if (fd < 0)
+         return BadAlloc;
+@@ -768,6 +773,11 @@
+     int i;
+     Bool implicit = FALSE;
+ 
++    /* Fake DRM: only LINEAR was advertised, so whatever the client names (Mesa for DRM-less
++     * X servers sends a placeholder) is the linear layout */
++    if (xwl_fakedrm_linear_only() && modifier != DRM_FORMAT_MOD_INVALID)
++        modifier = DRM_FORMAT_MOD_LINEAR;
++
+     if (width == 0 || height == 0 || num_fds == 0 ||
+         depth < 15 || bpp != BitsPerPixel(depth) ||
+         strides[0] < width * bpp / 8)
+

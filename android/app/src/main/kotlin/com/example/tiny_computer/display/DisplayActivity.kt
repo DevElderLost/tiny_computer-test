@@ -224,6 +224,9 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
         if (!CompositorHost.isStarted) {
             WaylandCompositor.nativeSetHdrRequest(WaylandCompositor.HDR_MODE_OFF, "tiny", false, false)
         }
+        // DRM palsu (extra/fakedrm): compositor menyebut render node tiruan itu di dmabuf feedback, dibaca saat compositor mulai
+        if (Cfg.fakeDrm) android.system.Os.setenv("DROIDDECK_WAYLAND_FAKE_RENDER_NODE", "1", true)
+        else android.system.Os.unsetenv("DROIDDECK_WAYLAND_FAKE_RENDER_NODE")
         CompositorHost.startOrAttach(
             holder.surface, rt.path,
             id?.let { turnip.driverPath(it) }, id?.let { turnip.libraryName(it) },

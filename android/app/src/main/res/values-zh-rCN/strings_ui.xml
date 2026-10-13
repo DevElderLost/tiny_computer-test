@@ -67,6 +67,8 @@
     <string name="tc_ui_turnip_env_var">Turnip环境变量</string>
     <string name="tc_ui_enable_turnip_zink">启用Turnip+Zink驱动</string>
     <string name="tc_ui_enable_d_r_i3">启用DRI3</string>
+    <string name="tc_ui_fake_drm">虚拟 DRM(实验性)</string>
+    <string name="tc_ui_fake_drm_hint">为 Xwayland glamor 提供用户态 DRM 渲染节点(libfakedrm.so)。需要 DRI3 与 Turnip,下次启动桌面时生效。</string>
     <string name="tc_ui_dri3_requirement">DRI3必须配合Termux:X11和Turnip使用</string>
     <string name="tc_ui_windows_app_support">Windows应用支持</string>
     <string name="tc_ui_hangover_description">使用Hangover（在原生Wine运行跨架构应用）运行Windows应用！\n\n运行Windows程序需要经过架构和系统两层模拟，不要对运行速度抱有期待！\n\n需要速度可以尝试配合图形加速使用。当然程序崩溃甚至打不开也是正常的。\n\n建议将要运行的Windows程序连同程序文件夹移至桌面运行。\n\n你需要耐心。即使图形界面什么也没显示。看看终端，还在继续输出吗？还是停止在某个报错？\n\n或者寻找该Windows软件官方是否提供Linux arm64版本。</string>

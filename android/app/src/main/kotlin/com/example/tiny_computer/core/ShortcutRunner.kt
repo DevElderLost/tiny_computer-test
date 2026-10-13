@@ -274,7 +274,7 @@ i=0; while [ ${'$'}i -lt 150 ] && [ ! -S /tmp/wayland-0 ]; do sleep 0.2; i=${'$'
     xrandr --current >> "${'$'}HOME/.vnc/xrandr.log" 2>&1
   fi
 ) &
-XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0 exec ${Launcher.xwaylandBin()} :4 -fullscreen -geometry ${w}x$h -noreset -ac +iglx -extension MIT-SHM > "${'$'}HOME/.vnc/xwayland.log" 2>&1
+XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0 ${Launcher.xwaylandEnv()}exec ${Launcher.xwaylandBin()} :4 -fullscreen -geometry ${w}x$h -noreset -ac +iglx -extension MIT-SHM > "${'$'}HOME/.vnc/xwayland.log" 2>&1
 """.trimStart(),
         )
         return "$GUEST_DIR/$SESSION_SCRIPT"

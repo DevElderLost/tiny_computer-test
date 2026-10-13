@@ -23,6 +23,19 @@ object Launcher {
      * "Enable DRI3" aktif dan berkasnya ada; selain itu Xwayland bawaan rootfs (tanpa DRI3, lihat
      * MESA_VK_WSI_DEBUG di guestSpec). Dibaca dari sisi guest: folder extra di-mount ke ~/.local/share/tiny/extra.
      */
+    /** DRM palsu untuk glamor Xwayland: butuh toggle-nya, DRI3 + Turnip, libfakedrm.so dan Xwayland hasil patch di extra. */
+    fun fakeDrmActive(): Boolean {
+        val extra = File(TinyEnv.dataPath, "tiny/extra")
+        return Cfg.fakeDrm && Cfg.dri3 && Cfg.turnip &&
+            File(extra, "libfakedrm.so").isFile && File(extra, "Xwayland").isFile
+    }
+
+    /** Awalan variabel lingkungan untuk proses Xwayland saja (LD_PRELOAD tidak dipasang ke proses guest lain). */
+    fun xwaylandEnv(): String =
+        if (fakeDrmActive())
+            "FAKEDRM_ROOT=/tmp/.fakedrm LD_PRELOAD=\"\${LD_PRELOAD:+\$LD_PRELOAD:}/home/tiny/.local/share/tiny/extra/libfakedrm.so\" "
+        else ""
+
     fun xwaylandBin(): String =
         if (Cfg.dri3 && File(TinyEnv.dataPath, "tiny/extra/Xwayland").isFile)
             "/home/tiny/.local/share/tiny/extra/Xwayland"
@@ -493,7 +506,7 @@ rm -f /tmp/.X11-unix/X4 /tmp/.X4-lock
 for i in ${'$'}(seq 1 150); do [ -S /tmp/wayland-0 ] && break; sleep 0.2; done
 # MIT-SHM dimatikan seperti versi original: SysV shm tidak bisa di-attach lewat proot, sehingga Mesa/Qt/Wine
 # mencetak "Failed to attach to x11 shm" berulang bila X mengiklankan ekstensi ini.
-(XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0 ${xwaylandBin()} :4 -fullscreen -geometry ${w}x$h -noreset -ac +iglx -extension MIT-SHM > "${'$'}HOME/.vnc/xwayland.log" 2>&1 &)
+(XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0 ${xwaylandEnv()}${xwaylandBin()} :4 -fullscreen -geometry ${w}x$h -noreset -ac +iglx -extension MIT-SHM > "${'$'}HOME/.vnc/xwayland.log" 2>&1 &)
 for i in ${'$'}(seq 1 150); do [ -S /tmp/.X11-unix/X4 ] && break; sleep 0.2; done
 if [ -n "${'$'}TINY_LAUNCH_LOG" ] && [ -w "${'$'}TINY_LAUNCH_LOG" ]; then
 (${sessionEnv}bash /etc/X11/xinit/Xsession 2>&1 | tee "${'$'}HOME/.vnc/x.log" >> "${'$'}TINY_LAUNCH_LOG") &

@@ -132,6 +132,17 @@ jobs:
             echo "::warning::Build Xwayland DRI3-tanpa-DRM gagal; APK dibuat tanpa tiny/extra/Xwayland (cek log langkah ini)."
           fi
 
+      # ---- libfakedrm.so (extra/fakedrm): render node DRM tiruan via LD_PRELOAD untuk glamor Xwayland ----
+      - name: Build libfakedrm.so (aarch64)
+        continue-on-error: true
+        run: |
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+          mkdir -p /tmp/fakedrm-out
+          sh extra/fakedrm/build.sh /tmp/fakedrm-out || {
+            rm -rf /tmp/fakedrm-out/*
+            echo "::warning::Build libfakedrm.so gagal; APK dibuat tanpa tiny/extra/libfakedrm.so."
+          }
+
       # AGP/AAPT meng-gunzip asset berakhiran .gz lalu membuang akhiran-nya (patch.tar.gz -> patch.tar).
       # Supaya tidak bergantung pada perilaku itu, patch dari rilis dikonversi di sini: tar.gz -> tar.zst,
       # disimpan sebagai assets/patch.tzst (lebih kecil dari gzip). Rootfs mengenali zstd dari magic number.
@@ -141,14 +152,21 @@ jobs:
         run: |
           sudo apt-get install -y zstd
           gunzip -c /tmp/dl/patch.tar.gz > /tmp/patch.tar
+          P=""; tar tf /tmp/patch.tar | grep -q '^\./' && P="./"
+          mkdir -p /tmp/xwl-stage/tiny/extra
           if [ -s /tmp/xwl-out/Xwayland ]; then
-            P=""; tar tf /tmp/patch.tar | grep -q '^\./' && P="./"
-            mkdir -p /tmp/xwl-stage/tiny/extra
             cp /tmp/xwl-out/Xwayland /tmp/xwl-stage/tiny/extra/Xwayland
             tar --append -f /tmp/patch.tar -C /tmp/xwl-stage --owner=0 --group=0 --mode=755 "${P}tiny/extra/Xwayland"
             echo "Xwayland disisipkan: $(cat /tmp/xwl-out/Xwayland.version 2>/dev/null)"
           else
             echo "::warning::tiny/extra/Xwayland tidak ada; patch.tzst dibuat tanpa Xwayland DRI3-tanpa-DRM."
+          fi
+          if [ -s /tmp/fakedrm-out/libfakedrm.so ]; then
+            cp /tmp/fakedrm-out/libfakedrm.so /tmp/xwl-stage/tiny/extra/libfakedrm.so
+            tar --append -f /tmp/patch.tar -C /tmp/xwl-stage --owner=0 --group=0 --mode=755 "${P}tiny/extra/libfakedrm.so"
+            echo "libfakedrm.so disisipkan"
+          else
+            echo "::warning::tiny/extra/libfakedrm.so tidak ada; DRM palsu tidak tersedia di APK ini."
           fi
           zstd -19 -T0 -q -f /tmp/patch.tar -o android/app/src/main/assets/patch.tzst
           zstd -t android/app/src/main/assets/patch.tzst
