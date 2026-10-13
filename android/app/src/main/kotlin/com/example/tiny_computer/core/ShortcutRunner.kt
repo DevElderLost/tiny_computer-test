@@ -108,7 +108,9 @@ fi
             ShortcutPrefs.GPU_TURNIP -> {
                 for ((k, v) in pairs(Launcher.turnipOpt(ctx))) sb.append("export $k=${q(v)}\n")
                 // lihat alasan di Launcher.guestSpec: Xwayland tanpa DRI3
-                if (!Cfg.dri3) sb.append("export MESA_VK_WSI_DEBUG=sw LIBGL_KOPPER_DRI2=true\n")
+                // LIBGL_KOPPER_DRI2 selalu: EGL di atas X11 butuh ini agar tidak jatuh ke llvmpipe saat DRI3Open ditolak
+                sb.append("export LIBGL_KOPPER_DRI2=true\n")
+                if (!Cfg.dri3) sb.append("export MESA_VK_WSI_DEBUG=sw\n")
             }
         }
         // Program Vulkan/SDL memakai WSI Wayland langsung ke compositor, bukan X11 lewat Xwayland (tanpa DRI3):
@@ -124,7 +126,7 @@ fi
             // WSI Wayland memakai dmabuf langsung; jalur WSI software (MESA_VK_WSI_DEBUG=sw) hanya untuk X11 tanpa DRI3
             // dan akan memaksa Vulkan/DXVK Wine menyalin lewat shm.
             if (isWine && WineContents.displayWayland())
-                sb.append("if [ -S /tmp/wayland-0 ]; then unset MESA_VK_WSI_DEBUG LIBGL_KOPPER_DRI2; fi\n")
+                sb.append("if [ -S /tmp/wayland-0 ]; then unset MESA_VK_WSI_DEBUG; fi\n")
         }
         // HiDPI khusus aplikasi ini
         when (s.hidpi) {

@@ -11,7 +11,8 @@ Register DRI3 1.2 on the plain wl_shm path when glamor is unavailable:
  - if the compositor offers linux-dmabuf with LINEAR for the format, a
    wl_buffer is also created asynchronously so Present can flip with
    zero copies; on failure the copy path is kept
- - env XWL_NODRM_DRI3=0 disables, XWL_NODRM_DRI3_ZEROCOPY=0 copy only
+ - env XWL_NODRM_DRI3=0 disables, XWL_NODRM_DRI3_ZEROCOPY=0 copy only,
+   XWL_NODRM_DRI3_DEBUG=1 traces buffers and counts copies vs flips
 
 Base: xwayland 24.1.6 (Debian trixie). Apply with: patch -p1
 ---
@@ -30,7 +31,7 @@ diff -urN -x build xwayland-24.1.6.orig/hw/xwayland/meson.build xwayland-24.1.6/
 diff -urN -x build xwayland-24.1.6.orig/hw/xwayland/xwayland-dri3-nodrm.c xwayland-24.1.6/hw/xwayland/xwayland-dri3-nodrm.c
 --- /dev/null
 +++ b/hw/xwayland/xwayland-dri3-nodrm.c
-@@ -0,0 +1,540 @@
+@@ -0,0 +1,582 @@
 +/*
 + * Copyright © 2026 DevElderLost
 + *
@@ -117,7 +118,24 @@ diff -urN -x build xwayland-24.1.6.orig/hw/xwayland/xwayland-dri3-nodrm.c xwayla
 +
 +    Bool zerocopy;
 +    Bool warned_modifier;
++
++    /* XWL_NODRM_DRI3_DEBUG=1: trace which path buffers take */
++    Bool debug;
++    unsigned int copies;        /* Present copied a client buffer (CPU path) */
++    unsigned int flips;         /* the compositor released a flipped buffer */
 +} nodrm;
++
++#define DBG(...) do { if (nodrm.debug) ErrorF("xwayland dri3-nodrm: " __VA_ARGS__); } while (0)
++
++static void
++xwl_nodrm_debug_stats(void)
++{
++    unsigned int total = nodrm.copies + nodrm.flips;
++
++    if (nodrm.debug && total && total % 300 == 0)
++        ErrorF("xwayland dri3-nodrm: stats: copies=%u flips=%u\n",
++               nodrm.copies, nodrm.flips);
++}
 +
 +static struct xwl_nodrm_pixmap *
 +xwl_nodrm_pixmap_get(PixmapPtr pixmap)
@@ -172,6 +190,8 @@ diff -urN -x build xwayland-24.1.6.orig/hw/xwayland/xwayland-dri3-nodrm.c xwayla
 +                xwl_nodrm_sync(priv, DMA_BUF_SYNC_END | DMA_BUF_SYNC_READ);
 +            xwl_nodrm_sync(priv, DMA_BUF_SYNC_START | DMA_BUF_SYNC_READ);
 +            priv->cpu_access = TRUE;
++            nodrm.copies++;
++            xwl_nodrm_debug_stats();
 +        }
 +    }
 +
@@ -230,8 +250,17 @@ diff -urN -x build xwayland-24.1.6.orig/hw/xwayland/xwayland-dri3-nodrm.c xwayla
 +    free(priv);
 +}
 +
++static void
++xwl_nodrm_buffer_release(void *data, struct wl_buffer *buffer)
++{
++    /* A release only happens for a buffer that was attached, i.e. flipped */
++    nodrm.flips++;
++    xwl_nodrm_debug_stats();
++    xwl_pixmap_buffer_release_cb(data, buffer);
++}
++
 +static const struct wl_buffer_listener xwl_nodrm_buffer_listener = {
-+    xwl_pixmap_buffer_release_cb,
++    xwl_nodrm_buffer_release,
 +};
 +
 +static void
@@ -250,6 +279,7 @@ diff -urN -x build xwayland-24.1.6.orig/hw/xwayland/xwayland-dri3-nodrm.c xwayla
 +        return;
 +    }
 +
++    DBG("compositor accepted the dma-buf, zero-copy flips possible\n");
 +    priv->buffer = buffer;
 +    wl_buffer_add_listener(buffer, &xwl_nodrm_buffer_listener, priv->pixmap);
 +}
@@ -262,6 +292,7 @@ diff -urN -x build xwayland-24.1.6.orig/hw/xwayland/xwayland-dri3-nodrm.c xwayla
 +    zwp_linux_buffer_params_v1_destroy(params);
 +    priv->params = NULL;
 +
++    DBG("compositor rejected the dma-buf, using the copy path\n");
 +    /* Not fatal: Present keeps copying through the CPU mapping */
 +    if (priv->orphan)
 +        xwl_nodrm_free_priv(priv);
@@ -283,8 +314,12 @@ diff -urN -x build xwayland-24.1.6.orig/hw/xwayland/xwayland-dri3-nodrm.c xwayla
 +    struct zwp_linux_buffer_params_v1 *params;
 +
 +    if (!nodrm.zerocopy || !nodrm.dmabuf ||
-+        !xwl_nodrm_compositor_takes_linear(priv->format))
++        !xwl_nodrm_compositor_takes_linear(priv->format)) {
++        DBG("copy path only (zerocopy=%d dmabuf=%d compositor-linear=%d)\n",
++            nodrm.zerocopy, nodrm.dmabuf != NULL,
++            xwl_nodrm_compositor_takes_linear(priv->format));
 +        return;
++    }
 +
 +    params = zwp_linux_dmabuf_v1_create_params(nodrm.dmabuf);
 +    if (!params)
@@ -381,6 +416,9 @@ diff -urN -x build xwayland-24.1.6.orig/hw/xwayland/xwayland-dri3-nodrm.c xwayla
 +        goto err_unmap;
 +    }
 +
++    DBG("pixmap_from_fds %ux%u depth=%u stride=%u offset=%u modifier=0x%llx "
++        "format=0x%08x\n", width, height, depth, priv->stride, priv->offset,
++        (unsigned long long) modifier, priv->format);
 +    priv->pixmap = pixmap;
 +    dixSetPrivate(&pixmap->devPrivates, &nodrm.key, priv);
 +    xwl_nodrm_request_wl_buffer(priv, pixmap);
@@ -551,6 +589,9 @@ diff -urN -x build xwayland-24.1.6.orig/hw/xwayland/xwayland-dri3-nodrm.c xwayla
 +    nodrm.SourceValidate = screen->SourceValidate;
 +    screen->SourceValidate = xwl_nodrm_source_validate;
 +
++    env = getenv("XWL_NODRM_DRI3_DEBUG");
++    nodrm.debug = env && strcmp(env, "0") != 0;
++
 +    /* Zero-copy flips are optional: they need the compositor's linux-dmabuf */
 +    env = getenv("XWL_NODRM_DRI3_ZEROCOPY");
 +    nodrm.zerocopy = !(env && strcmp(env, "0") == 0);
@@ -564,9 +605,11 @@ diff -urN -x build xwayland-24.1.6.orig/hw/xwayland/xwayland-dri3-nodrm.c xwayla
 +                                             &xwl_nodrm_dmabuf_listener, NULL);
 +    }
 +
-+    LogMessage(X_INFO, "xwayland: DRI3 enabled without DRM (%s)\n",
-+               nodrm.dmabuf ? "copy, zero-copy flips when the compositor "
-+                              "accepts linear dma-bufs" : "copy only");
++    /* ErrorF: always reaches stderr, unlike LogMessage(X_INFO) at default verbosity */
++    ErrorF("xwayland: DRI3 enabled without DRM (%s)\n",
++           nodrm.dmabuf ? "linux-dmabuf found, zero-copy flips if the "
++                          "compositor accepts linear dma-bufs"
++                        : "copy only, no linux-dmabuf from the compositor");
 +    return TRUE;
 +}
 +
