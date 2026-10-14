@@ -44,6 +44,8 @@ jobs:
       RELEASE_TAG: ${{ inputs.release_tag || 'v1.1.0' }}
       # Suite Debian rootfs; harus sama dengan rootfs yang dipakai app (sumber paket xwayland diambil dari sini)
       XWAYLAND_SUITE: trixie
+      # Paket yang dibungkus offline ke patch.tzst (harus sama dengan PACKAGES di ExtraSetup.kt)
+      DEB_PACKAGES: xwayland socat pulseaudio-utils libxkbregistry0
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -143,12 +145,40 @@ jobs:
             echo "::warning::Build libfakedrm.so gagal; APK dibuat tanpa tiny/extra/libfakedrm.so."
           }
 
+      # ---- Paket .deb offline (extra/debs): dibungkus ke patch.tzst sebagai tiny/extra/debs/*.deb ----
+      # Wayland (xwayland), Sound (socat, pulseaudio-utils) dan libxkbregistry0 beserta dependensinya diunduh di
+      # sini, lalu dipasang ExtraSetup dengan `dpkg -i` saat instalasi pertama: tidak butuh internet di perangkat.
+      # Untuk menambah paket offline lain cukup tambahkan namanya di DEB_PACKAGES (kunci cache ikut berubah).
+      - name: Cache .deb offline
+        id: debs-cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/debs-stage
+          key: debs-${{ env.XWAYLAND_SUITE }}-${{ hashFiles('extra/debs/**') }}-${{ env.DEB_PACKAGES }}
+
+      - name: Setup QEMU (arm64) untuk .deb offline
+        if: steps.debs-cache.outputs.cache-hit != 'true'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Fetch .deb offline
+        if: steps.debs-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        run: |
+          rm -rf /tmp/debs-stage && mkdir -p /tmp/debs-stage/tiny/extra/debs
+          sh extra/debs/fetch-debs.sh /tmp/debs-stage/tiny/extra/debs $DEB_PACKAGES || {
+            rm -rf /tmp/debs-stage   # tidak ada folder = cache tidak disimpan (jangan menyimpan hasil gagal)
+            echo "::warning::Unduh .deb offline gagal; app akan memasang paket lewat apt (butuh internet)."
+          }
+          ls -lh /tmp/debs-stage/tiny/extra/debs || true
+
       # AGP/AAPT meng-gunzip asset berakhiran .gz lalu membuang akhiran-nya (patch.tar.gz -> patch.tar).
       # Supaya tidak bergantung pada perilaku itu, patch dari rilis dikonversi di sini: tar.gz -> tar.zst,
       # disimpan sebagai assets/patch.tzst (lebih kecil dari gzip). Rootfs mengenali zstd dari magic number.
       # Xwayland hasil build di atas disisipkan ke tar yang sama sebagai tiny/extra/Xwayland sebelum dikompres,
       # sehingga ikut terpasang bersama berkas extra lain (libvulkan_freedreno.so dst).
-      - name: Convert patch.tar.gz -> assets/patch.tzst (+ Xwayland)
+      - name: Convert patch.tar.gz -> assets/patch.tzst (+ Xwayland, .deb offline)
         run: |
           sudo apt-get install -y zstd
           gunzip -c /tmp/dl/patch.tar.gz > /tmp/patch.tar
@@ -168,6 +198,11 @@ jobs:
           else
             echo "::warning::tiny/extra/libfakedrm.so tidak ada; DRM palsu tidak tersedia di APK ini."
           fi
+          for d in /tmp/debs-stage/tiny/extra/debs/*.deb; do
+            [ -s "$d" ] || continue
+            tar --append -f /tmp/patch.tar -C /tmp/debs-stage --owner=0 --group=0 --mode=644 "${P}tiny/extra/debs/$(basename "$d")"
+            echo "deb offline disisipkan: $(basename "$d")"
+          done
           zstd -19 -T0 -q -f /tmp/patch.tar -o android/app/src/main/assets/patch.tzst
           zstd -t android/app/src/main/assets/patch.tzst
           zstd -dc android/app/src/main/assets/patch.tzst | tar tf - | grep -q "tiny/extra/libvulkan_freedreno.so"
