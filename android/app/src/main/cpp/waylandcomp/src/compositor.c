@@ -3494,6 +3494,39 @@ static void scroll_event(int steps) {
     wl_display_flush_clients(g_display);
 }
 
+/* Smooth wheel motion on one axis (0 = vertical, 1 = horizontal) in 1/120 notch, positive = down or
+ * right. The touchpad scrolls a few pixels at a time instead of a whole notch per 40 px of finger. A
+ * client that binds wl_pointer 8 or later takes value120 as it is; older ones get whole notches
+ * from a remainder kept here. */
+static int g_scroll_rem[2];
+static void scroll_smooth(int axis, int v120) {
+    struct surface *target = g_active_constraint ? g_active_constraint->surface
+                           : g_desktop ? g_desktop : (g_grab ? g_grab : toplevel_at(g_ptr_x, g_ptr_y));
+    if (!target || !v120 || axis < 0 || axis > 1) return;
+    struct wl_client *client = wl_resource_get_client(target->resource);
+    struct seat_pointer *sp;
+    if (!pointer_for(client)) return;
+    int tx = 0, ty = 0;
+    if (target != g_desktop && target->placed) { tx = target->x; ty = target->y; }
+    uint32_t t = now_ms();
+    uint32_t wl_axis = axis ? WL_POINTER_AXIS_HORIZONTAL_SCROLL : WL_POINTER_AXIS_VERTICAL_SCROLL;
+    int notches;
+    g_scroll_rem[axis] += v120;
+    notches = g_scroll_rem[axis] / 120;
+    g_scroll_rem[axis] -= notches * 120;
+    pointer_focus(target->resource, wl_fixed_from_double(g_ptr_x - tx), wl_fixed_from_double(g_ptr_y - ty));
+    for_each_pointer_of(client, sp) {
+        int ver = wl_resource_get_version(sp->ptr);
+        if (ver >= WL_POINTER_AXIS_VALUE120_SINCE_VERSION)
+            wl_pointer_send_axis_value120(sp->ptr, wl_axis, v120);
+        else if (ver >= WL_POINTER_AXIS_DISCRETE_SINCE_VERSION && notches)
+            wl_pointer_send_axis_discrete(sp->ptr, wl_axis, notches);
+        wl_pointer_send_axis(sp->ptr, t, wl_axis, wl_fixed_from_double(v120 * 10.0 / 120.0));
+        if (ver >= WL_POINTER_FRAME_SINCE_VERSION) wl_pointer_send_frame(sp->ptr);
+    }
+    wl_display_flush_clients(g_display);
+}
+
 /* Folds a key into the modifier state; returns whether the state changed. */
 static int update_modifiers(uint32_t evdev, int pressed) {
     static const struct { uint32_t evdev, mask; } mod_keys[] = {
@@ -3581,6 +3614,7 @@ static int on_input_readable(int fd, uint32_t mask, void *data) {
         case 2: pointer_event(m.p1, m.p2, 0, 0); break;          /* scene motion */
         case 3: pointer_button(m.p1, m.p2); break;               /* button at pointer */
         case 4: scroll_event(m.p1); break;
+        case 9: scroll_smooth(m.p1, m.p2); break;                /* smooth wheel: axis, 1/120 notch */
         case 5: on_vsync(((int64_t)m.p1 << 32) | (uint32_t)m.p2); break;
         case 6: pointer_delta(m.p1 / 256.0, m.p2 / 256.0); break; /* relative motion, 1/256 px */
         case 7: deliver_touch(&m); break;
@@ -3633,7 +3667,8 @@ void droiddeck_wayland_vsync(int64_t frame_time_ns) {
 
 /* Called from JNI with the app's X-server input (on-screen controls, mouse): type 2 = motion
  * to scene x,y; 3 = evdev button a pressed/released (b); 4 = a wheel steps (negative = up);
- * 6 = relative motion by a,b in 1/256 pixel (the app's Relative Mouse / captured-mouse path). */
+ * 6 = relative motion by a,b in 1/256 pixel (the app's Relative Mouse / captured-mouse path);
+ * 9 = smooth wheel on axis a (0 vertical, 1 horizontal) by b/120 of a notch (the touchpad's scroll). */
 void droiddeck_wayland_send_scene_input(int type, int a, int b) {
     if (g_input_pipe[1] < 0) return;
     struct input_msg m = { type, a, b, 0, 0 };

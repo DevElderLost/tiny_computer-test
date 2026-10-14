@@ -635,6 +635,55 @@ ${WsiWayland.probeForDesktop(sessionEnv)}
         stopAndWait(onDone)
     }
 
+    /**
+     * Shutdown untuk desktop yang dibuka lewat Open desktop: hentikan Xwayland + sesi X11 (Xsession beserta
+     * seluruh keturunannya) dan semua aplikasi Shortcut yang menempel di desktop itu, lalu tunggu sampai
+     * prosesnya benar-benar hilang. Shell kontainer (terminal) dibiarkan hidup; [guiStarted] kembali false
+     * sehingga Open desktop berikutnya menyalakan desktop dari awal. Tidak memblokir pemanggil: [appPhase]
+     * menjadi STOPPING (layar progres) dan [onDone] dipanggil di thread utama.
+     */
+    fun shutdownDesktop(onDone: () -> Unit = {}) {
+        epoch++
+        mainHandler.removeCallbacks(idleCheck)
+        appStage = 0
+        appPhase = AppPhase.STOPPING
+        Thread({
+            synchronized(spawnLock) {
+                val killed = ArrayList<Int>()
+                killed += stopAppSession()
+                killed += killDesktopProcesses()
+                if (appPhase == AppPhase.STOPPING) advanceStage(1)
+                waitGone(killed, 3000)
+                guiStarted = false
+            }
+            LaunchLog.write(containerLog, "desktop", "Shutdown: Xwayland + sesi X11 dihentikan")
+            mainHandler.post {
+                if (appPhase == AppPhase.STOPPING) appPhase = AppPhase.IDLE
+                onDone()
+            }
+        }, "tiny-stop-desktop").start()
+    }
+
+    /**
+     * Xwayland desktop dan Xsession (beserta pohon prosesnya). Shell kontainer sendiri tidak disentuh:
+     * boot mengekspor DISPLAY=:4 ke seluruh shell, jadi proses tidak bisa dikenali dari lingkungannya.
+     * Yang dicari adalah baris perintahnya; proot (host) dilewati.
+     */
+    private fun killDesktopProcesses(): List<Int> {
+        val me = android.os.Process.myPid()
+        val killed = ArrayList<Int>()
+        File("/proc").listFiles()?.forEach { d ->
+            val pid = d.name.toIntOrNull() ?: return@forEach
+            if (pid == me) return@forEach
+            val cmd = runCatching { File(d, "cmdline").readText().replace('\u0000', ' ') }.getOrNull() ?: return@forEach
+            if (cmd.contains("--rootfs") || cmd.contains("proot")) return@forEach
+            val xwayland = cmd.contains("Xwayland") && cmd.contains(" :4")
+            val session = cmd.contains("xinit/Xsession")
+            if (xwayland || session) killed += killTree(pid)
+        }
+        return killed
+    }
+
     /** Mematikan sesi aplikasi di thread latar dan menunggu prosesnya hilang; [onDone] jalan di thread utama. */
     private fun stopAndWait(onDone: () -> Unit) {
         appStage = 0

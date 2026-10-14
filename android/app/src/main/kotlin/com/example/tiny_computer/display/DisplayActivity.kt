@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
+import android.view.HapticFeedbackConstants
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -15,6 +16,7 @@ import android.view.SurfaceView
 import android.view.View
 import android.view.ViewConfiguration
 import android.view.WindowManager
+import android.graphics.Rect
 import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.getValue
@@ -35,6 +37,7 @@ import com.example.tiny_computer.core.ShortcutPrefs
 import com.example.tiny_computer.core.TinyEnv
 import com.example.tiny_computer.ui.TinyTheme
 import java.io.File
+import kotlin.math.abs
 import kotlin.math.min
 
 /** Status UI yang dibaca overlay Compose. */
@@ -42,6 +45,8 @@ class DisplayUiState {
     var menuOpen by mutableStateOf(false)
     var touchpad by mutableStateOf(Cfg.touchpadMode)
     var touchpadSpeed by mutableStateOf(Cfg.touchpadSpeed.toFloat())
+    var touchpadScroll by mutableStateOf(Cfg.touchpadScroll.toFloat())
+    var touchpadNatural by mutableStateOf(Cfg.touchpadNatural)
     /** Gambar kursor bawaan rootfs (CursorView) dan pengali ukurannya. */
     var showCursor by mutableStateOf(Cfg.showCursor)
     var cursorScale by mutableStateOf(Cfg.cursorScale.toFloat())
@@ -64,6 +69,13 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
     private var pad: PadBridge? = null
     private lateinit var touchpadInput: TouchpadInput
     private var lastTouchpad = false
+
+    // menu sesi: geser dari tepi kiri ke kanan
+    private var density = 1f
+    private var edgeTracking = false   // jari turun di tepi kiri dan belum jadi geseran
+    private var edgeSwallow = false    // geseran sudah dikenali: sisa gestur tidak diteruskan ke sesi
+    private var edgeDownX = 0f
+    private var edgeDownY = 0f
     private var outW = 1280
     private var outH = 720
 
@@ -109,7 +121,11 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
         outW = size.first
         outH = size.second
 
-        touchpadInput = TouchpadInput(ViewConfiguration.get(this).scaledTouchSlop.toFloat())
+        // seret dimulai (tekan lama / tiga jari): getaran singkat sebagai tanda tombol kiri tertahan
+        density = resources.displayMetrics.density
+        touchpadInput = TouchpadInput(ViewConfiguration.get(this).scaledTouchSlop.toFloat()) {
+            surfaceView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+        }
         lastTouchpad = ui.touchpad
         val p = PadBridge(File(File(filesDir, "session"), "dev/input"))
         p.start()
@@ -120,6 +136,15 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
             holder.addCallback(this@DisplayActivity)
             isFocusable = true
             isFocusableInTouchMode = true
+            // gestur Back sistem juga mulai dari tepi kiri: sisihkan sebagian tepi (batas sistem 200dp) untuk menu
+            addOnLayoutChangeListener { v, _, top, _, bottom, _, _, _, _ ->
+                if (Build.VERSION.SDK_INT >= 29) {
+                    val h = bottom - top
+                    val strip = minOf(h, (EDGE_EXCLUDE_DP * density).toInt())
+                    val y = (h - strip) / 2
+                    v.systemGestureExclusionRects = listOf(Rect(0, y, (EDGE_ZONE_DP * density).toInt(), y + strip))
+                }
+            }
         }
         val overlay = ComposeView(this).apply {
             setContent {
@@ -130,9 +155,11 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
                         sendKey = { code, down -> WaylandCompositor.nativeSendKey(code, if (down) 1 else 0) },
                         onClose = { finish() },
                         onShutdown = {
-                            // matikan semua aplikasi + Xwayland sesi Shortcut sekarang juga; layar progres tampil
-                            // sampai semua proses benar-benar mati, baru kembali ke menu Shortcut
-                            Launcher.shutdownAppSession { finish() }
+                            // matikan sekarang juga; layar progres tampil sampai semua proses benar-benar mati.
+                            // Sesi aplikasi Shortcut: semua aplikasi + Xwayland-nya; desktop: Xwayland + sesi X11.
+                            // Setelah itu layar ditutup (kembali ke menu Shortcut atau terminal).
+                            if (currentApp != null) Launcher.shutdownAppSession { finish() }
+                            else Launcher.shutdownDesktop { finish() }
                         },
                         onPadOverlayChange = { on ->
                             // aplikasi Shortcut punya pengaturan controller sendiri; desktop memakai yang global
@@ -291,8 +318,40 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
     private fun button(code: Int, down: Boolean) =
         WaylandCompositor.nativeSendSceneInput(SCENE_BUTTON, code, if (down) 1 else 0)
 
+    /**
+     * Menu sesi: jari turun di tepi kiri lalu digeser ke kanan membuka [SessionDrawer]. Sentuhan yang
+     * mulai di tepi itu tidak diteruskan ke sesi (ketukan di tepi tidak berbuat apa-apa). True = dimakan.
+     */
+    private fun handleEdgeSwipe(e: MotionEvent): Boolean {
+        when (e.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                edgeSwallow = false
+                edgeTracking = !ui.menuOpen && e.x <= EDGE_ZONE_DP * density
+                edgeDownX = e.x
+                edgeDownY = e.y
+            }
+            MotionEvent.ACTION_MOVE -> if (edgeTracking) {
+                val dx = e.x - edgeDownX
+                val dy = abs(e.y - edgeDownY)
+                if (dx > EDGE_SWIPE_DP * density && dx > dy * 1.2f) {
+                    edgeTracking = false
+                    edgeSwallow = true
+                    ui.menuOpen = true
+                }
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                val eaten = edgeTracking || edgeSwallow
+                edgeTracking = false
+                edgeSwallow = false
+                return eaten
+            }
+        }
+        return edgeTracking || edgeSwallow
+    }
+
     private fun handleTouch(e: MotionEvent): Boolean {
         if (e.source and InputDevice.SOURCE_MOUSE == InputDevice.SOURCE_MOUSE) return handleMouse(e)
+        if (handleEdgeSwipe(e)) return true
         val touchpad = ui.touchpad
         if (touchpad != lastTouchpad) {
             // mode diganti di tengah gestur: lepas tombol yang masih tertahan
@@ -302,7 +361,10 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
         }
         if (touchpad) {
             val s = min(surfaceView.width.toFloat() / outW, surfaceView.height.toFloat() / outH)
-            return touchpadInput.onTouch(e, s, ui.touchpadSpeed, outW, outH)
+            touchpadInput.speed = ui.touchpadSpeed
+            touchpadInput.scrollSpeed = ui.touchpadScroll
+            touchpadInput.naturalScroll = ui.touchpadNatural
+            return touchpadInput.onTouch(e, s, outW, outH)
         }
         // sentuh langsung: kursor mengikuti jari
         when (e.actionMasked) {
@@ -403,6 +465,11 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
         /** Id berkas .desktop (tanpa ekstensi) yang dijalankan tanpa membuka desktop; tidak ada = desktop biasa. */
         const val EXTRA_APP = "tiny.shortcut.app"
         private const val TAG = "DisplayActivity"
+
+        /** Lebar zona tepi kiri tempat geseran menu dimulai, jarak geser yang membukanya, dan tinggi tepi yang disisihkan dari gestur Back. */
+        private const val EDGE_ZONE_DP = 28f
+        private const val EDGE_SWIPE_DP = 36f
+        private const val EDGE_EXCLUDE_DP = 200f
 
         /** Ukuran output yang terakhir diberikan ke compositor (satu proses = satu compositor). */
         @Volatile private var lastOutput: Pair<Int, Int>? = null

@@ -219,13 +219,20 @@ object Cfg {
     var padOverlay: Boolean
         get() = TinyPrefs.getBool("padOverlay", false)
         set(v) = TinyPrefs.setBool("padOverlay", v)
-    /** Mode touchpad (kursor digerakkan relatif) untuk layar desktop/aplikasi; false = sentuh langsung. */
+    /** Mode touchpad (kursor digerakkan relatif) untuk layar desktop/aplikasi; bawaan aktif, false = sentuh langsung. */
     var touchpadMode: Boolean
-        get() = TinyPrefs.getBool("touchpadMode", false)
+        get() = TinyPrefs.getBool("touchpadMode", true)
         set(v) = TinyPrefs.setBool("touchpadMode", v)
     var touchpadSpeed: Double
         get() = TinyPrefs.getDouble("touchpadSpeed", 1.6)
         set(v) = TinyPrefs.setDouble("touchpadSpeed", v)
+    /** Kecepatan gulir dua jari dan arahnya (true = isi mengikuti jari, seperti ponsel). */
+    var touchpadScroll: Double
+        get() = TinyPrefs.getDouble("touchpadScroll", 1.0)
+        set(v) = TinyPrefs.setDouble("touchpadScroll", v)
+    var touchpadNatural: Boolean
+        get() = TinyPrefs.getBool("touchpadNatural", true)
+        set(v) = TinyPrefs.setBool("touchpadNatural", v)
     /** Gambar kursor bawaan rootfs (dari wl_pointer.set_cursor) di atas layar. */
     var showCursor: Boolean
         get() = TinyPrefs.getBool("showCursor", true)

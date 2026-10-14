@@ -129,6 +129,12 @@
     <string name="tc_app_stop_wait">正在等待程序結束…</string>
     <string name="tc_display_touchpad">触控板模式（相对指针）</string>
     <string name="tc_display_touchpad_speed">触控板速度</string>
+    <string name="tc_display_touchpad_scroll">滚动速度</string>
+    <string name="tc_display_touchpad_natural">自然滚动（内容跟随手指）</string>
+    <string name="tc_drawer_pointer">指针</string>
+    <string name="tc_drawer_input">输入</string>
+    <string name="tc_drawer_session">会话</string>
+    <string name="tc_display_shutdown_confirm">停止此会话中运行的一切并关闭？</string>
     <string name="tc_display_cursor">显示光标</string>
     <string name="tc_display_cursor_size">光标大小</string>
     <string name="tc_display_back">返回终端</string>

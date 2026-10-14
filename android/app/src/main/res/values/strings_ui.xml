@@ -129,6 +129,12 @@
     <string name="tc_app_stop_wait">Waiting for processes to exit…</string>
     <string name="tc_display_touchpad">Touchpad mode (relative pointer)</string>
     <string name="tc_display_touchpad_speed">Touchpad speed</string>
+    <string name="tc_display_touchpad_scroll">Scroll speed</string>
+    <string name="tc_display_touchpad_natural">Natural scroll (content follows your fingers)</string>
+    <string name="tc_drawer_pointer">Pointer</string>
+    <string name="tc_drawer_input">Input</string>
+    <string name="tc_drawer_session">Session</string>
+    <string name="tc_display_shutdown_confirm">Stop everything running in this session and close it?</string>
     <string name="tc_display_cursor">Show cursor</string>
     <string name="tc_display_cursor_size">Cursor size</string>
     <string name="tc_display_back">Back to terminal</string>
