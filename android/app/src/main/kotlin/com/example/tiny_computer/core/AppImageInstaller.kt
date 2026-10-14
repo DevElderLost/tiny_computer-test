@@ -4,6 +4,9 @@ import android.content.Context
 import android.net.Uri
 import android.os.StatFs
 import android.provider.OpenableColumns
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import java.io.File
 import java.io.IOException
 import java.nio.file.FileVisitResult
@@ -47,6 +50,22 @@ object AppImageInstaller {
     }
 
     fun isAppImageShortcut(id: String) = id.startsWith(ID_PREFIX)
+
+    /**
+     * Id AppImage yang skrip pasangnya sedang berjalan di terminal. Diisi saat perintah dikirim ke terminal;
+     * TinyApp menunggu penanda selesai ([isDone]) lalu menutup tampilan terminal dan kembali ke tab Shortcut.
+     */
+    var watching by mutableStateOf<String?>(null)
+        private set
+
+    fun watch(id: String) { watching = id }
+
+    fun stopWatching(id: String) { if (watching == id) watching = null }
+
+    /** Skrip pasang menulis berkas ini di langkah terakhir; tidak ada bila gagal (terminal dibiarkan agar galatnya terbaca). */
+    fun isDone(id: String) = File(File(baseDir(), id), DONE_MARK).exists()
+
+    private const val DONE_MARK = "install.done"
 
     fun isAppImageName(name: String?) = name != null && name.endsWith(".appimage", ignoreCase = true)
 
@@ -205,6 +224,37 @@ if [ -n "${'$'}ICONNAME" ]; then
   fi
 fi
 if [ -z "${'$'}ICON" ] && [ -e app/.DirIcon ] && cp -L app/.DirIcon icon.png 2>/dev/null; then ICON="${'$'}BASE/icon.png"; fi
+# AppImage berbasis sharun (anylinux): di proot, hardlink hasil ekstraksi menjadi symlink .proot.l2s.* dan sharun
+# salah membaca namanya sendiri (gagal "Failed to check ELF class"). Lewati sharun: jalankan biner asli lewat
+# ld-linux bawaan AppImage dengan peluncur buatan sendiri.
+LAUNCH=""
+LDSO="${'$'}(ls app/shared/lib/ld-linux-*.so.* 2>/dev/null | head -n 1)"
+if [ -e app/sharun ] && [ -n "${'$'}LDSO" ] && [ -d app/shared/bin ]; then
+  BIN="${'$'}(key Exec)"; BIN="${'$'}{BIN%% *}"; BIN="${'$'}{BIN##*/}"
+  [ -n "${'$'}BIN" ] && [ -f "app/shared/bin/${'$'}BIN" ] || BIN="${'$'}(ls app/shared/bin 2>/dev/null | head -n 1)"
+  if [ -n "${'$'}BIN" ] && [ -f "app/shared/bin/${'$'}BIN" ]; then
+    cat > app/tiny-launch.sh <<'WRAP'
+#!/bin/sh
+# dibuat installer Tiny Computer: menjalankan biner asli tanpa sharun (lihat install.sh)
+APPDIR="${'$'}(cd "${'$'}(dirname "${'$'}0")" && pwd)"
+export APPDIR
+cd "${'$'}APPDIR/bin" 2>/dev/null || cd "${'$'}APPDIR"
+LP="${'$'}APPDIR/shared/lib"
+for d in "${'$'}APPDIR"/shared/lib/*/; do
+  [ -n "${'$'}(ls "${'$'}d"lib*.so* 2>/dev/null | head -n 1)" ] && LP="${'$'}LP:${'$'}{d%/}"
+done
+if [ -f "${'$'}APPDIR/.env" ]; then
+  while IFS= read -r l; do
+    case "${'$'}l" in ''|'#'*) ;; *=*) export "${'$'}l" ;; esac
+  done < "${'$'}APPDIR/.env"
+fi
+exec "${'$'}APPDIR/__LDSO__" --library-path "${'$'}LP" "${'$'}APPDIR/shared/bin/__BIN__" "${'$'}@"
+WRAP
+    sed -i -e "s|__LDSO__|${'$'}{LDSO#app/}|" -e "s|__BIN__|${'$'}BIN|" app/tiny-launch.sh
+    chmod +x app/tiny-launch.sh
+    LAUNCH="${'$'}BASE/app/tiny-launch.sh"
+  fi
+fi
 mkdir -p "${'$'}APPS"
 {
   echo "[Desktop Entry]"
@@ -212,7 +262,7 @@ mkdir -p "${'$'}APPS"
   echo "Name=${'$'}NAME"
   [ -n "${'$'}COMMENT" ] && echo "Comment=${'$'}COMMENT"
   [ -n "${'$'}ICON" ] && echo "Icon=${'$'}ICON"
-  echo "Exec=${'$'}BASE/app/AppRun %U"
+  echo "Exec=${'$'}{LAUNCH:-${'$'}BASE/app/AppRun} %U"
   echo "Path=${'$'}BASE/app"
   echo "Terminal=false"
   echo "Categories=${'$'}CATS"
@@ -222,6 +272,7 @@ chmod a+r "${'$'}APPS/${'$'}ID.desktop"
 rm -f image.AppImage extract.log
 echo "[4/4] Selesai: ${'$'}NAME terpasang."
 echo "Buka tab Shortcut (tekan tombol segarkan) lalu ketuk ikonnya untuk menjalankan."
+: > "${'$'}BASE/install.done"
 """
 
     /** Menghapus AppImage terpasang beserta entri menu, pengaturan, dan isi ekstraksinya. Entri lain tidak disentuh. */

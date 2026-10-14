@@ -160,7 +160,6 @@ fun SessionDrawer(
                         DrawerPage.INPUT -> InputPage(state, onPadOverlayChange)
                         DrawerPage.SESSION -> SessionPage(
                             onBack = { state.menuOpen = false; onBackToTerminal() },
-                            onShutdown = { confirmStop = true },
                         )
                     }
                 }
@@ -256,12 +255,11 @@ private fun InputPage(state: DisplayUiState, onPadOverlayChange: (Boolean) -> Un
 }
 
 @Composable
-private fun SessionPage(onBack: () -> Unit, onShutdown: () -> Unit) {
+private fun SessionPage(onBack: () -> Unit) {
     val pal = LocalPalette.current
     DeckGroup(stringResource(R.string.tc_drawer_session)) {
         Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             DrawerActionButton(stringResource(R.string.tc_display_back), Icons.Outlined.Terminal, pal.onBackground, onBack)
-            DrawerActionButton(stringResource(R.string.tc_display_shutdown), Icons.Outlined.PowerSettingsNew, pal.error, onShutdown, danger = true)
         }
     }
 }

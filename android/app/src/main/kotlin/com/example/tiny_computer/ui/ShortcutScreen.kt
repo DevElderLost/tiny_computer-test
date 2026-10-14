@@ -110,6 +110,7 @@ fun ShortcutScreen(onLaunch: (String) -> Unit, onShowTerminal: () -> Unit = {}) 
                 val msg = when (r) {
                     is AppImageInstaller.Outcome.Ready -> {
                         val command = AppImageInstaller.terminalCommand(r.id)
+                        AppImageInstaller.watch(r.id)
                         if (Startup.phase == Startup.Phase.DONE && Launcher.isStarted) {
                             // kontainer sudah berjalan: skrip pasang langsung dijalankan di terminal
                             Launcher.runInTerminal(ctx, command)

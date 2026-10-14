@@ -67,6 +67,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.tiny_computer.R
+import com.example.tiny_computer.core.AppImageInstaller
 import com.example.tiny_computer.core.Cfg
 import com.example.tiny_computer.core.Containers
 import com.example.tiny_computer.core.Launcher
@@ -77,6 +78,10 @@ import com.example.tiny_computer.display.DisplayActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+
+private const val INSTALL_POLL_MS = 500L
+private const val INSTALL_DONE_PAUSE_MS = 1200L
+private const val INSTALL_WAIT_MS = 30 * 60 * 1000L
 
 private enum class Page(val icon: ImageVector, val label: Int) {
     HOME(Icons.Filled.Computer, R.string.tc_nav_home),
@@ -130,6 +135,23 @@ fun TinyApp() {
                 page = Page.TERMINAL.ordinal
             } else if (app != null) { Startup.consumeOpen(); openApp(app) } else if (Startup.consumeOpen()) openDesktop()
         }
+    }
+    // pemasangan AppImage selesai: tutup tampilan terminal dan kembali ke tab Shortcut (setelah jeda singkat
+    // supaya pesan "Selesai" sempat terbaca). Bila gagal, penanda tidak pernah ada dan terminal tetap terbuka.
+    val installing = AppImageInstaller.watching
+    LaunchedEffect(installing) {
+        val id = installing ?: return@LaunchedEffect
+        val deadline = System.currentTimeMillis() + INSTALL_WAIT_MS
+        while (System.currentTimeMillis() < deadline) {
+            if (withContext(Dispatchers.IO) { AppImageInstaller.isDone(id) }) {
+                delay(INSTALL_DONE_PAUSE_MS)
+                if (page == Page.TERMINAL.ordinal) page = Page.SHORTCUT.ordinal
+                AppImageInstaller.stopWatching(id)
+                return@LaunchedEffect
+            }
+            delay(INSTALL_POLL_MS)
+        }
+        AppImageInstaller.stopWatching(id)
     }
     // jangan keluar dari aplikasi di tengah pemasangan
     BackHandler(enabled = phase == Startup.Phase.RUNNING) {}
