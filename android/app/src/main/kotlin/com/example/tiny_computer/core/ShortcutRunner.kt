@@ -205,7 +205,7 @@ fi
 """.trimStart(),
             )
         } else if (isWine && WineContents.waylandCapable()) {
-            // winewayland tersedia tetapi jalur grafisnya OpenGL (WineD3D) atau DRI3: paksa X11 di registri, kalau
+            // winewayland tersedia tetapi jalur grafisnya OpenGL (WineD3D): paksa X11 di registri, kalau
             // tidak Wine tetap memilih winewayland (daftar "wayland,x11") dan OpenGL jatuh ke llvmpipe.
             sb.append(
                 """
@@ -217,7 +217,7 @@ fi
     wine reg add 'HKCU\Software\Wine\Drivers' /v Graphics /d x11 /f
   fi
 )
-echo "[tiny] Wine: memakai X11 (Xwayland${if (Cfg.dri3) " DRI3" else ""}) + Zink/Turnip; OpenGL WineD3D lewat Wayland jatuh ke llvmpipe"
+echo "[tiny] Wine: memakai X11 (Xwayland) + Zink/Turnip untuk OpenGL WineD3D; OpenGL lewat Wayland jatuh ke llvmpipe"
 """.trimStart(),
             )
         } else if (isWine && Cfg.wineDisplay != "x11") {

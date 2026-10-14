@@ -111,17 +111,17 @@ object WineContents {
     fun waylandCapable(): Boolean = Cfg.wineDisplay != "x11" && supportsWayland(activeWine())
 
     /**
-     * Jalur X11 (Xwayland + Zink/Turnip) HARUS dipakai walau Wayland tersedia:
-     *  - OpenGL milik Wine (WineD3D, atau DXVK belum terpasang): EGL platform Wayland di Mesa tidak bisa memuat
-     *    Zink tanpa node DRM sungguhan, lalu diam-diam jatuh ke llvmpipe (berat, game hitam/lambat). Lewat X11
-     *    jalur LIBGL_KOPPER_DRI2 (lihat Launcher.guestSpec) tetap memakai Zink di Turnip;
-     *  - "Enable DRI3" aktif dengan Xwayland khusus (extra/Xwayland): Vulkan/Zink memakai WSI DRI3 lewat X11.
-     * Dulu jalur ini terpilih "kebetulan": winewayland.so gagal dimuat tanpa libxkbregistry.so.0 dan Wine jatuh ke
+     * Jalur X11 (Xwayland + Zink/Turnip) HARUS dipakai walau Wayland tersedia untuk OpenGL milik Wine (WineD3D,
+     * atau DXVK belum terpasang): EGL platform Wayland di Mesa tidak bisa memuat Zink tanpa node DRM sungguhan,
+     * lalu diam-diam jatuh ke llvmpipe (berat). Lewat X11 jalur LIBGL_KOPPER_DRI2 (lihat Launcher.guestSpec)
+     * tetap memakai Zink di Turnip.
+     * DXVK (Vulkan) sebaliknya HARUS lewat Wayland, juga saat toggle "Enable DRI3" aktif: toggle itu hanya
+     * mengganti Xwayland untuk aplikasi X11/Zink. winevulkan lewat Xwayland (xcb) macet di loader_section dan layar
+     * hitam walau Xwayland-nya hasil patch DRI3; surface Wayland langsung ke compositor DroidDeck yang jalan.
+     * Dulu jalur X11 terpilih "kebetulan": winewayland.so gagal dimuat tanpa libxkbregistry.so.0 dan Wine jatuh ke
      * X11. Setelah libxkbregistry0 terpasang winewayland jalan, sehingga pilihan ini harus eksplisit.
      */
-    fun x11Preferred(): Boolean =
-        !(D3dMode.isDxvk() && active(Type.DXVK) != null) ||
-            (Cfg.dri3 && File(TinyEnv.dataPath, "tiny/extra/Xwayland").isFile)
+    fun x11Preferred(): Boolean = !(D3dMode.isDxvk() && active(Type.DXVK) != null)
 
     /** Wine memakai winewayland.drv pada peluncuran ini: didukung, dipilih pengguna, dan jalur grafisnya memang Vulkan lewat Wayland. */
     fun displayWayland(): Boolean = waylandCapable() && !x11Preferred()
