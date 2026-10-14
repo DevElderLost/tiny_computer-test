@@ -86,6 +86,8 @@ fi
         // Aplikasi Wine? (dipakai untuk memilih jalur Wayland di bawah)
         val prog = cleanExec(app.exec).substringBefore(' ').substringAfterLast('/')
         val isWine = prog == "wine" || prog == "wine64"
+        // Driver tampilan Wine untuk peluncuran ini (lihat WineContents.x11Preferred): env.sh membacanya
+        if (isWine) sb.append("export TINY_WINE_DISPLAY=${if (WineContents.displayWayland()) "wayland" else "x11"}\n")
         // Turnip aktif bila dipilih untuk aplikasi ini, atau (GPU "default") bila Turnip global menyala
         val turnipOn = when (s.gpu) {
             ShortcutPrefs.GPU_TURNIP -> true
@@ -200,6 +202,22 @@ if [ -S /tmp/wayland-0 ]; then
 else
   echo "[tiny] Wine: soket /tmp/wayland-0 tidak ada; Wine memakai X11 (Vulkan/DXVK lewat Xwayland tanpa DRI3 bisa hang)"
 fi
+""".trimStart(),
+            )
+        } else if (isWine && WineContents.waylandCapable()) {
+            // winewayland tersedia tetapi jalur grafisnya OpenGL (WineD3D) atau DRI3: paksa X11 di registri, kalau
+            // tidak Wine tetap memilih winewayland (daftar "wayland,x11") dan OpenGL jatuh ke llvmpipe.
+            sb.append(
+                """
+(
+  . "${'$'}HOME/.local/share/tiny/wine/env.sh"
+  unset HODLL
+  if ! grep -qs '^"Graphics"="x11"' "${'$'}WINEPREFIX/user.reg"; then
+    echo "[tiny] Wine: driver tampilan di registri ditulis ulang ke x11"
+    wine reg add 'HKCU\Software\Wine\Drivers' /v Graphics /d x11 /f
+  fi
+)
+echo "[tiny] Wine: memakai X11 (Xwayland${if (Cfg.dri3) " DRI3" else ""}) + Zink/Turnip; OpenGL WineD3D lewat Wayland jatuh ke llvmpipe"
 """.trimStart(),
             )
         } else if (isWine && Cfg.wineDisplay != "x11") {

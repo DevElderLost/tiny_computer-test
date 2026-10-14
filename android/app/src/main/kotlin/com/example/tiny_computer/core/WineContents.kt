@@ -107,8 +107,24 @@ object WineContents {
     fun supportsWayland(p: Profile?): Boolean =
         p != null && File(dirOf(p), "${p.wineLib}/wine/aarch64-unix/winewayland.so").isFile
 
-    /** Wayland dipakai bila dipilih pengguna DAN didukung build Wine aktif. */
-    fun displayWayland(): Boolean = Cfg.wineDisplay != "x11" && supportsWayland(activeWine())
+    /** Wayland dipilih pengguna DAN didukung build Wine aktif (belum mempertimbangkan jalur grafis, lihat [displayWayland]). */
+    fun waylandCapable(): Boolean = Cfg.wineDisplay != "x11" && supportsWayland(activeWine())
+
+    /**
+     * Jalur X11 (Xwayland + Zink/Turnip) HARUS dipakai walau Wayland tersedia:
+     *  - OpenGL milik Wine (WineD3D, atau DXVK belum terpasang): EGL platform Wayland di Mesa tidak bisa memuat
+     *    Zink tanpa node DRM sungguhan, lalu diam-diam jatuh ke llvmpipe (berat, game hitam/lambat). Lewat X11
+     *    jalur LIBGL_KOPPER_DRI2 (lihat Launcher.guestSpec) tetap memakai Zink di Turnip;
+     *  - "Enable DRI3" aktif dengan Xwayland khusus (extra/Xwayland): Vulkan/Zink memakai WSI DRI3 lewat X11.
+     * Dulu jalur ini terpilih "kebetulan": winewayland.so gagal dimuat tanpa libxkbregistry.so.0 dan Wine jatuh ke
+     * X11. Setelah libxkbregistry0 terpasang winewayland jalan, sehingga pilihan ini harus eksplisit.
+     */
+    fun x11Preferred(): Boolean =
+        !(D3dMode.isDxvk() && active(Type.DXVK) != null) ||
+            (Cfg.dri3 && File(TinyEnv.dataPath, "tiny/extra/Xwayland").isFile)
+
+    /** Wine memakai winewayland.drv pada peluncuran ini: didukung, dipilih pengguna, dan jalur grafisnya memang Vulkan lewat Wayland. */
+    fun displayWayland(): Boolean = waylandCapable() && !x11Preferred()
 
     /** Nilai registri `HKCU\Software\Wine\Drivers\Graphics`: daftar dicoba berurutan, jadi X11 menjadi cadangan. */
     fun displayDriverValue(): String = if (displayWayland()) "wayland,x11" else "x11"
@@ -695,11 +711,14 @@ object WineContents {
             }
             if (hodll != null) append("export HODLL=$hodll\n")
             append(EmuPresets.envLines())
-            if (displayWayland()) {
+            if (waylandCapable()) {
                 // Vulkan/DXVK lewat Xwayland (xcb) gagal di Turnip karena tanpa DRI3; surface Wayland langsung ke
                 // compositor DroidDeck jalan. Hanya bila soketnya ada; selain itu Wine memakai X11 (cadangan di registri).
                 // MESA_VK_WSI_DEBUG=sw (jalur X11 tanpa DRI3) memaksa Vulkan Wayland menyalin lewat shm: dilepas di sini.
-                append("if [ -S /tmp/wayland-0 ]; then export XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0; unset MESA_VK_WSI_DEBUG; fi\n")
+                // TINY_WINE_DISPLAY diisi ShortcutRunner tiap peluncuran (x11 untuk OpenGL/DRI3): env.sh tidak perlu
+                // ditulis ulang saat pengguna mengganti mode Direct3D atau toggle DRI3, dan jalur X11 tetap memakai
+                // MESA_VK_WSI_DEBUG=sw bila DRI3 mati.
+                append("if [ \"\${TINY_WINE_DISPLAY:-wayland}\" = wayland ] && [ -S /tmp/wayland-0 ]; then export XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0; unset MESA_VK_WSI_DEBUG; fi\n")
             }
             append("export LD_LIBRARY_PATH=\"\$TINY_WINE_ROOT/${wine.wineLib}\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}\"\n")
             append("export PATH=\"\$TINY_WINE_ROOT/${wine.wineBin}:\$PATH\"\n")
