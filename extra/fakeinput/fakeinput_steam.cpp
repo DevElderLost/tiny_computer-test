@@ -1321,7 +1321,7 @@ static bool fake_deck_enabled() {
 
 // The Deck is the client's alone: a game that found it would have the pad twice, once through it
 // and once through Steam Input's virtual pad.
-__attribute__((visibility("hidden"))) static bool process_is_steam_client() {
+__attribute__((visibility("hidden"))) static bool process_is_steam_exe() {
   static int known;
   if (known == 0) {
     char exe[PATH_MAX];
@@ -1337,10 +1337,23 @@ __attribute__((visibility("hidden"))) static bool process_is_steam_client() {
   return known == 1;
 }
 
+// FAKE_DECK_ALL_PROCESSES=1: there is no Steam client and no Steam Input behind the Deck (Tiny
+// Computer), so the process that reads it is the game's own: Wine's winebus and SDL. Every
+// process counts as the client then - it is offered /dev/hidraw16, the sysfs stand-ins and the
+// libudev compatibility paths that were the client's alone. The app's evdev node 0 stays withdrawn.
+__attribute__((visibility("hidden"))) static bool process_is_steam_client() {
+  static int all = -1;
+  if (all < 0) {
+    const char *v = getenv("FAKE_DECK_ALL_PROCESSES");
+    all = v && atoi(v) ? 1 : 0;
+  }
+  return all == 1 || process_is_steam_exe();
+}
+
 // What the client starts with, so a pad log says whether it was offered a Deck at all.
 __attribute__((constructor)) static void log_client_start() {
   config();
-  if (process_is_steam_client())
+  if (process_is_steam_exe())
     Logger::log("loaded in the Steam client: deck %s, ring slot 0 %s\n", fake_deck_enabled() ? "on" : "off",
                 get_ring_path_for_slot(0).empty() ? "(none configured)" : get_ring_path_for_slot(0).c_str());
 }

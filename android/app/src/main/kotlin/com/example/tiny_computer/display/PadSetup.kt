@@ -42,6 +42,11 @@ object PadSetup {
         if (SessionState.deckPad) {
             mounts += binds
             env += "FAKE_EVDEV_DECK=1"
+            // tanpa klien Steam: proses yang membaca Deck adalah Wine/SDL milik game sendiri
+            env += "FAKE_DECK_ALL_PROCESSES=1"
+            // driver HIDAPI Steam Deck bawaan SDL mati secara default; tanpanya hidraw Deck tidak
+            // diterjemahkan menjadi gamepad untuk Wine
+            env += "SDL_JOYSTICK_HIDAPI_STEAMDECK=1"
             env += "FAKE_DECK_SYSFS_LISTING=${DeckSysfs.listingDir(root).path}"
         } else {
             // tanpa hidraw Deck: SDL memakai node evdev saja
