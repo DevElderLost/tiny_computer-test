@@ -36,6 +36,7 @@ import java.nio.file.Paths
  *
  * Template target di profile.json dipetakan ke guest:
  *   `${system32}` / `${syswow64}` -> drive_c/windows/system32 / syswow64 di prefix
+ *   `${localbin}`                 -> /usr/local/bin kontainer (biner Box64 native)
  *   `${libdir}`                   -> `lib` milik Wine aktif (tempat berkas .so di `lib/wine/aarch64-unix/`; di sini FEX
  *                                    menaruh libwow64fex.so / libarm64ecfex.so, yang dicari Wine relatif ke loader-nya)
  */
@@ -49,8 +50,6 @@ object WineContents {
         WINE("Wine"), PROTON("Proton"), DXVK("DXVK"), VKD3D("VKD3D"), FEXCORE("FEXCore"),
         BOX64("Box64"), WOWBOX64("WOWBox64");
 
-        /** Box64/WOWBox64 hanya untuk Wine x86_64; Tiny memakai arm64ec + FEX, jadi tidak dipasang. */
-        val supported: Boolean get() = this != BOX64 && this != WOWBOX64
         val isWine: Boolean get() = this == WINE || this == PROTON
 
         companion object {
@@ -136,7 +135,8 @@ object WineContents {
         Type.FEXCORE -> find(Cfg.fexActive)
         Type.DXVK -> find(Cfg.dxvkActive)
         Type.VKD3D -> find(Cfg.vkd3dActive)
-        else -> null
+        Type.BOX64 -> find(Cfg.box64Active)
+        Type.WOWBOX64 -> find(Cfg.wowbox64Active)
     }
 
     fun select(type: Type, id: String) {
@@ -145,7 +145,8 @@ object WineContents {
             Type.FEXCORE -> Cfg.fexActive = id
             Type.DXVK -> Cfg.dxvkActive = id
             Type.VKD3D -> Cfg.vkd3dActive = id
-            else -> {}
+            Type.BOX64 -> Cfg.box64Active = id
+            Type.WOWBOX64 -> Cfg.wowbox64Active = id
         }
     }
 
@@ -180,6 +181,7 @@ object WineContents {
             target.startsWith("\${system32}/") -> File(prefixDir(), "drive_c/windows/system32") to target.removePrefix("\${system32}/")
             target.startsWith("\${syswow64}/") -> File(prefixDir(), "drive_c/windows/syswow64") to target.removePrefix("\${syswow64}/")
             target.startsWith("\${libdir}/") -> (wine?.let { File(dirOf(it), it.wineLib) } ?: return null) to target.removePrefix("\${libdir}/")
+            target.startsWith("\${localbin}/") -> File(TinyEnv.containerDir(), "usr/local/bin") to target.removePrefix("\${localbin}/")
             else -> return null
         }
         if (rest.isEmpty() || rest.contains("..") || rest.contains("dosdevices")) return null
@@ -193,6 +195,9 @@ object WineContents {
             Type.DXVK, Type.VKD3D -> target.startsWith("\${system32}/") || target.startsWith("\${syswow64}/")
             // FEX: dll di system32 dan .so unix di lib/wine/aarch64-unix
             Type.FEXCORE -> target.startsWith("\${system32}/") || target.startsWith("\${libdir}/wine/")
+            // WOWBox64: wowbox64.dll (PE arm64) untuk emulasi i386; Box64: biner native di /usr/local/bin
+            Type.WOWBOX64 -> target.startsWith("\${system32}/") || target.startsWith("\${syswow64}/")
+            Type.BOX64 -> target.startsWith("\${localbin}/")
             else -> false
         }
     }
@@ -273,7 +278,7 @@ object WineContents {
      * Memasang satu .wcp dari [open] (ukuran terkompresi [size] untuk persen, boleh -1). Mengembalikan profil
      * terpasang; melempar [IllegalArgumentException] (pesan siap tampil) bila isinya tidak cocok.
      */
-    private fun install(label: String, size: Long, open: () -> InputStream): Profile {
+    private fun install(label: String, size: Long, expect: Type? = null, open: () -> InputStream): Profile {
         val stage = File(root(), "tmp/stage-${System.nanoTime()}")
         try {
             stage.mkdirs()
@@ -291,6 +296,9 @@ object WineContents {
             if (!pf.isFile) throw IllegalArgumentException("profile.json tidak ada di paket.")
             val probe = runCatching { parseProfile(JSONObject(pf.readText()), "x") }
                 .getOrElse { throw IllegalArgumentException("profile.json tidak valid: ${it.message}") }
+            if (expect != null && probe.type != expect && !(expect.isWine && probe.type.isWine)) {
+                throw IllegalArgumentException("This package is ${probe.type.label}, not ${expect.label}.")
+            }
             validate(stage, probe)
             val dirName = safeName("${probe.name}-${probe.code}")
             val dest = File(typeDir(probe.type), dirName)
@@ -306,9 +314,6 @@ object WineContents {
     }
 
     private fun validate(stage: File, p: Profile) {
-        if (!p.type.supported) {
-            throw IllegalArgumentException("${p.type.label} untuk Wine x86_64. Tiny memakai Wine arm64ec + FEXCore, jadi paket ini tidak dipasang.")
-        }
         val root = stage.canonicalFile
         for (f in p.files) {
             val src = File(stage, f.source).canonicalFile
@@ -327,6 +332,12 @@ object WineContents {
         }
         if (p.type == Type.FEXCORE && p.files.none { it.target.endsWith("libwow64fex.dll") }) {
             throw IllegalArgumentException("Paket FEXCore tidak berisi libwow64fex.dll.")
+        }
+        if (p.type == Type.WOWBOX64 && p.files.none { it.target.endsWith("wowbox64.dll", true) }) {
+            throw IllegalArgumentException("Paket WOWBox64 tidak berisi wowbox64.dll.")
+        }
+        if (p.type == Type.BOX64 && p.files.none { it.target.endsWith("/box64") }) {
+            throw IllegalArgumentException("Paket Box64 tidak berisi biner box64.")
         }
     }
 
@@ -347,7 +358,7 @@ object WineContents {
     }
 
     /** Pasang dari berkas yang dipilih pengguna (SAF). Pilihan aktif otomatis pindah ke paket baru. */
-    fun importUri(ctx: Context, uri: Uri) {
+    fun importUri(ctx: Context, uri: Uri, expect: Type? = null) {
         val app = ctx.applicationContext
         runTask {
             var name = "wcp"
@@ -355,7 +366,7 @@ object WineContents {
             app.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)?.use {
                 if (it.moveToFirst()) { name = it.getString(0) ?: name; size = if (it.isNull(1)) -1 else it.getLong(1) }
             }
-            val p = install(name, size) { app.contentResolver.openInputStream(uri) ?: throw IOException("tidak bisa membuka $uri") }
+            val p = install(name, size, expect) { app.contentResolver.openInputStream(uri) ?: throw IOException("tidak bisa membuka $uri") }
             autoSelect(p)
         }
     }
@@ -377,8 +388,8 @@ object WineContents {
 
     private fun autoSelect(p: Profile) {
         select(p.type, p.id)
-        // FEX/DXVK/VKD3D yang dipilih langsung dipasang ke prefix bila sudah ada
-        if (!p.type.isWine) runCatching { applyAll() }
+        // FEX/DXVK/VKD3D/Box64 yang dipilih langsung dipasang ke prefix; env.sh ikut ditulis ulang (HODLL bergantung padanya)
+        if (!p.type.isWine) runCatching { onSelectionChanged() }
     }
 
     private fun download(url: String, dest: File, progress: (Long, Long) -> Unit) {
@@ -416,7 +427,8 @@ object WineContents {
             Type.FEXCORE -> if (Cfg.fexActive == p.id) Cfg.fexActive = ""
             Type.DXVK -> if (Cfg.dxvkActive == p.id) Cfg.dxvkActive = ""
             Type.VKD3D -> if (Cfg.vkd3dActive == p.id) Cfg.vkd3dActive = ""
-            else -> {}
+            Type.BOX64 -> if (Cfg.box64Active == p.id) Cfg.box64Active = ""
+            Type.WOWBOX64 -> if (Cfg.wowbox64Active == p.id) Cfg.wowbox64Active = ""
         }
         runCatching { applyAll() }
         revision++
@@ -461,7 +473,6 @@ object WineContents {
                 (0 until arr.length()).mapNotNull { i ->
                     val o = arr.getJSONObject(i)
                     val t = Type.of(o.optString("type")) ?: return@mapNotNull null
-                    if (!t.supported) return@mapNotNull null
                     val n = o.optString("verName")
                     // Wine/Proton harus arm64ec; DXVK/VKD3D arm64ec dipakai sebagai default, sisanya x86 hanya untuk syswow64
                     if (t.isWine && !n.contains("arm64ec", true)) return@mapNotNull null
@@ -517,7 +528,7 @@ object WineContents {
         else if (to.exists()) to.delete()
         from.copyTo(to, overwrite = true)
         to.setReadable(true, false)
-        if (to.name.endsWith(".so")) to.setExecutable(true, false)
+        if (to.name.endsWith(".so") || to.path.contains("/usr/local/bin/")) to.setExecutable(true, false)
     }
 
     /**
@@ -531,8 +542,9 @@ object WineContents {
         val state = File(runtimeDir(), "applied.json")
         val applied = jsonOf(state)
         val prefix = prefixReady()
-        for (type in listOf(Type.FEXCORE, Type.DXVK, Type.VKD3D)) {
-            val prof = active(type)
+        for (type in listOf(Type.FEXCORE, Type.DXVK, Type.VKD3D, Type.WOWBOX64, Type.BOX64)) {
+            // mode WineD3D: DXVK tidak diterapkan, jadi DLL asli Wine dikembalikan (lihat D3dMode)
+            val prof = if (type == Type.DXVK && !D3dMode.isDxvk()) null else active(type)
             val key = type.label
             val old = applied.optJSONArray(key) ?: JSONArray()
             val oldSet = (0 until old.length()).map { old.getString(it) }.toSet()
@@ -556,9 +568,10 @@ object WineContents {
             for ((path, src) in wanted) {
                 if (!src.isFile) continue
                 val dst = File(path)
-                val isDll = path.contains("/drive_c/windows/")
+                // dll di prefix dan biner di /usr/local/bin: berkas asli dicadangkan sekali dan dikembalikan saat dicabut
+                val keepOrig = path.contains("/drive_c/windows/") || path.contains("/usr/local/bin/")
                 // sudah diterapkan dengan ukuran sama: lewati (DXVK puluhan MB)
-                if (!(path in oldSet && dst.isFile && dst.length() == src.length())) place(src, dst, backup = isDll)
+                if (!(path in oldSet && dst.isFile && dst.length() == src.length())) place(src, dst, backup = keepOrig)
                 keep += path
             }
             applied.put(key, JSONArray(keep))
@@ -588,7 +601,8 @@ object WineContents {
         val overrides = buildList {
             add("mscoree,mshtml=d")      // tanpa dialog Mono/Gecko
             add("winemenubuilder.exe=d") // tanpa entri menu otomatis
-            if (dxvk.isNotEmpty()) add("$dxvk=n,b")
+            // mode DXVK: native,builtin; mode WineD3D: builtin dipaksa lewat env supaya menang atas registri yang basi
+            if (D3dMode.isDxvk()) { if (dxvk.isNotEmpty()) add("$dxvk=n,b") } else add("${D3dMode.dllCsv()}=b")
             if (vkd3d.isNotEmpty()) add("$vkd3d=n,b")
         }.joinToString(";")
 
@@ -599,7 +613,14 @@ object WineContents {
             append("export WINEDEBUG=\"\${WINEDEBUG:--all}\"\n")
             append("export WINEESYNC=\"\${WINEESYNC:-0}\" WINEFSYNC=\"\${WINEFSYNC:-0}\"\n")
             append("export WINEDLLOVERRIDES=\"\${WINEDLLOVERRIDES:-$overrides}\"\n")
-            if (fex != null) append("export HODLL=libwow64fex.dll\n")
+            // emulator i386 (HODLL): FEXCore atau WOWBox64 (Cfg.emu32); "auto" memakai FEXCore bila terpasang, selain itu WOWBox64
+            val hodll = when (Cfg.emu32) {
+                "fex" -> "libwow64fex.dll"
+                "box64" -> "wowbox64.dll"
+                else -> if (fex != null) "libwow64fex.dll" else if (active(Type.WOWBOX64) != null) "wowbox64.dll" else null
+            }
+            if (hodll != null) append("export HODLL=$hodll\n")
+            append(EmuPresets.envLines())
             if (displayWayland()) {
                 // Vulkan/DXVK lewat Xwayland (xcb) gagal di Turnip karena tanpa DRI3; surface Wayland langsung ke
                 // compositor DroidDeck jalan. Hanya bila soketnya ada; selain itu Wine memakai X11 (cadangan di registri).

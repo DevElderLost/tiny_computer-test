@@ -144,6 +144,7 @@ object WineSetup {
         stage = "applying"
         applyDisplayDriver(ctx)
         WineContents.applyAll()
+        runCatching { D3dMode.writeRegistry() } // wineboot/wineserver -w sudah selesai, jadi user.reg aman ditulis
         return null
     }
 
@@ -156,6 +157,33 @@ object WineSetup {
         val cmd = ". ~/.local/share/tiny/wine/env.sh; unset HODLL; " +
             "wine reg add 'HKCU\\Software\\Wine\\Drivers' /v Graphics /d $value /f; wineserver -w"
         guestRun(ctx, cmd, 5 * 60_000L)
+    }
+
+    /**
+     * Dipanggil UI saat pengguna mengganti mode Direct3D (WineD3D / DXVK): menghentikan wineserver supaya user.reg tidak
+     * ditimpa saat flush (program Windows yang berjalan ikut berhenti), menerapkan/mencabut DLL DXVK, lalu menulis
+     * DllOverrides ke user.reg. [onDone] menerima pesan galat atau null bila berhasil; dipanggil di thread latar.
+     */
+    fun applyD3dModeAsync(ctx: Context, onDone: (String?) -> Unit) {
+        val app = ctx.applicationContext
+        Thread({
+            if (phase == Phase.RUNNING) {
+                onDone("Wait for Prepare to finish, then try again.")
+                return@Thread
+            }
+            var err: String? = null
+            try {
+                if (Launcher.isStarted && WineContents.prefixReady() && File(WineContents.root(), "env.sh").isFile) {
+                    guestRun(app, ". ~/.local/share/tiny/wine/env.sh; unset HODLL; wineserver -k; true", 60_000L)
+                }
+                runCatching { WineContents.onSelectionChanged() }
+                err = D3dMode.writeRegistry()
+            } catch (t: Throwable) {
+                Log.w(TAG, "ganti mode D3D gagal", t)
+                err = t.message ?: t.javaClass.simpleName
+            }
+            onDone(err)
+        }, "tiny-d3d-mode").start()
     }
 
     /** Dipanggil UI saat pengguna mengganti driver tampilan Wine; bila belum bisa dijalankan, berlaku di "Run" berikutnya. */

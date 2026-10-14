@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.tiny_computer.R
 import com.example.tiny_computer.core.Cfg
+import com.example.tiny_computer.core.D3dMode
 import com.example.tiny_computer.core.WineContents
 import com.example.tiny_computer.core.WineContents.Type
 import com.example.tiny_computer.core.WineSetup
@@ -41,7 +42,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * Pengaturan Wine/Proton arm64ec + FEXCore + DXVK/VKD3D berformat .wcp Winlator. Pemasangan dan pilihan ada di
+ * Pengaturan Wine/Proton arm64ec + FEXCore + DXVK/VKD3D + Box64/WOWBox64 berformat .wcp Winlator. Pemasangan dan pilihan ada di
  * sini; [WineSetup] menyiapkan pustaka, prefix, dan shim `wine` supaya program Windows bisa dijalankan.
  */
 @Composable
@@ -56,9 +57,18 @@ fun WineGroup() {
     val fexes = remember(revision, tick) { WineContents.installed(Type.FEXCORE) }
     val dxvks = remember(revision, tick) { WineContents.installed(Type.DXVK) }
     val vkd3ds = remember(revision, tick) { WineContents.installed(Type.VKD3D) }
+    val box64s = remember(revision, tick) { WineContents.installed(Type.BOX64) }
+    val wowboxes = remember(revision, tick) { WineContents.installed(Type.WOWBOX64) }
 
+    // jenis yang diharapkan pada impor: null = apa saja (tombol umum), selain itu paket harus bertipe itu
+    var importType by remember { mutableStateOf<Type?>(null) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) WineContents.importUri(ctx, uri)
+        if (uri != null) WineContents.importUri(ctx, uri, importType)
+    }
+    fun pickFor(t: Type?) {
+        if (WineContents.isBusy) return
+        importType = t
+        picker.launch(arrayOf("*/*"))
     }
 
     DeckGroup(stringResource(R.string.tc_wine_title)) {
@@ -70,18 +80,67 @@ fun WineGroup() {
             DeckNote(if (pct >= 0) stringResource(R.string.tc_wine_task, task, pct) else stringResource(R.string.tc_wine_task_unknown, task))
         }
         WineContents.taskError?.let { DeckNote(stringResource(R.string.tc_wine_failed, it), pal.error) }
-        DeckActionRow(stringResource(R.string.tc_wine_import), null, stringResource(R.string.tc_btn_import)) {
-            if (!WineContents.isBusy) picker.launch(arrayOf("*/*"))
-        }
+        DeckActionRow(stringResource(R.string.tc_wine_import), null, stringResource(R.string.tc_btn_import)) { pickFor(null) }
         DeckActionRow(stringResource(R.string.tc_wine_download), null, stringResource(R.string.tc_btn_download)) {
             if (!WineContents.isBusy) catalog = true
         }
 
         if (wines.isEmpty()) DeckNote(stringResource(R.string.tc_wine_no_wine))
         else Picker(R.string.tc_wine_pick_wine, Type.WINE, wines, false) { tick++ }
-        Picker(R.string.tc_wine_pick_fex, Type.FEXCORE, fexes, true) { tick++ }
-        Picker(R.string.tc_wine_pick_dxvk, Type.DXVK, dxvks, true) { tick++ }
-        Picker(R.string.tc_wine_pick_vkd3d, Type.VKD3D, vkd3ds, true) { tick++ }
+        // satu blok per komponen: pilih versi, impor .wcp bertipe itu, hapus yang dipilih (baris tampil juga saat belum ada yang terpasang)
+        Component(R.string.tc_wine_pick_fex, Type.FEXCORE, fexes, { pickFor(Type.FEXCORE) }) { tick++ }
+        Component(R.string.tc_wine_pick_dxvk, Type.DXVK, dxvks, { pickFor(Type.DXVK) }) { tick++ }
+
+        // mode Direct3D: DXVK <-> WineD3D; menulis DllOverrides di user.reg dan memasang/mencabut DLL DXVK
+        var d3d by remember(revision, tick) { mutableStateOf(D3dMode.mode()) }
+        var d3dBusy by remember { mutableStateOf(false) }
+        var d3dError by remember { mutableStateOf<String?>(null) }
+        fun applyD3d() {
+            if (d3dBusy) return
+            d3dBusy = true
+            d3dError = null
+            WineSetup.applyD3dModeAsync(ctx) { err -> d3dError = err; d3dBusy = false; tick++ }
+        }
+        DeckChoiceRow(
+            stringResource(R.string.tc_d3d_mode), stringResource(R.string.tc_d3d_mode_hint),
+            listOf(D3dMode.DXVK to stringResource(R.string.tc_d3d_dxvk), D3dMode.WINED3D to stringResource(R.string.tc_d3d_wined3d)),
+            d3d,
+        ) { id ->
+            if (id != d3d && !d3dBusy) {
+                d3d = id
+                Cfg.d3dMode = id
+                applyD3d()
+            }
+        }
+        val regMode = remember(revision, tick) { D3dMode.regState() }
+        DeckInfoRow(
+            stringResource(R.string.tc_d3d_reg_state),
+            stringResource(
+                when {
+                    !WineContents.prefixReady() -> R.string.tc_d3d_reg_noprefix
+                    regMode == D3dMode.DXVK -> R.string.tc_d3d_reg_dxvk
+                    regMode == D3dMode.WINED3D -> R.string.tc_d3d_reg_wined3d
+                    else -> R.string.tc_d3d_reg_unset
+                },
+            ),
+        )
+        if (d3dBusy) DeckNote(stringResource(R.string.tc_d3d_switching))
+        d3dError?.let { DeckNote(stringResource(R.string.tc_wine_failed, it), pal.error) }
+        DeckActionRow(stringResource(R.string.tc_d3d_rewrite), stringResource(R.string.tc_d3d_rewrite_hint), stringResource(R.string.tc_btn_apply)) { applyD3d() }
+        Component(R.string.tc_wine_pick_vkd3d, Type.VKD3D, vkd3ds, { pickFor(Type.VKD3D) }) { tick++ }
+        Component(R.string.tc_wine_pick_wowbox64, Type.WOWBOX64, wowboxes, { pickFor(Type.WOWBOX64) }) { tick++ }
+        Component(R.string.tc_wine_pick_box64, Type.BOX64, box64s, { pickFor(Type.BOX64) }) { tick++ }
+
+        var emu by remember(revision, tick) { mutableStateOf(Cfg.emu32) }
+        DeckChoiceRow(
+            stringResource(R.string.tc_wine_emu32), stringResource(R.string.tc_wine_emu32_hint),
+            listOf("auto" to stringResource(R.string.tc_wine_emu32_auto), "fex" to "FEXCore", "box64" to "WOWBox64"),
+            emu,
+        ) { id ->
+            emu = id
+            Cfg.emu32 = id
+            Thread { runCatching { WineContents.onSelectionChanged() } }.start()
+        }
 
         val activeWine = WineContents.activeWine()
         if (activeWine != null) {
@@ -149,6 +208,25 @@ private fun Picker(title: Int, type: Type, list: List<WineContents.Profile>, non
 }
 
 @Composable
+private fun Component(title: Int, type: Type, list: List<WineContents.Profile>, onImport: () -> Unit, onChanged: () -> Unit) {
+    val sel = WineContents.active(type)?.id ?: ""
+    val options = listOf("" to stringResource(R.string.tc_wine_none)) + list.map { it.id to it.title }
+    DeckChoiceRow(stringResource(title), null, options, if (options.any { it.first == sel }) sel else "") { id ->
+        WineContents.select(type, id)
+        onChanged()
+        Thread { runCatching { WineContents.onSelectionChanged() } }.start()
+    }
+    DeckActionRow(stringResource(R.string.tc_wine_import_type, type.label), null, stringResource(R.string.tc_btn_import), onImport)
+    val chosen = list.firstOrNull { it.id == sel }
+    if (chosen != null) {
+        DeckActionRow(stringResource(R.string.tc_wine_remove), chosen.title, stringResource(R.string.tc_btn_remove)) {
+            WineContents.remove(chosen)
+            onChanged()
+        }
+    }
+}
+
+@Composable
 private fun CatalogDialog(onDismiss: () -> Unit, onPick: (WineContents.Remote) -> Unit) {
     val pal = LocalPalette.current
     var items by remember { mutableStateOf<List<WineContents.Remote>?>(null) }
@@ -160,6 +238,8 @@ private fun CatalogDialog(onDismiss: () -> Unit, onPick: (WineContents.Remote) -
         "FEXCore" to setOf(Type.FEXCORE),
         "DXVK" to setOf(Type.DXVK),
         "VKD3D" to setOf(Type.VKD3D),
+        "WOWBox64" to setOf(Type.WOWBOX64),
+        "Box64" to setOf(Type.BOX64),
     )
     val shape = RoundedCornerShape(18.dp)
     Dialog(onDismissRequest = onDismiss) {

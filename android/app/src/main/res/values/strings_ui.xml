@@ -346,7 +346,7 @@
     <string name="tc_sc_remove">Remove this shortcut</string>
     <!-- Wine / Proton arm64ec + FEXCore + DXVK (.wcp Winlator) -->
     <string name="tc_wine_title">Wine / Proton (arm64ec)</string>
-    <string name="tc_wine_hint">Install Winlator content packages (.wcp): an arm64ec Wine or Proton, FEXCore to run x86/x64 programs, and DXVK or VKD3D for Direct3D. Import a file or download from the catalog, pick what to use, then run Prepare once.</string>
+    <string name="tc_wine_hint">Install Winlator content packages (.wcp): an arm64ec Wine or Proton, FEXCore or WOWBox64 / Box64 to run x86/x64 programs, and DXVK or VKD3D for Direct3D. Import a file (the general button or the one under each component) or download from the catalog, pick the version to use, then run Prepare once.</string>
     <string name="tc_wine_import">Import .wcp file</string>
     <string name="tc_wine_download">Download from catalog</string>
     <string name="tc_wine_pick_wine">Wine / Proton</string>
@@ -395,4 +395,49 @@
     <string name="tc_wine_display_unsupported">This Wine build has no winewayland driver, so X11 (Xwayland) is used.</string>
     <string name="tc_wine_display_wayland">Wayland (Turnip / Vulkan)</string>
     <string name="tc_wine_display_x11">X11 (Xwayland)</string>
+    <!-- Komponen Wine: Box64 / WOWBox64, impor per tipe, emulator i386 -->
+    <string name="tc_wine_pick_box64">Box64 (x86_64 binary for /usr/local/bin)</string>
+    <string name="tc_wine_pick_wowbox64">WOWBox64 (i386 emulator DLL)</string>
+    <string name="tc_wine_import_type">Import %1$s package</string>
+    <string name="tc_wine_emu32">i386 emulator (32-bit programs)</string>
+    <string name="tc_wine_emu32_hint">Automatic uses FEXCore when one is selected, otherwise WOWBox64. Wine builds that already bundle the emulator DLL (such as Hangover) also work here without importing anything.</string>
+    <string name="tc_wine_emu32_auto">Automatic</string>
+    <!-- Preset emulator (Box64 / FEXCore) -->
+    <string name="tc_preset_title">Emulator presets</string>
+    <string name="tc_preset_hint">Presets set the BOX64_* and FEX_* environment variables of the x86 emulator when Wine starts. Bundled presets are read-only: clone one to change it, or create or import your own. A variable already set in a Shortcut takes priority. For a native box64 in Terminal, run: . ~/.local/share/tiny/wine/env.sh</string>
+    <string name="tc_preset_card_title">%1$s Preset</string>
+    <string name="tc_preset_create">Create new</string>
+    <string name="tc_preset_clone">Clone</string>
+    <string name="tc_preset_edit">Edit</string>
+    <string name="tc_preset_delete">Delete</string>
+    <string name="tc_preset_import">Import preset</string>
+    <string name="tc_preset_export">Export preset</string>
+    <string name="tc_preset_bundled_ro">Bundled preset · read only</string>
+    <string name="tc_preset_custom">Custom preset</string>
+    <string name="tc_preset_name">Preset</string>
+    <string name="tc_preset_env">Environment variables</string>
+    <string name="tc_preset_save">Save</string>
+    <string name="tc_preset_cancel">Cancel</string>
+    <string name="tc_preset_add_var">Add variable</string>
+    <string name="tc_preset_add">Add</string>
+    <string name="tc_preset_help">Help</string>
+    <string name="tc_preset_bad_key">The name must start with %1$s, use only A-Z, 0-9 and _, and not be in the list already.</string>
+    <string name="tc_preset_delete_title">Delete preset?</string>
+    <string name="tc_preset_delete_msg">\"%1$s\" will be removed.</string>
+    <string name="tc_preset_imported">Imported %1$d preset(s).</string>
+    <string name="tc_preset_exported">Exported \"%1$s\".</string>
+    <!-- Mode Direct3D: WineD3D <-> DXVK, tulis DllOverrides di user.reg -->
+    <string name="tc_d3d_mode">Direct3D renderer</string>
+    <string name="tc_d3d_mode_hint">WineD3D is Wine\'s own Direct3D (OpenGL): most compatible, slower. DXVK translates Direct3D 8-11 to Vulkan: faster, needs a working Vulkan driver. Switching writes the DllOverrides keys in the prefix registry (user.reg), swaps the DXVK DLLs, and stops running Windows programs.</string>
+    <string name="tc_d3d_dxvk">DXVK (Vulkan)</string>
+    <string name="tc_d3d_wined3d">WineD3D (OpenGL)</string>
+    <string name="tc_d3d_reg_state">Registry DllOverrides (user.reg)</string>
+    <string name="tc_d3d_reg_dxvk">DXVK (native,builtin)</string>
+    <string name="tc_d3d_reg_wined3d">WineD3D (builtin)</string>
+    <string name="tc_d3d_reg_unset">Not written yet</string>
+    <string name="tc_d3d_reg_noprefix">Prefix not created yet</string>
+    <string name="tc_d3d_switching">Switching the Direct3D renderer…</string>
+    <string name="tc_d3d_rewrite">Rewrite DllOverrides now</string>
+    <string name="tc_d3d_rewrite_hint">Writes the current mode to user.reg again. Stops running Windows programs first.</string>
+    <string name="tc_btn_apply">Apply</string>
 </resources>
