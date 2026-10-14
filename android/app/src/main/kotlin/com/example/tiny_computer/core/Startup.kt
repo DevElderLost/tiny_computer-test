@@ -48,6 +48,13 @@ object Startup {
     var pendingApp by mutableStateOf<String?>(null)
         private set
 
+    /**
+     * Perintah untuk terminal kontainer yang menunggu kontainer siap (mis. pasang AppImage dari menu Shortcut
+     * saat kontainer belum menyala): ditulis ke terminal begitu siap, lalu tab Terminal dibuka agar prosesnya terlihat.
+     */
+    var pendingTerminal by mutableStateOf<String?>(null)
+        private set
+
     /** APK tanpa asset patch (patch.tzst): beri tahu di Beranda apa yang hilang dan cara memperbaikinya. */
     private fun patchWarning() {
         if (Rootfs.patchAssetMissing) {
@@ -84,6 +91,12 @@ object Startup {
         begin(ctx, openDesktop = false)
     }
 
+    /** Dari menu Shortcut: jalankan [command] di terminal; kontainer dinyalakan dulu bila belum berjalan. */
+    fun beginForTerminal(ctx: Context, command: String) {
+        pendingTerminal = command
+        begin(ctx, openDesktop = false)
+    }
+
     /**
      * Shell kontainer berakhir: kembali ke IDLE supaya Open desktop / Start container menyalakan
      * ulang kontainer. Saat RUNNING dibiarkan; [ExtraSetup.run] berhenti sendiri bila shell mati.
@@ -93,6 +106,7 @@ object Startup {
         phase = Phase.IDLE
         openWhenReady = false
         pendingApp = null
+        pendingTerminal = null
     }
 
     @Synchronized
@@ -127,12 +141,14 @@ object Startup {
                     notice = problem
                     openWhenReady = false
                     pendingApp = null
+                    pendingTerminal = null
                     phase = Phase.IDLE
                 }
             } catch (t: Throwable) {
                 Log.e(TAG, "startup gagal", t)
                 error = t.message ?: t.javaClass.simpleName
                 pendingApp = null
+                pendingTerminal = null
                 phase = Phase.FAILED
             }
         }, "tiny-startup").start()
@@ -145,6 +161,7 @@ object Startup {
             error = null
             openWhenReady = false
             pendingApp = null
+            pendingTerminal = null
         }
     }
 
@@ -155,6 +172,13 @@ object Startup {
         val o = openWhenReady
         openWhenReady = false
         return o
+    }
+
+    /** Mengembalikan perintah terminal yang menunggu kontainer siap (sekali), atau null. */
+    fun consumeTerminal(): String? {
+        val c = pendingTerminal
+        pendingTerminal = null
+        return c
     }
 
     /** Mengembalikan id Shortcut yang menunggu kontainer siap (sekali), atau null. */

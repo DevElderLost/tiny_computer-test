@@ -346,13 +346,20 @@
     <string name="tc_sc_opt_off">Off</string>
     <string name="tc_sc_hide">Hide from the list</string>
     <string name="tc_sc_reset">Reset</string>
-    <string name="tc_sc_add">Add Windows app (.exe)</string>
+    <string name="tc_sc_add">Add a Windows app (.exe) or an ARM64 AppImage</string>
     <string name="tc_sc_added">Added %1$s. Tap to run with Wine, long-press to rename or change its settings.</string>
-    <string name="tc_sc_add_not_exe">Only .exe files can be added.</string>
+    <string name="tc_sc_add_not_exe">Only .exe or .AppImage files can be added.</string>
     <string name="tc_sc_add_bad_location">Cannot use this location. Pick the file from the device storage (not Recent or a cloud drive), so Wine can reach the files next to it.</string>
     <string name="tc_sc_add_need_wine">Wine is not set up yet. Install Wine in Settings first.</string>
     <string name="tc_sc_add_failed">Could not add the shortcut: %1$s</string>
     <string name="tc_sc_remove">Remove this shortcut</string>
+    <string name="tc_sc_ai_checking">Checking the AppImage and copying it into the Linux system…</string>
+    <string name="tc_sc_ai_installing">Installing %1$s. Follow the progress in the Terminal tab.</string>
+    <string name="tc_sc_ai_not_appimage">This is not a valid AppImage (it must be a Linux .AppImage file).</string>
+    <string name="tc_sc_ai_wrong_arch">Installation cancelled: this AppImage is built for %1$s, not ARM64 (aarch64).</string>
+    <string name="tc_sc_ai_bad_type">Installation cancelled: only type 2 AppImages are supported (this one is type %1$d).</string>
+    <string name="tc_sc_ai_no_system">The Linux system is not installed yet. Install it first with Open desktop.</string>
+    <string name="tc_sc_ai_no_space">Not enough free storage. About %1$d MB is needed to install this AppImage.</string>
     <!-- Wine / Proton arm64ec + FEXCore + DXVK (.wcp Winlator) -->
     <string name="tc_wine_title">Wine / Proton (arm64ec)</string>
     <string name="tc_wine_hint">Install Winlator content packages (.wcp): an arm64ec Wine or Proton, FEXCore or WOWBox64 / Box64 to run x86/x64 programs, and DXVK or VKD3D for Direct3D. Import a file (the general button or the one under each component) or download from the catalog, pick the version to use, then run Prepare once.</string>

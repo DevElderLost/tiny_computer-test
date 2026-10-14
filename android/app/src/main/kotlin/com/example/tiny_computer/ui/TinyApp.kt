@@ -122,7 +122,13 @@ fun TinyApp() {
             // proses shell keluar normal (kode 0) -> tutup aplikasi, seperti SystemNavigator.pop di versi Dart
             TermSessions.forCurrent(ctx).onExit = { code -> if (code == 0) ctx.findActivity()?.finish() }
             val app = Startup.consumeApp()
-            if (app != null) { Startup.consumeOpen(); openApp(app) } else if (Startup.consumeOpen()) openDesktop()
+            val terminalCommand = Startup.consumeTerminal()
+            if (terminalCommand != null) {
+                // mis. pasang AppImage dari menu Shortcut: tulis ke terminal dan tampilkan tab Terminal
+                Startup.consumeOpen()
+                Launcher.runInTerminal(ctx, terminalCommand)
+                page = Page.TERMINAL.ordinal
+            } else if (app != null) { Startup.consumeOpen(); openApp(app) } else if (Startup.consumeOpen()) openDesktop()
         }
     }
     // jangan keluar dari aplikasi di tengah pemasangan
@@ -147,7 +153,7 @@ private fun TinyShell(
     val content: @Composable () -> Unit = {
         when (Page.values()[page]) {
             Page.HOME -> HomeScreen(onOpenDesktop, onOpenSettings)
-            Page.SHORTCUT -> ShortcutScreen(onLaunchApp)
+            Page.SHORTCUT -> ShortcutScreen(onLaunchApp, onShowTerminal = { onPage(Page.TERMINAL.ordinal) })
             Page.TERMINAL -> if (started) TerminalScreen() else TerminalGate()
             Page.CONTROLLER -> ControllerScreen()
         }

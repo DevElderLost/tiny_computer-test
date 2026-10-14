@@ -521,6 +521,14 @@ ${WsiWayland.probeForDesktop(sessionEnv)}
 """.trimIndent()
     }
 
+    /**
+     * Menulis [command] ke shell kontainer (terminal) supaya prosesnya terlihat di tab Terminal.
+     * Kontainer harus sudah berjalan ([isStarted]); pemanggil menyalakannya lewat [Startup.beginForTerminal].
+     */
+    fun runInTerminal(ctx: Context, command: String) {
+        TermSessions.forCurrent(ctx).writeLine(command)
+    }
+
     fun launchGuiBackend(ctx: Context) {
         val term = TermSessions.forCurrent(ctx)
         val replace = appSessionStarted

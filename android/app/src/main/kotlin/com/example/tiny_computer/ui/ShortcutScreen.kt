@@ -64,10 +64,12 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.tiny_computer.R
+import com.example.tiny_computer.core.AppImageInstaller
 import com.example.tiny_computer.core.DesktopApps
 import com.example.tiny_computer.core.ExeShortcuts
 import com.example.tiny_computer.core.Launcher
 import com.example.tiny_computer.core.ShortcutPrefs
+import com.example.tiny_computer.core.Startup
 import com.example.tiny_computer.core.TinyEnv
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -86,7 +88,7 @@ import kotlinx.coroutines.withContext
  * ([DesktopApps.ready]); sebelum itu halaman hanya menampilkan petunjuk.
  */
 @Composable
-fun ShortcutScreen(onLaunch: (String) -> Unit) {
+fun ShortcutScreen(onLaunch: (String) -> Unit, onShowTerminal: () -> Unit = {}) {
     val pal = LocalPalette.current
     val ready = remember { DesktopApps.ready() }
     var refresh by remember { mutableIntStateOf(0) }
@@ -96,10 +98,38 @@ fun ShortcutScreen(onLaunch: (String) -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    // pilih .exe: pemilih sistem tidak bisa menyaring ekstensi, jadi pilihan divalidasi di ExeShortcuts
+    // pilih .exe atau .AppImage: pemilih sistem tidak bisa menyaring ekstensi, jadi pilihan divalidasi
+    // di ExeShortcuts / AppImageInstaller (AppImage: cek arsitektur dulu, hanya ARM64 yang dipasang)
     val exePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch {
+            val picked = withContext(Dispatchers.IO) { AppImageInstaller.displayName(ctx, uri) }
+            if (AppImageInstaller.isAppImageName(picked)) {
+                Toast.makeText(ctx, R.string.tc_sc_ai_checking, Toast.LENGTH_SHORT).show()
+                val r = withContext(Dispatchers.IO) { AppImageInstaller.prepare(ctx, uri) }
+                val msg = when (r) {
+                    is AppImageInstaller.Outcome.Ready -> {
+                        val command = AppImageInstaller.terminalCommand(r.id)
+                        if (Startup.phase == Startup.Phase.DONE && Launcher.isStarted) {
+                            // kontainer sudah berjalan: skrip pasang langsung dijalankan di terminal
+                            Launcher.runInTerminal(ctx, command)
+                            onShowTerminal()
+                        } else {
+                            // kontainer dinyalakan dulu; perintahnya ditulis ke terminal begitu siap
+                            Startup.beginForTerminal(ctx, command)
+                        }
+                        ctx.getString(R.string.tc_sc_ai_installing, r.name)
+                    }
+                    AppImageInstaller.Outcome.NotAppImage -> ctx.getString(R.string.tc_sc_ai_not_appimage)
+                    is AppImageInstaller.Outcome.WrongArch -> ctx.getString(R.string.tc_sc_ai_wrong_arch, r.arch)
+                    is AppImageInstaller.Outcome.BadType -> ctx.getString(R.string.tc_sc_ai_bad_type, r.type)
+                    AppImageInstaller.Outcome.NoSystem -> ctx.getString(R.string.tc_sc_ai_no_system)
+                    is AppImageInstaller.Outcome.NoSpace -> ctx.getString(R.string.tc_sc_ai_no_space, r.needMb)
+                    is AppImageInstaller.Outcome.Failed -> ctx.getString(R.string.tc_sc_add_failed, r.message)
+                }
+                Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show()
+                return@launch
+            }
             val r = withContext(Dispatchers.IO) { ExeShortcuts.addFromUri(ctx, uri) }
             val msg = when (r) {
                 is ExeShortcuts.Outcome.Ok -> { refresh++; ctx.getString(R.string.tc_sc_added, r.name) }
@@ -383,11 +413,11 @@ private fun AppSettingsDialog(app: DesktopApps.App, onRemoved: () -> Unit, onDis
                     }
                     DeckButton(stringResource(R.string.tc_close), Modifier.weight(1f), onClick = onDismiss)
                 }
-                // hanya shortcut .exe buatan pengguna yang bisa dihapus; aplikasi Linux tidak disentuh
-                if (ExeShortcuts.isExeShortcut(app.id)) {
+                // hanya shortcut .exe / AppImage buatan pengguna yang bisa dihapus; aplikasi Linux tidak disentuh
+                if (ExeShortcuts.isExeShortcut(app.id) || AppImageInstaller.isAppImageShortcut(app.id)) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp)) {
                         DeckButton(stringResource(R.string.tc_sc_remove), Modifier.weight(1f), primary = false) {
-                            ExeShortcuts.remove(app.id)
+                            if (AppImageInstaller.isAppImageShortcut(app.id)) AppImageInstaller.remove(app.id) else ExeShortcuts.remove(app.id)
                             onRemoved()
                         }
                     }
