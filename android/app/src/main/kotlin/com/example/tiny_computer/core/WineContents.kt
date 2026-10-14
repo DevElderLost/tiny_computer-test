@@ -32,7 +32,7 @@ import java.nio.file.Paths
  * Tata letak di host (terlihat di guest sebagai `~/.local/share/tiny/wine`):
  *   `$DATA_DIR/tiny/wine/contents/<Tipe>/<nama>-<kode>/`  isi paket apa adanya
  *   `$DATA_DIR/tiny/wine/env.sh`                          lingkungan Wine aktif (dibaca shim di /usr/local/bin)
- *   `$DATA_DIR/share/.wine`                               prefix (HOME guest = `$DATA_DIR/share`)
+ *   `<kontainer>/home/tiny/.wine`                         prefix (HOME guest = /home/tiny, di dalam rootfs kontainer)
  *
  * Template target di profile.json dipetakan ke guest:
  *   `${system32}` / `${syswow64}` -> drive_c/windows/system32 / syswow64 di prefix
@@ -96,7 +96,11 @@ object WineContents {
     private fun typeDir(t: Type) = File(contentRoot(), t.label)
     fun dirOf(p: Profile) = File(typeDir(p.type), p.dirName)
     fun guestDirOf(p: Profile) = "$GUEST_ROOT/contents/${p.type.label}/${p.dirName}"
-    fun prefixDir() = File(TinyEnv.dataPath, "share/.wine")
+    /**
+     * Prefix Wine. HOME guest (/home/tiny) ada di dalam rootfs kontainer, jadi prefix `~/.wine` terlihat dari Android di
+     * `containers/<n>/home/tiny/.wine`. (`$DATA_DIR/share` hanya di-mount ke ~/公共, bukan HOME.)
+     */
+    fun prefixDir() = File(TinyEnv.containerDir(), "home/tiny/.wine")
     /** Build Wine ini punya driver tampilan Wayland (`winewayland.so`)? Tidak semua build menyertakannya. */
     fun supportsWayland(p: Profile?): Boolean =
         p != null && File(dirOf(p), "${p.wineLib}/wine/aarch64-unix/winewayland.so").isFile
