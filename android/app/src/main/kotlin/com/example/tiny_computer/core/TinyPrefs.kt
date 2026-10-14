@@ -219,10 +219,14 @@ object Cfg {
     var padOverlay: Boolean
         get() = TinyPrefs.getBool("padOverlay", false)
         set(v) = TinyPrefs.setBool("padOverlay", v)
-    /** Mode touchpad (kursor digerakkan relatif) untuk layar desktop/aplikasi; bawaan aktif, false = sentuh langsung. */
+    /**
+     * Mode touchpad (kursor digerakkan relatif) untuk layar desktop/aplikasi; bawaan aktif, false = sentuh langsung.
+     * Kunci diganti ke "touchpadModeV2" supaya nilai false lama dari versi sebelumnya tidak menahan mode ini mati:
+     * semua pengguna mulai dengan touchpad aktif, lalu pilihan baru disimpan seperti biasa.
+     */
     var touchpadMode: Boolean
-        get() = TinyPrefs.getBool("touchpadMode", true)
-        set(v) = TinyPrefs.setBool("touchpadMode", v)
+        get() = TinyPrefs.getBool("touchpadModeV2", true)
+        set(v) = TinyPrefs.setBool("touchpadModeV2", v)
     var touchpadSpeed: Double
         get() = TinyPrefs.getDouble("touchpadSpeed", 1.6)
         set(v) = TinyPrefs.setDouble("touchpadSpeed", v)

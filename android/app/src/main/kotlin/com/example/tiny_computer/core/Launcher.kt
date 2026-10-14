@@ -637,10 +637,12 @@ ${WsiWayland.probeForDesktop(sessionEnv)}
 
     /**
      * Shutdown untuk desktop yang dibuka lewat Open desktop: hentikan Xwayland + sesi X11 (Xsession beserta
-     * seluruh keturunannya) dan semua aplikasi Shortcut yang menempel di desktop itu, lalu tunggu sampai
-     * prosesnya benar-benar hilang. Shell kontainer (terminal) dibiarkan hidup; [guiStarted] kembali false
-     * sehingga Open desktop berikutnya menyalakan desktop dari awal. Tidak memblokir pemanggil: [appPhase]
-     * menjadi STOPPING (layar progres) dan [onDone] dipanggil di thread utama.
+     * seluruh keturunannya), semua aplikasi Shortcut yang menempel di desktop itu, DAN shell kontainer
+     * (terminal + proot beserta seluruh prosesnya), lalu tunggu sampai prosesnya benar-benar hilang.
+     * Setelah itu [started] dan [guiStarted] false dan [Startup.phase] kembali IDLE: terminal tidak lagi
+     * berjalan, penanda "Container running" di Beranda tidak hijau lagi, dan Open desktop / Start container
+     * berikutnya menyalakan kontainer dari awal. Tidak memblokir pemanggil: [appPhase] menjadi STOPPING
+     * (layar progres) dan [onDone] dipanggil di thread utama.
      */
     fun shutdownDesktop(onDone: () -> Unit = {}) {
         epoch++
@@ -652,16 +654,35 @@ ${WsiWayland.probeForDesktop(sessionEnv)}
                 val killed = ArrayList<Int>()
                 killed += stopAppSession()
                 killed += killDesktopProcesses()
+                killed += killContainerShell()
                 if (appPhase == AppPhase.STOPPING) advanceStage(1)
                 waitGone(killed, 3000)
                 guiStarted = false
             }
-            LaunchLog.write(containerLog, "desktop", "Shutdown: Xwayland + sesi X11 dihentikan")
+            LaunchLog.write(containerLog, "desktop", "Shutdown: Xwayland + sesi X11 + shell kontainer dihentikan")
             mainHandler.post {
+                // jangan menunggu callback onSessionFinished: status harus sudah benar saat layar desktop ditutup
+                markStopped()
+                Startup.reset()
                 if (appPhase == AppPhase.STOPPING) appPhase = AppPhase.IDLE
                 onDone()
             }
         }, "tiny-stop-desktop").start()
+    }
+
+    /**
+     * Mematikan shell kontainer (terminal): SIGKILL shell `/system/bin/sh` beserta seluruh pohonnya (proot
+     * dan semua proses guest). Sesi ditandai [TermSession.stoppedByUser] supaya kode keluar -9 tidak
+     * dianggap batas proses anak Android 12+ (halaman Signal9). Mengembalikan PID yang dikirimi sinyal.
+     */
+    private fun killContainerShell(): List<Int> {
+        val term = TermSessions.peek() ?: return emptyList()
+        if (term.exitCode != null) return emptyList()
+        term.stoppedByUser = true
+        val pid = term.session.pid
+        val killed = if (pid > 0) killTree(pid) else emptyList()
+        runCatching { term.session.finishIfRunning() }
+        return killed
     }
 
     /**

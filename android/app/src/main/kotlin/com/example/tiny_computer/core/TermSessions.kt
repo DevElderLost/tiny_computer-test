@@ -28,6 +28,9 @@ class TermSession(private val context: Context) : TerminalSessionClient {
     @Volatile var exitCode: Int? = null
     @Volatile var onExit: ((Int) -> Unit)? = null
 
+    /** True bila shell dimatikan sengaja oleh Shutdown desktop (bukan crash / dibunuh Android). */
+    @Volatile var stoppedByUser = false
+
     val session: TerminalSession = run {
         val env = ArrayList<String>()
         System.getenv().forEach { (k, v) -> if (k != "TERM") env.add("$k=$v") }
@@ -61,7 +64,7 @@ class TermSession(private val context: Context) : TerminalSessionClient {
         Startup.reset()
         updateScreen()
         // sinyal -9 (batas proses anak Android 12+): tampilkan halaman petunjuk, seperti launchSignal9Page
-        if (code == -9) {
+        if (code == -9 && !stoppedByUser) {
             context.startActivity(Intent(context, Signal9Activity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }
         onExit?.invoke(code)
