@@ -164,6 +164,33 @@ fi
         // tanda driver Vulkan: 20 baris pertama ringkasan vulkaninfo masuk ke log shortcut (lihat WsiWayland)
         if (turnipOn) sb.append(WsiWayland.probeForScript())
 
+        // Wine harus memakai winewayland.drv. Jika registri prefix masih "x11" (atau kosong), winevulkan membuat surface
+        // lewat Xwayland tanpa DRI3: DXVK menemukan Turnip, device jadi, lalu presentasi macet (loader_section timeout)
+        // dan layar hitam. Nilai registri sebelumnya hanya ditulis oleh Prepare / saat kontainer desktop menyala, jadi
+        // Shortcut yang berjalan tanpa desktop tidak pernah memperbaikinya. Dicek tiap peluncuran (murah: satu grep);
+        // `wine reg add` hanya dijalankan bila nilainya belum benar. Tanpa `wineserver -w`: bila wineserver prefix ini
+        // sedang dipakai aplikasi lain, perintah itu akan menunggu sampai aplikasinya keluar.
+        if (isWine && WineContents.displayWayland()) {
+            sb.append(
+                """
+if [ -S /tmp/wayland-0 ]; then
+  (
+    . "${'$'}HOME/.local/share/tiny/wine/env.sh"
+    unset HODLL
+    if ! grep -qs '^"Graphics"="wayland,x11"' "${'$'}WINEPREFIX/user.reg"; then
+      echo "[tiny] Wine: driver tampilan di registri bukan wayland; ditulis ulang ke wayland,x11"
+      wine reg add 'HKCU\Software\Wine\Drivers' /v Graphics /d wayland,x11 /f
+    fi
+  )
+else
+  echo "[tiny] Wine: soket /tmp/wayland-0 tidak ada; Wine memakai X11 (Vulkan/DXVK lewat Xwayland tanpa DRI3 bisa hang)"
+fi
+""".trimStart(),
+            )
+        } else if (isWine && Cfg.wineDisplay != "x11") {
+            sb.append("echo \"[tiny] Wine: build Wine aktif tidak punya winewayland.so; memakai X11 (DXVK/Vulkan bisa hang tanpa DRI3)\"\n")
+        }
+
         var cmd = cleanExec(app.exec)
         if (s.args.isNotBlank()) cmd += " " + s.args.trim()
         if (app.terminal) cmd = "x-terminal-emulator -e sh -c ${q("exec $cmd")}"
@@ -178,8 +205,13 @@ fi
             val (vw, vh) = Launcher.sessionSize(ctx, app.id)
             val rest = wm.groupValues[2]
             val vd = "${wm.groupValues[1]} explorer /desktop=tiny,${vw}x$vh$rest"
-            sb.append("echo \"[tiny] Wine virtual desktop ${vw}x$vh\"\n")
-            sb.append("if [ \"\${TINY_WINE_VDESKTOP:-1}\" = 0 ]; then TINY_CMD=${q(cmd)}; else TINY_CMD=${q(vd)}; fi\n")
+            // Di driver Wayland tidak ada XRandR 5K yang perlu dihindari, dan explorer /desktop tidak cocok dengan
+            // winewayland.drv (jendela game bukan toplevel Wayland sendiri). Bawaan: tanpa virtual desktop bila Wayland
+            // aktif; TINY_WINE_VDESKTOP=1 memaksanya menyala.
+            if (WineContents.displayWayland()) sb.append("TINY_VD_DEF=1; [ -S /tmp/wayland-0 ] && TINY_VD_DEF=0\n")
+            else sb.append("TINY_VD_DEF=1\n")
+            sb.append("echo \"[tiny] Wine virtual desktop ${vw}x$vh (bawaan: \$TINY_VD_DEF, 1 = nyala)\"\n")
+            sb.append("if [ \"\${TINY_WINE_VDESKTOP:-\$TINY_VD_DEF}\" = 0 ]; then TINY_CMD=${q(cmd)}; else TINY_CMD=${q(vd)}; fi\n")
         } else {
             sb.append("TINY_CMD=${q(cmd)}\n")
         }
