@@ -609,6 +609,23 @@ object WineContents {
     private fun shimDir() = File(TinyEnv.containerDir(), "usr/local/bin")
     private const val SHIM_MARK = "# tiny-wine-shim"
 
+    /**
+     * Membuang env.sh dan shim `wine`/`wineserver`/... buatan [writeRuntime] dari /usr/local/bin kontainer (berkas milik
+     * sistem/paket lain tidak disentuh). Dipakai [HangoverSetup] sebelum memasang Hangover lewat apt, supaya shim lama
+     * (yang menunjuk ke Wine .wcp yang sudah dihapus) tidak menutupi `wine` hasil apt.
+     */
+    fun removeRuntime() {
+        val dir = shimDir()
+        val listFile = File(runtimeDir(), "shims.txt")
+        val names = if (listFile.isFile) listFile.readLines().filter { it.isNotBlank() } else emptyList()
+        for (n in names) {
+            val f = File(dir, n)
+            if (f.isFile && runCatching { f.readText().contains(SHIM_MARK) }.getOrDefault(false)) f.delete()
+        }
+        listFile.delete()
+        File(runtimeDir(), "env.sh").delete()
+    }
+
     private fun jsonOf(f: File): JSONObject = runCatching { JSONObject(f.readText()) }.getOrDefault(JSONObject())
 
     /** Salin [from] ke [to]; berkas asli (mis. dll palsu buatan wineboot) dicadangkan sekali sebagai `.tiny-orig`. */

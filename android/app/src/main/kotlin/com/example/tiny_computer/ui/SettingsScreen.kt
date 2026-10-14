@@ -91,6 +91,8 @@ fun SettingsScreen() {
 
         WineGroup()
 
+        HangoverGroup()
+
         PresetGroup()
 
         DeckGroup(stringResource(R.string.tc_group_terminal)) {

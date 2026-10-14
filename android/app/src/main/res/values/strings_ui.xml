@@ -458,4 +458,8 @@
     <string name="tc_d3d_rewrite">Rewrite DllOverrides now</string>
     <string name="tc_d3d_rewrite_hint">Writes the current mode to user.reg again. Stops running Windows programs first.</string>
     <string name="tc_btn_apply">Apply</string>
+    <string name="tc_btn_install">Install</string>
+    <string name="tc_hangover_title">Hangover (apt)</string>
+    <string name="tc_hangover_blocked">Wine/Proton builds are still installed in the section above. Remove all of them first to use this installer.</string>
+    <string name="tc_hangover_sent">Started in the container terminal. Open the Terminal tab to follow the progress.</string>
 </resources>

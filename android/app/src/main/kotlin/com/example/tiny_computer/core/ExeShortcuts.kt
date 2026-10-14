@@ -37,7 +37,8 @@ object ExeShortcuts {
     fun isExeShortcut(id: String) = id.startsWith(ID_PREFIX)
 
     /** Wine sudah disiapkan (shim `wine` ada di /usr/local/bin kontainer). */
-    fun wineReady(): Boolean = File(TinyEnv.containerDir(), "usr/local/bin/wine").exists()
+    fun wineReady(): Boolean = File(TinyEnv.containerDir(), "usr/local/bin/wine").exists() ||
+        File(TinyEnv.containerDir(), "usr/bin/wine").exists() // Hangover lewat apt ([HangoverSetup])
 
     private fun appsDir() = File(TinyEnv.containerDir(), "home/tiny/.local/share/applications")
 

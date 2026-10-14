@@ -153,10 +153,10 @@ fun SliderRow(title: String, value: Float, range: ClosedFloatingPointRange<Float
 
 /** Tombol utama (terisi warna sinyal) atau sekunder (permukaan berbingkai). */
 @Composable
-fun DeckButton(text: String, modifier: Modifier = Modifier, primary: Boolean = true, onClick: () -> Unit) {
+fun DeckButton(text: String, modifier: Modifier = Modifier, primary: Boolean = true, enabled: Boolean = true, onClick: () -> Unit) {
     val pal = LocalPalette.current
     Button(
-        onClick = onClick, modifier = modifier.heightIn(min = 48.dp), shape = ControlShape,
+        onClick = onClick, enabled = enabled, modifier = modifier.heightIn(min = 48.dp), shape = ControlShape,
         colors = ButtonDefaults.buttonColors(
             containerColor = if (primary) pal.signal else pal.surfaceVariant,
             contentColor = if (primary) pal.onSignal else pal.onBackground,
