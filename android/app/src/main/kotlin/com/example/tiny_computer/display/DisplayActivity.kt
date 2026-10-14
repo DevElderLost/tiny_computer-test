@@ -13,6 +13,7 @@ import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.WindowManager
 import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
@@ -34,13 +35,16 @@ import com.example.tiny_computer.core.ShortcutPrefs
 import com.example.tiny_computer.core.TinyEnv
 import com.example.tiny_computer.ui.TinyTheme
 import java.io.File
-import kotlin.math.abs
 import kotlin.math.min
 
 /** Status UI yang dibaca overlay Compose. */
 class DisplayUiState {
     var menuOpen by mutableStateOf(false)
-    var touchpad by mutableStateOf(false)
+    var touchpad by mutableStateOf(Cfg.touchpadMode)
+    var touchpadSpeed by mutableStateOf(Cfg.touchpadSpeed.toFloat())
+    /** Gambar kursor bawaan rootfs (CursorView) dan pengali ukurannya. */
+    var showCursor by mutableStateOf(Cfg.showCursor)
+    var cursorScale by mutableStateOf(Cfg.cursorScale.toFloat())
     var padOverlay by mutableStateOf(Cfg.padOverlay)
     var padIdentity by mutableStateOf(Cfg.padIdentity)
     /** Keyboard PC di layar (dari DroidDeck): tombol evdev asli, bukan keyboard Android. */
@@ -58,6 +62,8 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
     private val ui = DisplayUiState()
     private lateinit var surfaceView: DeskSurface
     private var pad: PadBridge? = null
+    private lateinit var touchpadInput: TouchpadInput
+    private var lastTouchpad = false
     private var outW = 1280
     private var outH = 720
 
@@ -103,6 +109,8 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
         outW = size.first
         outH = size.second
 
+        touchpadInput = TouchpadInput(ViewConfiguration.get(this).scaledTouchSlop.toFloat())
+        lastTouchpad = ui.touchpad
         val p = PadBridge(File(File(filesDir, "session"), "dev/input"))
         p.start()
         pad = p
@@ -138,6 +146,8 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
         setContentView(FrameLayout(this).apply {
             setBackgroundColor(0xFF000000.toInt())
             addView(surfaceView, FrameLayout.LayoutParams(-1, -1))
+            // kursor rootfs: di atas compositor, di bawah menu; tidak menerima sentuhan
+            addView(CursorView(this@DisplayActivity, ui) { outW to outH }, FrameLayout.LayoutParams(-1, -1))
             addView(overlay, FrameLayout.LayoutParams(-1, -1))
         })
     }
@@ -196,6 +206,8 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
         super.onResume()
         ui.padOverlay = ShortcutPrefs.padOverlay(currentApp) ?: Cfg.padOverlay
         ui.padIdentity = Cfg.padIdentity
+        ui.touchpad = Cfg.touchpadMode
+        ui.showCursor = Cfg.showCursor
         surfaceView.requestFocus()
     }
 
@@ -282,10 +294,21 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
     private fun handleTouch(e: MotionEvent): Boolean {
         if (e.source and InputDevice.SOURCE_MOUSE == InputDevice.SOURCE_MOUSE) return handleMouse(e)
         val touchpad = ui.touchpad
+        if (touchpad != lastTouchpad) {
+            // mode diganti di tengah gestur: lepas tombol yang masih tertahan
+            if (leftHeld) { button(BTN_LEFT, false); leftHeld = false }
+            touchpadInput.cancel()
+            lastTouchpad = touchpad
+        }
+        if (touchpad) {
+            val s = min(surfaceView.width.toFloat() / outW, surfaceView.height.toFloat() / outH)
+            return touchpadInput.onTouch(e, s, ui.touchpadSpeed, outW, outH)
+        }
+        // sentuh langsung: kursor mengikuti jari
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 lastX = e.x; lastY = e.y; downTime = e.eventTime; moved = false; scrollAcc = 0f
-                if (!touchpad) { move(e.x, e.y); button(BTN_LEFT, true); leftHeld = true }
+                move(e.x, e.y); button(BTN_LEFT, true); leftHeld = true
             }
             MotionEvent.ACTION_POINTER_DOWN -> {
                 // dua jari: gulir; ketuk dua jari = klik kanan (saat dilepas tanpa bergerak)
@@ -304,15 +327,6 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
                         scrollAcc -= steps * SCROLL_STEP_PX
                         WaylandCompositor.nativeSendSceneInput(SCENE_WHEEL, steps, 0)
                     }
-                } else if (touchpad) {
-                    val dx = e.x - lastX; val dy = e.y - lastY
-                    if (abs(dx) + abs(dy) > 1f) moved = true
-                    lastX = e.x; lastY = e.y
-                    val s = min(surfaceView.width.toFloat() / outW, surfaceView.height.toFloat() / outH)
-                    // gerak relatif dalam 1/256 piksel scene
-                    WaylandCompositor.nativeSendSceneInput(
-                        SCENE_RELATIVE, (dx / s * 256f * TOUCHPAD_GAIN).toInt(), (dy / s * 256f * TOUCHPAD_GAIN).toInt(),
-                    )
                 } else {
                     move(e.x, e.y)
                 }
@@ -322,9 +336,6 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 if (leftHeld) { button(BTN_LEFT, false); leftHeld = false }
-                else if (touchpad && !moved && e.eventTime - downTime < TAP_MS && e.pointerCount == 1) {
-                    button(BTN_LEFT, true); button(BTN_LEFT, false)
-                }
             }
         }
         return true
@@ -400,12 +411,10 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
         private const val SCENE_MOTION = 2
         private const val SCENE_BUTTON = 3
         private const val SCENE_WHEEL = 4
-        private const val SCENE_RELATIVE = 6
         private const val BTN_LEFT = 272
         private const val BTN_RIGHT = 273
         private const val BTN_MIDDLE = 274
         private const val TAP_MS = 250L
         private const val SCROLL_STEP_PX = 40f
-        private const val TOUCHPAD_GAIN = 1.6f
     }
 }

@@ -128,6 +128,9 @@
     <string name="tc_app_stop_apps">Stopping apps…</string>
     <string name="tc_app_stop_wait">Waiting for processes to exit…</string>
     <string name="tc_display_touchpad">Touchpad mode (relative pointer)</string>
+    <string name="tc_display_touchpad_speed">Touchpad speed</string>
+    <string name="tc_display_cursor">Show cursor</string>
+    <string name="tc_display_cursor_size">Cursor size</string>
     <string name="tc_display_back">Back to terminal</string>
     <string name="tc_close">Close</string>
     <string name="tc_pad_overlay">On-screen controller</string>
@@ -399,6 +402,8 @@
     <string name="tc_wine_pick_box64">Box64 (x86_64 binary for /usr/local/bin)</string>
     <string name="tc_wine_pick_wowbox64">WOWBox64 (i386 emulator DLL)</string>
     <string name="tc_wine_import_type">Import %1$s package</string>
+    <string name="tc_wine_import_dxvk_hint">A .wcp, or a DXVK release archive (.tar.gz / .tar.xz / .tar.zst / .zip) with x64 + x32 or arm64ec folders.</string>
+    <string name="tc_wine_download_dxvk">Download DXVK version</string>
     <string name="tc_wine_emu32">i386 emulator (32-bit programs)</string>
     <string name="tc_wine_emu32_hint">Automatic uses FEXCore when one is selected, otherwise WOWBox64. Wine builds that already bundle the emulator DLL (such as Hangover) also work here without importing anything.</string>
     <string name="tc_wine_emu32_auto">Automatic</string>

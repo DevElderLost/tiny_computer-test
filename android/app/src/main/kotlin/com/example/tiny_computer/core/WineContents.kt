@@ -8,6 +8,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
+import org.apache.commons.compress.archivers.zip.ZipArchiveInputStream
+import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream
 import org.apache.commons.compress.compressors.xz.XZCompressorInputStream
 import org.apache.commons.compress.compressors.zstandard.ZstdCompressorInputStream
 import org.json.JSONArray
@@ -226,7 +228,8 @@ object WineContents {
         return when {
             got >= 6 && b(0) == 0xFD && b(1) == 0x37 && b(2) == 0x7A && b(3) == 0x58 && b(4) == 0x5A -> XZCompressorInputStream(s, true)
             got >= 4 && b(0) == 0x28 && b(1) == 0xB5 && b(2) == 0x2F && b(3) == 0xFD -> ZstdCompressorInputStream(s)
-            else -> throw IllegalArgumentException("Bukan berkas .wcp (harus tar xz atau zstd).")
+            got >= 2 && b(0) == 0x1F && b(1) == 0x8B -> GzipCompressorInputStream(s)
+            else -> throw IllegalArgumentException("Bukan arsip yang dikenal (harus tar xz/zstd/gzip, atau zip).")
         }
     }
 
@@ -276,6 +279,47 @@ object WineContents {
         }
     }
 
+    /** Mengekstrak zip ke [dest] dengan pemeriksaan path yang sama seperti [extractTar]. */
+    private fun extractZip(input: InputStream, dest: File) {
+        val root = dest.canonicalFile
+        ZipArchiveInputStream(input).use { zip ->
+            val buf = ByteArray(1 shl 16)
+            var e = zip.nextEntry
+            while (e != null) {
+                val rel = e.name.removePrefix("./").trimStart('/')
+                if (rel.isNotEmpty()) {
+                    val out = File(root, rel)
+                    val canon = out.canonicalFile
+                    if (rel.split('/').any { it == ".." } || !(canon.path == root.path || canon.path.startsWith(root.path + File.separator))) {
+                        throw IllegalArgumentException("Entri di luar folder tujuan: ${e.name}")
+                    }
+                    if (e.isDirectory) out.mkdirs()
+                    else {
+                        out.parentFile?.mkdirs()
+                        out.outputStream().use { o ->
+                            while (true) { val r = zip.read(buf); if (r < 0) break; o.write(buf, 0, r) }
+                        }
+                        out.setReadable(true, false)
+                        out.setWritable(true, true)
+                    }
+                }
+                e = zip.nextEntry
+            }
+        }
+    }
+
+    /** Zip (magic bytes "PK 03 04") atau tar (xz/zstd/gzip, dikenali [decompress]). */
+    private fun extractArchive(input: InputStream, dest: File) {
+        val s = BufferedInputStream(input, 1 shl 16)
+        s.mark(4)
+        val m = ByteArray(4)
+        var got = 0
+        while (got < m.size) { val r = s.read(m, got, m.size - got); if (r < 0) break; got += r }
+        s.reset()
+        val zip = got >= 4 && m[0] == 0x50.toByte() && m[1] == 0x4B.toByte() && m[2] == 0x03.toByte() && m[3] == 0x04.toByte()
+        if (zip) extractZip(s, dest) else extractTar(s, dest)
+    }
+
     // ------------------------------------------------------------------ pasang
 
     /**
@@ -289,7 +333,7 @@ object WineContents {
             setTask(label, if (size > 0) 0 else -1)
             var last = -1
             open().use { raw ->
-                extractTar(Counting(raw) { n ->
+                extractArchive(Counting(raw) { n ->
                     if (size > 0) {
                         val p = (n * 100 / size).toInt().coerceIn(0, 99)
                         if (p != last) { last = p; setTask(label, p) }
@@ -297,6 +341,8 @@ object WineContents {
                 }, stage)
             }
             val pf = File(stage, "profile.json")
+            // impor DXVK: arsip mentah (rilis resmi, build sendiri) tidak punya profile.json; susun dari isinya
+            if (!pf.isFile && expect == Type.DXVK) writeDxvkProfile(stage, label)
             if (!pf.isFile) throw IllegalArgumentException("profile.json tidak ada di paket.")
             val probe = runCatching { parseProfile(JSONObject(pf.readText()), "x") }
                 .getOrElse { throw IllegalArgumentException("profile.json tidak valid: ${it.message}") }
@@ -315,6 +361,18 @@ object WineContents {
         } finally {
             stage.deleteRecursively()
         }
+    }
+
+    /** Menulis `profile.json` DXVK dari isi arsip mentah (aturan pemetaan ada di [DxvkImport]). */
+    private fun writeDxvkProfile(stage: File, label: String) {
+        val plan = DxvkImport.plan(stage, label)
+            ?: throw IllegalArgumentException("Not a DXVK package: no 64-bit d3d11.dll / d3d9.dll in the archive.")
+        val files = JSONArray()
+        for ((src, tgt) in plan.files) files.put(JSONObject().put("source", src).put("target", tgt))
+        File(stage, "profile.json").writeText(
+            JSONObject().put("type", "DXVK").put("versionName", plan.name).put("versionCode", 1)
+                .put("description", plan.description).put("files", files).toString(2),
+        )
     }
 
     private fun validate(stage: File, p: Profile) {

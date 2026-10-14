@@ -9,11 +9,15 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Mouse
 import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -33,6 +37,7 @@ import com.example.tiny_computer.core.Launcher
 import com.example.tiny_computer.ui.AppProgressOverlay
 import com.example.tiny_computer.ui.LocalPalette
 import com.example.tiny_computer.ui.PcKeyboard
+import com.example.tiny_computer.ui.SliderRow
 import com.example.tiny_computer.ui.SwitchRow
 import com.example.tiny_computer.ui.clickableNoRipple
 
@@ -54,6 +59,14 @@ fun DisplayOverlay(
             }
             FloatingButton(active = state.pcKeyboard, onClick = { state.pcKeyboard = !state.pcKeyboard }) {
                 Icon(Icons.Filled.Keyboard, stringResource(R.string.tc_display_keyboard), tint = if (state.pcKeyboard) pal.signal else pal.onBackground)
+            }
+            // pintasan mode penunjuk: sentuh langsung <-> touchpad (relatif)
+            FloatingButton(active = state.touchpad, onClick = { state.touchpad = !state.touchpad; Cfg.touchpadMode = state.touchpad }) {
+                Icon(
+                    if (state.touchpad) Icons.Filled.Mouse else Icons.Filled.TouchApp,
+                    stringResource(R.string.tc_display_touchpad),
+                    tint = if (state.touchpad) pal.signal else pal.onBackground,
+                )
             }
             // Shutdown: hanya untuk layar aplikasi Shortcut, tepat di samping tombol keyboard PC
             if (state.appMode) {
@@ -79,8 +92,27 @@ fun DisplayOverlay(
             textContentColor = pal.onBackground,
             title = { Text(stringResource(R.string.tc_display_menu)) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    SwitchRow(stringResource(R.string.tc_display_touchpad), state.touchpad) { state.touchpad = it }
+                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    SwitchRow(stringResource(R.string.tc_display_touchpad), state.touchpad) {
+                        state.touchpad = it
+                        Cfg.touchpadMode = it
+                    }
+                    if (state.touchpad) {
+                        SliderRow(stringResource(R.string.tc_display_touchpad_speed), state.touchpadSpeed, 0.5f..4f) {
+                            state.touchpadSpeed = it
+                            Cfg.touchpadSpeed = it.toDouble()
+                        }
+                    }
+                    SwitchRow(stringResource(R.string.tc_display_cursor), state.showCursor) {
+                        state.showCursor = it
+                        Cfg.showCursor = it
+                    }
+                    if (state.showCursor) {
+                        SliderRow(stringResource(R.string.tc_display_cursor_size), state.cursorScale, 0.5f..4f) {
+                            state.cursorScale = it
+                            Cfg.cursorScale = it.toDouble()
+                        }
+                    }
                     SwitchRow(stringResource(R.string.tc_pad_overlay), state.padOverlay) {
                         state.padOverlay = it
                         onPadOverlayChange(it)

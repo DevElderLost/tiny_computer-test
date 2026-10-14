@@ -27,6 +27,7 @@ extern void droiddeck_wayland_send_pointer(int action, int x, int y);
 extern void droiddeck_wayland_send_touch(int action, int pointer_id, int x, int y);
 extern int  droiddeck_cursor_snapshot(int *out, int cap);
 extern int  droiddeck_cursor_serial(void);
+extern int  droiddeck_cursor_position(int *out, int cap);
 extern void droiddeck_wayland_send_key(int evdev, int state);
 extern void droiddeck_wayland_send_scene_input(int type, int a, int b);
 extern void droiddeck_wayland_vsync(int64_t frame_time_ns);
@@ -302,6 +303,18 @@ JNIEXPORT jint JNICALL
 Java_com_droiddeck_launcher_wayland_WaylandCompositor_nativeCursorSerial(JNIEnv *env, jclass clazz) {
     (void)env; (void)clazz;
     return droiddeck_cursor_serial();
+}
+
+/* The pointer's scene position in 1/16 pixel: out = [x, y]. Returns the ints written, 0 if too small. */
+JNIEXPORT jint JNICALL
+Java_com_droiddeck_launcher_wayland_WaylandCompositor_nativeCursorPosition(
+        JNIEnv *env, jclass clazz, jintArray out) {
+    if (!out || (*env)->GetArrayLength(env, out) < 2) return 0;
+    jint *buf = (*env)->GetIntArrayElements(env, out, NULL);
+    if (!buf) return 0;
+    int n = droiddeck_cursor_position((int *)buf, 2);
+    (*env)->ReleaseIntArrayElements(env, out, buf, 0);
+    return n;
 }
 
 /* Inject a key event. evdev = Linux input keycode (KEY_A=30…); state 1=down 0=up. */

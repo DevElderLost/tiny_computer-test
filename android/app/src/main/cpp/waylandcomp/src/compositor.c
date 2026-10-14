@@ -527,6 +527,7 @@ static uint32_t g_cursor_rb[CURSOR_MAX_PX];  /* compositor thread: GPU readback 
 static int g_cursor_w, g_cursor_h;           /* 0 = nothing to draw */
 static int g_cursor_hidden = 1;              /* the client asked for no pointer */
 static int g_cursor_serial;                  /* bumped on every change; the app polls it */
+static int g_cursor_decided;                 /* the client has said show or hide at least once */
 
 /* The last image again, after a hide: the same surface set as the pointer once more with nothing
  * newly committed to it (wlroots re-sets its cursor surface each time the pointer enters). */
@@ -538,7 +539,10 @@ static void cursor_publish_shown(void) {
 
 static void cursor_publish_hidden(void) {
     pthread_mutex_lock(&g_cursor_lock);
-    if (!g_cursor_hidden) { g_cursor_hidden = 1; g_cursor_serial++; }
+    /* The first hide bumps the serial too: serial 0 must mean "the client has not said anything yet",
+     * so the app can tell a pointer nobody asked for from one a game deliberately hid. */
+    if (!g_cursor_hidden || !g_cursor_decided) { g_cursor_hidden = 1; g_cursor_serial++; }
+    g_cursor_decided = 1;
     pthread_mutex_unlock(&g_cursor_lock);
 }
 
@@ -3242,6 +3246,19 @@ static void pointer_delta(double dx, double dy) {
 /* A button change at the current pointer position. */
 static void pointer_button(uint32_t button, int pressed) {
     pointer_input(0, 0, 1, button, pressed);
+}
+
+/* The pointer's scene position for the app's cursor overlay, in 1/16 pixel: out[0]=x, out[1]=y.
+ * Called from the UI thread; g_ptr_x/y are written on the compositor thread, so they are read with
+ * atomic loads (an aligned 64-bit load is never torn on arm64). Returns the ints written. */
+int droiddeck_cursor_position(int *out, int cap) {
+    double x, y;
+    if (!out || cap < 2) return 0;
+    __atomic_load(&g_ptr_x, &x, __ATOMIC_RELAXED);
+    __atomic_load(&g_ptr_y, &y, __ATOMIC_RELAXED);
+    out[0] = (int)(x * 16.0);
+    out[1] = (int)(y * 16.0);
+    return 2;
 }
 
 /* Java touch events arrive in INPUT_SPACE over the whole output: action 0=press, 1=move, 2=release.

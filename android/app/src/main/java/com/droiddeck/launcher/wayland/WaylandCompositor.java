@@ -222,6 +222,13 @@ public final class WaylandCompositor {
     /** The serial {@link #nativeCursorSnapshot} would report, without copying the image. */
     public static native int nativeCursorSerial();
 
+    /**
+     * The pointer's position in scene pixels times 16: out = [x, y]. What the cursor overlay draws at,
+     * wherever the pointer came from (finger, touchpad, mouse, a constraint's position hint).
+     * Returns the ints written, 0 if {@code out} is shorter than 2.
+     */
+    public static native int nativeCursorPosition(int[] out);
+
     /** Enough for the header plus a 256x256 cursor, the largest the compositor snapshots. */
     public static final int CURSOR_BUF_INTS = 6 + 256 * 256;
 

@@ -52,6 +52,7 @@ fun WineGroup() {
     val revision = WineContents.revision // dibaca agar daftar dibaca ulang setiap ada perubahan
     var tick by remember { mutableStateOf(0) }
     var catalog by remember { mutableStateOf(false) }
+    var catalogFilter by remember { mutableStateOf(0) }
 
     val wines = remember(revision, tick) { WineContents.installed(Type.WINE) + WineContents.installed(Type.PROTON) }
     val fexes = remember(revision, tick) { WineContents.installed(Type.FEXCORE) }
@@ -82,14 +83,18 @@ fun WineGroup() {
         WineContents.taskError?.let { DeckNote(stringResource(R.string.tc_wine_failed, it), pal.error) }
         DeckActionRow(stringResource(R.string.tc_wine_import), null, stringResource(R.string.tc_btn_import)) { pickFor(null) }
         DeckActionRow(stringResource(R.string.tc_wine_download), null, stringResource(R.string.tc_btn_download)) {
-            if (!WineContents.isBusy) catalog = true
+            if (!WineContents.isBusy) { catalogFilter = 0; catalog = true }
         }
 
         if (wines.isEmpty()) DeckNote(stringResource(R.string.tc_wine_no_wine))
         else Picker(R.string.tc_wine_pick_wine, Type.WINE, wines, false) { tick++ }
         // satu blok per komponen: pilih versi, impor .wcp bertipe itu, hapus yang dipilih (baris tampil juga saat belum ada yang terpasang)
         Component(R.string.tc_wine_pick_fex, Type.FEXCORE, fexes, { pickFor(Type.FEXCORE) }) { tick++ }
-        Component(R.string.tc_wine_pick_dxvk, Type.DXVK, dxvks, { pickFor(Type.DXVK) }) { tick++ }
+        Component(R.string.tc_wine_pick_dxvk, Type.DXVK, dxvks, { pickFor(Type.DXVK) }, hint = R.string.tc_wine_import_dxvk_hint) { tick++ }
+        // katalog langsung di tab DXVK (indeks filter 2), untuk memilih versi DXVK lain
+        DeckActionRow(stringResource(R.string.tc_wine_download_dxvk), null, stringResource(R.string.tc_btn_download)) {
+            if (!WineContents.isBusy) { catalogFilter = 2; catalog = true }
+        }
 
         // mode Direct3D: DXVK <-> WineD3D; menulis DllOverrides di user.reg dan memasang/mencabut DLL DXVK
         var d3d by remember(revision, tick) { mutableStateOf(D3dMode.mode()) }
@@ -181,7 +186,7 @@ fun WineGroup() {
         }
     }
 
-    if (catalog) CatalogDialog(onDismiss = { catalog = false }) { r ->
+    if (catalog) CatalogDialog(initialFilter = catalogFilter, onDismiss = { catalog = false }) { r ->
         catalog = false
         WineContents.downloadAndInstall(ctx, r)
     }
@@ -208,7 +213,7 @@ private fun Picker(title: Int, type: Type, list: List<WineContents.Profile>, non
 }
 
 @Composable
-private fun Component(title: Int, type: Type, list: List<WineContents.Profile>, onImport: () -> Unit, onChanged: () -> Unit) {
+private fun Component(title: Int, type: Type, list: List<WineContents.Profile>, onImport: () -> Unit, hint: Int? = null, onChanged: () -> Unit) {
     val sel = WineContents.active(type)?.id ?: ""
     val options = listOf("" to stringResource(R.string.tc_wine_none)) + list.map { it.id to it.title }
     DeckChoiceRow(stringResource(title), null, options, if (options.any { it.first == sel }) sel else "") { id ->
@@ -216,7 +221,7 @@ private fun Component(title: Int, type: Type, list: List<WineContents.Profile>, 
         onChanged()
         Thread { runCatching { WineContents.onSelectionChanged() } }.start()
     }
-    DeckActionRow(stringResource(R.string.tc_wine_import_type, type.label), null, stringResource(R.string.tc_btn_import), onImport)
+    DeckActionRow(stringResource(R.string.tc_wine_import_type, type.label), hint?.let { stringResource(it) }, stringResource(R.string.tc_btn_import), onImport)
     val chosen = list.firstOrNull { it.id == sel }
     if (chosen != null) {
         DeckActionRow(stringResource(R.string.tc_wine_remove), chosen.title, stringResource(R.string.tc_btn_remove)) {
@@ -227,10 +232,10 @@ private fun Component(title: Int, type: Type, list: List<WineContents.Profile>, 
 }
 
 @Composable
-private fun CatalogDialog(onDismiss: () -> Unit, onPick: (WineContents.Remote) -> Unit) {
+private fun CatalogDialog(initialFilter: Int, onDismiss: () -> Unit, onPick: (WineContents.Remote) -> Unit) {
     val pal = LocalPalette.current
     var items by remember { mutableStateOf<List<WineContents.Remote>?>(null) }
-    var filter by remember { mutableStateOf(0) }
+    var filter by remember { mutableStateOf(initialFilter) }
     LaunchedEffect(Unit) { items = withContext(Dispatchers.IO) { WineContents.catalog() } }
 
     val filters = listOf(
