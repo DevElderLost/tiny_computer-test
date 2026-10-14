@@ -171,6 +171,7 @@ fi
         // `wine reg add` hanya dijalankan bila nilainya belum benar. Tanpa `wineserver -w`: bila wineserver prefix ini
         // sedang dipakai aplikasi lain, perintah itu akan menunggu sampai aplikasinya keluar.
         if (isWine && WineContents.displayWayland()) {
+            val wineLib = WineContents.activeWine()?.wineLib ?: "lib"
             sb.append(
                 """
 if [ -S /tmp/wayland-0 ]; then
@@ -181,6 +182,20 @@ if [ -S /tmp/wayland-0 ]; then
       echo "[tiny] Wine: driver tampilan di registri bukan wayland; ditulis ulang ke wayland,x11"
       wine reg add 'HKCU\Software\Wine\Drivers' /v Graphics /d wayland,x11 /f
     fi
+    # Diagnosis: winewayland.drv yang dimuat lalu langsung dibuang berarti init Wayland gagal (pustaka .so tidak
+    # termuat atau wl_display_connect gagal). Hasilnya dicatat di log supaya penyebabnya terlihat.
+    echo "[tiny] wayland diag: XDG_RUNTIME_DIR=${'$'}XDG_RUNTIME_DIR WAYLAND_DISPLAY=${'$'}WAYLAND_DISPLAY DISPLAY=${'$'}DISPLAY"
+    ls -l "${'$'}XDG_RUNTIME_DIR/${'$'}WAYLAND_DISPLAY" 2>&1 | sed 's/^/[tiny] wayland diag: socket /'
+    so="${'$'}TINY_WINE_ROOT/$wineLib/wine/aarch64-unix/winewayland.so"
+    if [ -f "${'$'}so" ]; then
+      if command -v ldd >/dev/null 2>&1; then
+        miss=${'$'}(ldd "${'$'}so" 2>&1 | grep -i 'not found')
+        if [ -n "${'$'}miss" ]; then echo "[tiny] wayland diag: winewayland.so kekurangan pustaka: ${'$'}miss"
+        else echo "[tiny] wayland diag: winewayland.so, semua pustaka ada"; fi
+      fi
+    else
+      echo "[tiny] wayland diag: ${'$'}so tidak ada"
+    fi
   )
 else
   echo "[tiny] Wine: soket /tmp/wayland-0 tidak ada; Wine memakai X11 (Vulkan/DXVK lewat Xwayland tanpa DRI3 bisa hang)"
@@ -189,6 +204,15 @@ fi
             )
         } else if (isWine && Cfg.wineDisplay != "x11") {
             sb.append("echo \"[tiny] Wine: build Wine aktif tidak punya winewayland.so; memakai X11 (DXVK/Vulkan bisa hang tanpa DRI3)\"\n")
+        }
+
+        // Diagnosis DXVK: jenis DLL yang benar-benar ada di system32 prefix (arm64ec = benar; x64 = salah untuk prefix arm64ec).
+        if (isWine && D3dMode.isDxvk()) {
+            val sys32 = File(WineContents.prefixDir(), "drive_c/windows/system32")
+            val kinds = listOf("dxgi", "d3d11", "d3d9").joinToString(", ") { n ->
+                n + "=" + PeArch.kind(File(sys32, "$n.dll")).name.lowercase()
+            }
+            sb.append("echo \"[tiny] dxvk diag: system32 $kinds\"\n")
         }
 
         var cmd = cleanExec(app.exec)
