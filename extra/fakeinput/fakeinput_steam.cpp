@@ -28,6 +28,7 @@
 #include <fcntl.h>
 #include <linux/input.h>
 #include <linux/joystick.h>
+#include <linux/netlink.h>
 #include <linux/uinput.h>
 #include <poll.h>
 #include <pthread.h>
@@ -2781,9 +2782,109 @@ EXPORT int ioctl(int fd, ioctl_request_t op, ...) {
   }
 }
 
+// ---- Stand-in for libudev's uevent monitor socket -------------------------------------------
+// libudev, and through it SDL and Wine's winebus, watches hotplug with a NETLINK_KOBJECT_UEVENT
+// socket. A phone's SELinux policy refuses that socket to an app, so udev_monitor_new_from_netlink
+// fails and winebus abandons its whole device scan before it lists a single pad ("Unable to get
+// udev monitor object", "Could not initialize UDEV"). With FAKE_UEVENT_SOCKET=1 that socket is
+// instead one end of an AF_UNIX datagram pair whose other end stays open and silent: the monitor
+// is created, polls without ever seeing an event, and the scan of /sys/class/{input,hidraw} runs.
+// Hotplug is not announced; the pad nodes are there from the start.
+__attribute__((visibility("hidden"))) static bool fake_uevent_enabled() {
+  static const bool on = [] {
+    const char *v = getenv("FAKE_UEVENT_SOCKET");
+    return v && *v && strcmp(v, "0") != 0;
+  }();
+  return on;
+}
+
+__attribute__((visibility("hidden"))) static std::mutex &uevent_mutex() {
+  static std::mutex *m = new std::mutex;
+  return *m;
+}
+
+// socket fd handed to the caller -> the silent peer kept open behind it.
+__attribute__((visibility("hidden"))) static std::unordered_map<int, int> &uevent_map() {
+  static auto *m = new std::unordered_map<int, int>;
+  return *m;
+}
+
+static std::atomic<int> uevent_count{0};
+
+__attribute__((visibility("hidden"))) static bool is_uevent_fd(int fd) {
+  if (fd < 0 || uevent_count.load(std::memory_order_relaxed) == 0) return false;
+  std::lock_guard<std::mutex> guard(uevent_mutex());
+  return uevent_map().count(fd) != 0;
+}
+
+__attribute__((visibility("hidden"))) static void forget_uevent_fd(int fd) {
+  if (fd < 0 || uevent_count.load(std::memory_order_relaxed) == 0) return;
+  int peer = -1;
+  {
+    std::lock_guard<std::mutex> guard(uevent_mutex());
+    auto it = uevent_map().find(fd);
+    if (it == uevent_map().end()) return;
+    peer = it->second;
+    uevent_map().erase(it);
+    uevent_count.fetch_sub(1, std::memory_order_relaxed);
+  }
+  if (peer >= 0) syscall(SYS_close, peer);
+}
+
+EXPORT int socket(int domain, int type, int protocol) {
+  static auto real = reinterpret_cast<int (*)(int, int, int)>(dlsym(RTLD_NEXT, "socket"));
+  if (domain == AF_NETLINK && protocol == NETLINK_KOBJECT_UEVENT && fake_uevent_enabled()) {
+    int pair[2];
+    if (socketpair(AF_UNIX, SOCK_DGRAM | (type & (SOCK_NONBLOCK | SOCK_CLOEXEC)), 0, pair) == 0) {
+      fcntl(pair[1], F_SETFD, FD_CLOEXEC);
+      {
+        std::lock_guard<std::mutex> guard(uevent_mutex());
+        uevent_map()[pair[0]] = pair[1];
+        uevent_count.fetch_add(1, std::memory_order_relaxed);
+      }
+      Logger::log("uevent: netlink monitor socket %d is a silent stand-in\n", pair[0]);
+      return pair[0];
+    }
+  }
+  return real(domain, type, protocol);
+}
+
+EXPORT int bind(int fd, const struct sockaddr *addr, socklen_t len) {
+  static auto real = reinterpret_cast<int (*)(int, const struct sockaddr *, socklen_t)>(dlsym(RTLD_NEXT, "bind"));
+  if (is_uevent_fd(fd)) return 0;
+  return real(fd, addr, len);
+}
+
+EXPORT int getsockname(int fd, struct sockaddr *addr, socklen_t *len) {
+  static auto real = reinterpret_cast<int (*)(int, struct sockaddr *, socklen_t *)>(dlsym(RTLD_NEXT, "getsockname"));
+  if (is_uevent_fd(fd)) {
+    struct sockaddr_nl nl;
+    memset(&nl, 0, sizeof(nl));
+    nl.nl_family = AF_NETLINK;
+    nl.nl_pid = static_cast<__u32>(getpid());
+    nl.nl_groups = 0;
+    if (addr && len) {
+      socklen_t room = *len < sizeof(nl) ? *len : static_cast<socklen_t>(sizeof(nl));
+      memcpy(addr, &nl, room);
+      *len = sizeof(nl);
+    }
+    return 0;
+  }
+  return real(fd, addr, len);
+}
+
+// SO_PASSCRED, SO_RCVBUFFORCE and the BPF filter (SO_ATTACH_FILTER) libudev sets on a netlink
+// socket mean nothing, or are refused, on the AF_UNIX pair.
+EXPORT int setsockopt(int fd, int level, int optname, const void *optval, socklen_t optlen) {
+  static auto real = reinterpret_cast<int (*)(int, int, int, const void *, socklen_t)>(dlsym(RTLD_NEXT, "setsockopt"));
+  if (is_uevent_fd(fd)) return 0;
+  return real(fd, level, optname, optval, optlen);
+}
+
 EXPORT int close(int fd) {
   static auto my_close = reinterpret_cast<decltype(&::close)>(dlsym(RTLD_NEXT, "close"));
 
+  forget_uevent_fd(fd);
   if (!armed()) return my_close(fd);
   close_uinput(fd);
   std::unique_lock<std::recursive_mutex> guard(controller_mutex());

@@ -46,7 +46,12 @@ object PadSetup {
         } else {
             // tanpa hidraw Deck: SDL memakai node evdev saja
             env += "SDL_JOYSTICK_HIDAPI=0"
+            // libudev (SDL dan winebus Wine) mencari pad lewat /sys/class/input, bukan /dev/input
+            mounts += EvdevSysfs.prepare(root, TinyEnv.containerDir())
         }
+        // Soket NETLINK_KOBJECT_UEVENT ditolak SELinux Android, sehingga monitor udev gagal dan winebus
+        // membatalkan seluruh pemindaian perangkat. libfakeinput menggantinya dengan soket diam.
+        env += "FAKE_UEVENT_SOCKET=1"
         env += "SDL_JOYSTICK_DISABLE_UDEV=1"
         env += "SDL_HIDAPI_JOYSTICK_DISABLE_UDEV=1"
         env += "FAKE_EVDEV_LOG=1"
