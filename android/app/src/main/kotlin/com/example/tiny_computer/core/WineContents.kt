@@ -392,18 +392,6 @@ object WineContents {
                 throw IllegalArgumentException("Ini bukan Wine arm64ec (tidak ada lib/wine/aarch64-unix). Build x86_64 butuh Box64, yang tidak dipakai di Tiny.")
             }
         }
-        // Prefix arm64ec: DLL 64-bit DXVK/VKD3D di system32 harus ARM64EC. Build x64 resmi (mis. dxvk-2.7.1.tar.gz folder x64)
-        // termuat tetapi macet di loader lock saat Vulkan/DXVK dipakai (layar hitam); jadi ditolak saat dipasang.
-        if (p.type == Type.DXVK || p.type == Type.VKD3D) {
-            val bad = p.files.filter { it.target.startsWith("\${system32}/") && it.target.endsWith(".dll", true) }
-                .filter { PeArch.kind(File(stage, it.source)) == PeArch.Kind.X64 }
-            if (bad.isNotEmpty()) {
-                throw IllegalArgumentException(
-                    "${p.type.label}: ${bad.joinToString { it.target.substringAfterLast('/') }} is a plain x64 build, not arm64ec. " +
-                        "An arm64ec Wine prefix needs the arm64ec DLLs in system32 (use a *-arm64ec package).",
-                )
-            }
-        }
         if (p.type == Type.FEXCORE && p.files.none { it.target.endsWith("libwow64fex.dll") }) {
             throw IllegalArgumentException("Paket FEXCore tidak berisi libwow64fex.dll.")
         }
