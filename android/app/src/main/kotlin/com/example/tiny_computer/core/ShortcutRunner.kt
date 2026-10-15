@@ -327,7 +327,7 @@ command -v Xwayland >/dev/null 2>&1 || { echo "Xwayland belum terpasang"; exit 1
 rm -f /tmp/.X11-unix/X4 /tmp/.X4-lock
 i=0; while [ ${'$'}i -lt 150 ] && [ ! -S /tmp/wayland-0 ]; do sleep 0.2; i=${'$'}((i+1)); done
 rm -f "${'$'}HOME/.vnc/no-wm"
-${'$'}{noWm}# window manager (title bar + tombol tutup/maksimalkan/kecilkan) untuk aplikasi Shortcut.
+${noWm}# window manager (title bar + tombol tutup/maksimalkan/kecilkan) untuk aplikasi Shortcut.
 # Berkas ~/.vnc/no-wm (dibuat aplikasi Wine) = window manager dijeda; aplikasi Linux menghapusnya agar WM menyala lagi.
 # - berjalan di bus D-Bus sendiri: xfwm4 butuh xfconf lewat D-Bus, tanpa itu langsung mati dan jendela
 #   tampil tanpa bingkai;
