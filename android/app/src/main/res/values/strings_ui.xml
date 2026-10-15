@@ -411,6 +411,9 @@
     <string name="tc_wine_display_unsupported">This Wine build has no winewayland driver, so X11 (Xwayland) is used.</string>
     <string name="tc_wine_display_wayland">Wayland (Turnip / Vulkan)</string>
     <string name="tc_wine_display_x11">X11 (Xwayland)</string>
+    <string name="tc_wine_source_system">No Wine package (.wcp) is selected, so the Wine installed in the container (/usr/lib/wine) is used.</string>
+    <string name="tc_dxvk_tune">Low-memory DXVK config</string>
+    <string name="tc_dxvk_tune_hint">Sets DXVK_CONFIG (smaller memory limits, no pipeline libraries, 1 compiler thread, no state cache). Fixes the black screen / OUT_OF_HOST_MEMORY on Adreno 610. Turn off to compare. Applies on the next Shortcut launch or container start.</string>
     <!-- Komponen Wine: Box64 / WOWBox64, impor per tipe, emulator i386 -->
     <string name="tc_wine_pick_box64">Box64 (x86_64 binary for /usr/local/bin)</string>
     <string name="tc_wine_pick_wowbox64">WOWBox64 (i386 emulator DLL)</string>

@@ -435,6 +435,9 @@ $data/bin/virgl_test_server ${Cfg.defaultVirglCommand}""".trimIndent(),
             extraOpt.append("LIBGL_KOPPER_DRI2=true ")
             if (!Cfg.dri3) extraOpt.append("MESA_VK_WSI_DEBUG=sw ")
         }
+        // DXVK hemat memori (lihat D3dMode.TUNE_CONFIG). Berlaku untuk shell kontainer (saat kontainer dinyalakan) dan tiap
+        // peluncuran Shortcut. Env Shortcut buatan pengguna dan DXVK_CONFIG yang sudah ada di env.sh/skrip tetap bisa menimpa.
+        if (Cfg.dxvkTune) extraOpt.append("DXVK_CONFIG=").append(D3dMode.TUNE_CONFIG).append(' ')
         // GTK4 (mis. pavucontrol "Volume Control" di Debian 13) memakai renderer GL secara bawaan; di
         // Xwayland/proot tanpa EGL yang sehat jendelanya tampil kosong. Paksa renderer cairo (perangkat lunak).
         if (!extraOpt.contains("GSK_RENDERER=")) extraOpt.append("GSK_RENDERER=cairo ")

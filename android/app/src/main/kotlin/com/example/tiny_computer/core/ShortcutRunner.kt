@@ -173,12 +173,13 @@ fi
         // `wine reg add` hanya dijalankan bila nilainya belum benar. Tanpa `wineserver -w`: bila wineserver prefix ini
         // sedang dipakai aplikasi lain, perintah itu akan menunggu sampai aplikasinya keluar.
         if (isWine && WineContents.displayWayland()) {
-            val wineLib = WineContents.activeWine()?.wineLib ?: "lib"
+            // cabang .wcp: $TINY_WINE_ROOT/<lib>/...; cabang Wine sistem: /usr/lib/wine/...
+            val soPath = WineContents.waylandSoShellPath()
             sb.append(
                 """
 if [ -S /tmp/wayland-0 ]; then
   (
-    . "${'$'}HOME/.local/share/tiny/wine/env.sh"
+    [ -f "${'$'}HOME/.local/share/tiny/wine/env.sh" ] && . "${'$'}HOME/.local/share/tiny/wine/env.sh"
     unset HODLL
     if ! grep -qs '^"Graphics"="wayland,x11"' "${'$'}WINEPREFIX/user.reg"; then
       echo "[tiny] Wine: driver tampilan di registri bukan wayland; ditulis ulang ke wayland,x11"
@@ -188,7 +189,7 @@ if [ -S /tmp/wayland-0 ]; then
     # termuat atau wl_display_connect gagal). Hasilnya dicatat di log supaya penyebabnya terlihat.
     echo "[tiny] wayland diag: XDG_RUNTIME_DIR=${'$'}XDG_RUNTIME_DIR WAYLAND_DISPLAY=${'$'}WAYLAND_DISPLAY DISPLAY=${'$'}DISPLAY"
     ls -l "${'$'}XDG_RUNTIME_DIR/${'$'}WAYLAND_DISPLAY" 2>&1 | sed 's/^/[tiny] wayland diag: socket /'
-    so="${'$'}TINY_WINE_ROOT/$wineLib/wine/aarch64-unix/winewayland.so"
+    so="$soPath"
     if [ -f "${'$'}so" ]; then
       if command -v ldd >/dev/null 2>&1; then
         miss=${'$'}(ldd "${'$'}so" 2>&1 | grep -i 'not found')
@@ -210,7 +211,7 @@ fi
             sb.append(
                 """
 (
-  . "${'$'}HOME/.local/share/tiny/wine/env.sh"
+  [ -f "${'$'}HOME/.local/share/tiny/wine/env.sh" ] && . "${'$'}HOME/.local/share/tiny/wine/env.sh"
   unset HODLL
   if ! grep -qs '^"Graphics"="x11"' "${'$'}WINEPREFIX/user.reg"; then
     echo "[tiny] Wine: driver tampilan di registri ditulis ulang ke x11"

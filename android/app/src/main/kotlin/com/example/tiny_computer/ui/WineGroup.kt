@@ -117,6 +117,11 @@ fun WineGroup() {
                 applyD3d()
             }
         }
+        var dxTune by remember(revision, tick) { mutableStateOf(Cfg.dxvkTune) }
+        DeckToggleRow(stringResource(R.string.tc_dxvk_tune), stringResource(R.string.tc_dxvk_tune_hint), dxTune) { v ->
+            dxTune = v
+            Cfg.dxvkTune = v // dibaca Launcher.guestSpec: berlaku di peluncuran Shortcut berikutnya / kontainer baru
+        }
         val regMode = remember(revision, tick) { D3dMode.regState() }
         DeckInfoRow(
             stringResource(R.string.tc_d3d_reg_state),
@@ -148,8 +153,10 @@ fun WineGroup() {
         }
 
         val activeWine = WineContents.activeWine()
-        if (activeWine != null) {
-            val wayland = WineContents.supportsWayland(activeWine)
+        val systemWine = WineContents.wineSource() == WineContents.WineSource.SYSTEM
+        if (systemWine) DeckNote(stringResource(R.string.tc_wine_source_system))
+        if (activeWine != null || systemWine) {
+            val wayland = if (activeWine != null) WineContents.supportsWayland(activeWine) else WineContents.systemSupportsWayland()
             var disp by remember(revision, tick) { mutableStateOf(if (Cfg.wineDisplay == "x11" || !wayland) "x11" else "wayland") }
             DeckChoiceRow(
                 stringResource(R.string.tc_wine_display),

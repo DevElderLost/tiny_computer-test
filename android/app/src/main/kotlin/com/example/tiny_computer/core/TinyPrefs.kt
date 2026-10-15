@@ -184,6 +184,13 @@ object Cfg {
     var d3dMode: String
         get() = TinyPrefs.getString("d3dMode", "dxvk")
         set(v) = TinyPrefs.setString("d3dMode", v)
+    /**
+     * Konfigurasi DXVK hemat memori (D3dMode.TUNE_CONFIG) lewat DXVK_CONFIG, bawaan AKTIF. Tanpa ini DXVK di Turnip Adreno 610
+     * gagal membuat pipeline internal (VK_ERROR_OUT_OF_HOST_MEMORY) dan layar hitam. Matikan untuk membandingkan.
+     */
+    var dxvkTune: Boolean
+        get() = TinyPrefs.getBool("dxvkTune", true)
+        set(v) = TinyPrefs.setBool("dxvkTune", v)
     var box64Active: String
         get() = TinyPrefs.getString("box64Active", "")
         set(v) = TinyPrefs.setString("box64Active", v)

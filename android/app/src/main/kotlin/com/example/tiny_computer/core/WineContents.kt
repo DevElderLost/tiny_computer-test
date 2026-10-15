@@ -107,8 +107,52 @@ object WineContents {
     fun supportsWayland(p: Profile?): Boolean =
         p != null && File(dirOf(p), "${p.wineLib}/wine/aarch64-unix/winewayland.so").isFile
 
-    /** Wayland dipilih pengguna DAN didukung build Wine aktif (belum mempertimbangkan jalur grafis, lihat [displayWayland]). */
-    fun waylandCapable(): Boolean = Cfg.wineDisplay != "x11" && supportsWayland(activeWine())
+    /** Asal Wine yang dipakai: build .wcp terpasang, Wine sistem di rootfs (/usr/lib/wine), atau tidak ada. */
+    enum class WineSource { WCP, SYSTEM, NONE }
+
+    /** Lokasi winewayland.so Wine sistem (path DALAM guest), dicoba berurutan. */
+    private val SYSTEM_WAYLAND_SO = listOf(
+        "/usr/lib/wine/aarch64-unix/winewayland.so",
+        "/usr/lib/aarch64-linux-gnu/wine/aarch64-unix/winewayland.so",
+    )
+
+    /** File/symlink ada di rootfs. Symlink absolut ke /etc/alternatives tidak ter-resolve dari sisi Android, jadi cek linknya juga. */
+    private fun inRootfs(guestPath: String): Boolean {
+        val f = File(TinyEnv.containerDir(), guestPath.removePrefix("/"))
+        return f.exists() || runCatching { java.nio.file.Files.isSymbolicLink(f.toPath()) }.getOrDefault(false)
+    }
+
+    /** Wine bawaan rootfs (apt/Hangover): ada `/usr/bin/wine` atau folder `/usr/lib/wine`. */
+    fun systemWineInstalled(): Boolean = inRootfs("/usr/bin/wine") || inRootfs("/usr/lib/wine")
+
+    /** Path guest winewayland.so Wine sistem, atau null bila build-nya tidak menyertakannya. */
+    fun systemWaylandSo(): String? = SYSTEM_WAYLAND_SO.firstOrNull { inRootfs(it) }
+
+    fun systemSupportsWayland(): Boolean = systemWaylandSo() != null
+
+    /** Cabang Wine: .wcp aktif menang; bila tidak ada sama sekali, pakai Wine sistem. */
+    fun wineSource(): WineSource = when {
+        activeWine() != null -> WineSource.WCP
+        systemWineInstalled() -> WineSource.SYSTEM
+        else -> WineSource.NONE
+    }
+
+    /**
+     * Path winewayland.so untuk skrip shell (dipakai diagnosis ShortcutRunner). Cabang .wcp memakai `$TINY_WINE_ROOT`
+     * yang diisi env.sh; cabang sistem memakai path absolut.
+     */
+    fun waylandSoShellPath(): String = when (wineSource()) {
+        WineSource.WCP -> "\$TINY_WINE_ROOT/${activeWine()?.wineLib ?: "lib"}/wine/aarch64-unix/winewayland.so"
+        WineSource.SYSTEM -> systemWaylandSo() ?: SYSTEM_WAYLAND_SO[0]
+        WineSource.NONE -> SYSTEM_WAYLAND_SO[0]
+    }
+
+    /** Wayland dipilih pengguna DAN didukung Wine yang dipakai (cabang .wcp atau Wine sistem); lihat [displayWayland] untuk jalur grafis. */
+    fun waylandCapable(): Boolean = Cfg.wineDisplay != "x11" && when (wineSource()) {
+        WineSource.WCP -> supportsWayland(activeWine())
+        WineSource.SYSTEM -> systemSupportsWayland()
+        WineSource.NONE -> false
+    }
 
     /**
      * Jalur X11 (Xwayland + Zink/Turnip) HARUS dipakai walau Wayland tersedia untuk OpenGL milik Wine (WineD3D,
@@ -121,7 +165,11 @@ object WineContents {
      * Dulu jalur X11 terpilih "kebetulan": winewayland.so gagal dimuat tanpa libxkbregistry.so.0 dan Wine jatuh ke
      * X11. Setelah libxkbregistry0 terpasang winewayland jalan, sehingga pilihan ini harus eksplisit.
      */
-    fun x11Preferred(): Boolean = !(D3dMode.isDxvk() && active(Type.DXVK) != null)
+    fun x11Preferred(): Boolean = when (wineSource()) {
+        // Wine sistem tidak membawa DXVK .wcp (DXVK ada di prefix hasil impor/pasang manual): cukup mode DXVK dipilih
+        WineSource.SYSTEM -> !D3dMode.isDxvk()
+        else -> !(D3dMode.isDxvk() && active(Type.DXVK) != null)
+    }
 
     /** Wine memakai winewayland.drv pada peluncuran ini: didukung, dipilih pengguna, dan jalur grafisnya memang Vulkan lewat Wayland. */
     fun displayWayland(): Boolean = waylandCapable() && !x11Preferred()

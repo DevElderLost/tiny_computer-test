@@ -154,7 +154,7 @@ object WineSetup {
      */
     private fun applyDisplayDriver(ctx: Context) {
         val value = WineContents.displayDriverValue()
-        val cmd = ". ~/.local/share/tiny/wine/env.sh; unset HODLL; " +
+        val cmd = "[ -f ~/.local/share/tiny/wine/env.sh ] && . ~/.local/share/tiny/wine/env.sh; unset HODLL; " +
             "wine reg add 'HKCU\\Software\\Wine\\Drivers' /v Graphics /d $value /f; wineserver -w"
         guestRun(ctx, cmd, 5 * 60_000L)
     }

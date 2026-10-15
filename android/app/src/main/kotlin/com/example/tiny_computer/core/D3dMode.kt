@@ -18,6 +18,13 @@ object D3dMode {
     const val DXVK = "dxvk"
     const val WINED3D = "wined3d"
 
+    /**
+     * Nilai DXVK_CONFIG hasil uji di Adreno 610 (tanpa spasi: dipakai lewat $EXTRA_OPT proot yang tidak diberi kutip,
+     * spasi akan memecah argumen; `;` aman). Dipasang Launcher.guestSpec bila [Cfg.dxvkTune] aktif.
+     */
+    const val TUNE_CONFIG = "dxgi.maxDeviceMemory=512;dxgi.maxSharedMemory=512;dxvk.maxChunkSize=16;" +
+        "dxvk.numCompilerThreads=1;dxvk.enableGraphicsPipelineLibrary=False;dxvk.enableStateCache=False"
+
     /** Teks bagian di user.reg: dua garis miring terbalik antar-segmen. */
     private const val SECTION = "Software\\\\Wine\\\\DllOverrides"
     private val DEFAULT_DLLS = listOf("d3d8", "d3d9", "d3d10core", "d3d11", "dxgi")
