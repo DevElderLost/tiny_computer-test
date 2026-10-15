@@ -206,6 +206,9 @@ if [ ! -d "${'$'}SRC" ] || [ ! -e "${'$'}SRC/AppRun" ]; then
   exit 1
 fi
 mv "${'$'}SRC" app && rm -f squashfs-root
+# symlink hasil proot (link2symlink) menunjuk ke <folder-ekstraksi>/... dengan path absolut; tanpa folder lama itu semuanya putus
+# (termasuk app/sharun, sehingga [ -e ] di bawah salah menyangka bukan AppImage sharun). Arahkan nama lama ke app.
+ln -sfn app "${'$'}(basename "${'$'}SRC")"
 echo "    ${'$'}(find app -type f | wc -l) berkas diekstrak"
 echo "[3/4] Membuat shortcut..."
 DESK="${'$'}(ls app/*.desktop 2>/dev/null | head -n 1)"
@@ -229,7 +232,7 @@ if [ -z "${'$'}ICON" ] && [ -e app/.DirIcon ] && cp -L app/.DirIcon icon.png 2>/
 # ld-linux bawaan AppImage dengan peluncur buatan sendiri.
 LAUNCH=""
 LDSO="${'$'}(ls app/shared/lib/ld-linux-*.so.* 2>/dev/null | head -n 1)"
-if [ -e app/sharun ] && [ -n "${'$'}LDSO" ] && [ -d app/shared/bin ]; then
+if { [ -e app/sharun ] || [ -L app/sharun ]; } && [ -n "${'$'}LDSO" ] && [ -d app/shared/bin ]; then
   BIN="${'$'}(key Exec)"; BIN="${'$'}{BIN%% *}"; BIN="${'$'}{BIN##*/}"
   [ -n "${'$'}BIN" ] && [ -f "app/shared/bin/${'$'}BIN" ] || BIN="${'$'}(ls app/shared/bin 2>/dev/null | head -n 1)"
   if [ -n "${'$'}BIN" ] && [ -f "app/shared/bin/${'$'}BIN" ]; then
