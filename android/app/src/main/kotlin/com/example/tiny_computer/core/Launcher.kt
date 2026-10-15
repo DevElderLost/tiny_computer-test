@@ -238,23 +238,102 @@ object Launcher {
     /** True setelah perintah boot ditulis ke terminal (kontainer sedang/ sudah berjalan). */
     val isStarted: Boolean get() = started
 
+    /**
+     * Audio langsung ke Android: plugin ALSA `tinyaudio` di guest -> soket unix -> AAudio (cpp/tinyaudio),
+     * tanpa PulseAudio. Aktif bila toggle menyala dan plugin ada di folder extra (dibangun CI); selain itu
+     * jalur lama (pulseaudio + OpenSL ES) dipakai seperti biasa.
+     */
+    fun directAudioActive(): Boolean =
+        Cfg.directAudio && TinyAudio.available &&
+            File(TinyEnv.dataPath, "tiny/extra/libasound_module_pcm_tinyaudio.so").isFile
+
+    private const val ASOUND_MARK = "# tiny-direct-audio"
+
+    private fun asoundConf(): String = """
+$ASOUND_MARK (dibuat otomatis oleh Tiny Computer; matikan "Direct audio" di Pengaturan untuk kembali ke PulseAudio)
+pcm_type.tinyaudio {
+    lib "/home/tiny/.local/share/tiny/extra/libasound_module_pcm_tinyaudio.so"
+}
+pcm.tinyaudio_raw {
+    type tinyaudio
+    socket "${TinyAudio.GUEST_SOCKET}"
+}
+pcm.tinyaudio {
+    type plug
+    slave.pcm "tinyaudio_raw"
+}
+pcm.!default {
+    type plug
+    slave.pcm "tinyaudio_raw"
+}
+""".trimStart()
+
+    /** Menulis / menghapus /etc/asound.conf di rootfs kontainer saat ini (hanya berkas buatan kita yang disentuh). */
+    private fun installGuestAudio(on: Boolean) {
+        val f = File(TinyEnv.containerDir(), "etc/asound.conf")
+        runCatching {
+            val mine = f.isFile && f.readText().startsWith(ASOUND_MARK)
+            if (on) {
+                if (f.exists() && !mine) {
+                    Log.w("Launcher", "asound.conf milik pengguna sudah ada; audio langsung tidak dipasang ke ALSA default")
+                    return
+                }
+                f.parentFile?.mkdirs()
+                val want = asoundConf()
+                if (!f.isFile || f.readText() != want) f.writeText(want)
+            } else if (mine) f.delete()
+        }.onFailure { Log.w("Launcher", "asound.conf: ${it.message}") }
+    }
+
+    /**
+     * pulseaudio.conf ditulis ulang di sini (bukan dari assets.zip) tanpa modul yang membuat suara hilang:
+     * suspend-on-idle (sink tertidur dan tidak bangun lagi), role-cork, *-restore (volume lama 0 / mute), filter-*.
+     * Mode langsung: tanpa module-opensles, pulseaudio hanya dipakai sebagai perantara mikrofon.
+     */
+    private fun pulseConf(direct: Boolean): String = buildString {
+        appendLine("# dibuat otomatis oleh Tiny Computer")
+        appendLine(".fail")
+        appendLine("load-module module-native-protocol-unix")
+        appendLine("load-module module-native-protocol-tcp auth-anonymous=true port=${Cfg.defaultAudioPort}")
+        appendLine("load-module module-always-sink")
+        if (!direct) {
+            appendLine("load-module module-opensles")
+            appendLine("set-default-sink opensles")
+        }
+    }
+
     fun setupAudio() {
         audioProcess?.destroy()
         val data = TinyEnv.dataPath
+        runCatching { File(data, "bin/pulseaudio.conf.tmp").writeText(pulseConf(directAudioActive())) }
+            .onFailure { Log.w("Launcher", "pulseaudio.conf.tmp: ${it.message}") }
+        // --exit-idle-time=-1: bawaan pulseaudio mati sendiri setelah 20 dtk tanpa klien; sesudahnya semua suara
+        // hilang sampai aplikasi diluncurkan ulang.
         audioProcess = Shell.spawn(
             """
 export DATA_DIR=$data
 export PATH=${'$'}DATA_DIR/bin:${'$'}PATH
 export LD_LIBRARY_PATH=${'$'}DATA_DIR/lib
-${'$'}DATA_DIR/bin/busybox sed "s/4713/${Cfg.defaultAudioPort}/g" ${'$'}DATA_DIR/bin/pulseaudio.conf > ${'$'}DATA_DIR/bin/pulseaudio.conf.tmp
 rm -rf ${'$'}DATA_DIR/pulseaudio_tmp/*
-TMPDIR=${'$'}DATA_DIR/pulseaudio_tmp HOME=${'$'}DATA_DIR/pulseaudio_tmp XDG_CONFIG_HOME=${'$'}DATA_DIR/pulseaudio_tmp LD_LIBRARY_PATH=${'$'}DATA_DIR/bin:${'$'}LD_LIBRARY_PATH ${'$'}DATA_DIR/bin/pulseaudio -F ${'$'}DATA_DIR/bin/pulseaudio.conf.tmp
+TMPDIR=${'$'}DATA_DIR/pulseaudio_tmp HOME=${'$'}DATA_DIR/pulseaudio_tmp XDG_CONFIG_HOME=${'$'}DATA_DIR/pulseaudio_tmp LD_LIBRARY_PATH=${'$'}DATA_DIR/bin:${'$'}LD_LIBRARY_PATH ${'$'}DATA_DIR/bin/pulseaudio --exit-idle-time=-1 -F ${'$'}DATA_DIR/bin/pulseaudio.conf.tmp
 """.trimIndent(),
         )
     }
 
-    /** Audio hanya dinyalakan bila belum berjalan: shortcut tidak lagi bergantung pada start kontainer. */
+    /** Output suara: server native + asound.conf (langsung) ATAU pulseaudio (cadangan). */
     private fun ensureAudio() {
+        val direct = directAudioActive()
+        installGuestAudio(direct)
+        if (direct) {
+            if (!TinyAudio.start()) Log.w("Launcher", "server audio native gagal start; suara tidak keluar")
+            return
+        }
+        if (TinyAudio.running) TinyAudio.stop()
+        if (audioProcess?.isAlive != true) setupAudio()
+    }
+
+    /** Mikrofon virtual masih memakai pulseaudio (pactl/pacat); pada mode langsung ia dinyalakan hanya saat mik dipakai. */
+    fun ensurePulseForMic() {
         if (audioProcess?.isAlive != true) setupAudio()
     }
 
@@ -335,6 +414,7 @@ TMPDIR=${'$'}DATA_DIR/pulseaudio_tmp HOME=${'$'}DATA_DIR/pulseaudio_tmp XDG_CONF
      * guest merekam dari `input`, bukan dari mikrofon virtual, sehingga suara "tidak tertangkap".
      */
     fun micCommand(socketPath: String): String = """
+export PULSE_SERVER=tcp:127.0.0.1:${Cfg.defaultAudioPort}
 pactl list short sinks | grep -q AndroidSink || pactl load-module module-null-sink sink_name=AndroidSink sink_properties=device.description="Android_Audio_Stream" >/dev/null
 pactl list short sources | grep -q AndroidMic || pactl load-module module-remap-source master=AndroidSink.monitor source_name=AndroidMic source_properties=device.description="Android_Virtual_Mic" >/dev/null
 pactl set-default-source AndroidMic
@@ -352,6 +432,7 @@ pactl list short source-outputs | cut -f1 | xargs -r -I{} pactl move-source-outp
 
     /** Kebalikan [micCommand]: hentikan klien, bongkar modul Android* (dan loopback monitor), kembalikan default. */
     fun micStopCommand(socketPath: String): String = """
+export PULSE_SERVER=tcp:127.0.0.1:${Cfg.defaultAudioPort}
 pkill -f tiny_virtual_mic 2>/dev/null; pkill -f 'UNIX-CONNECT:$socketPath' 2>/dev/null
 pactl list short modules | grep Android | cut -f1 | tac | xargs -r -n1 pactl unload-module 2>/dev/null
 """.trimIndent()
@@ -363,9 +444,11 @@ pactl list short modules | grep Android | cut -f1 | tac | xargs -r -n1 pactl unl
      */
     fun micMonitorCommand(on: Boolean): String =
         if (on) """
+export PULSE_SERVER=tcp:127.0.0.1:${Cfg.defaultAudioPort}
 pactl list short modules | grep -q 'module-loopback.*AndroidMic' || pactl load-module module-loopback source=AndroidMic sink=${'$'}(pactl list short sinks | cut -f2 | grep -v AndroidSink | head -n1) latency_msec=1 >/dev/null
 """.trimIndent()
         else """
+export PULSE_SERVER=tcp:127.0.0.1:${Cfg.defaultAudioPort}
 pactl list short modules | grep 'module-loopback.*AndroidMic' | cut -f1 | xargs -r -n1 pactl unload-module 2>/dev/null
 """.trimIndent()
 
@@ -449,6 +532,10 @@ $data/bin/virgl_test_server ${Cfg.defaultVirglCommand}""".trimIndent(),
         if (File(extraDir, "tiny_virtual_mic").isFile) {
             extraMount += "--mount=\$DATA_DIR/tiny/extra/tiny_virtual_mic:/home/tiny/.local/bin/tiny_virtual_mic "
         }
+        // Audio langsung: SDL (PPSSPP, dll.) dipaksa ke ALSA yang diarahkan asound.conf ke plugin tinyaudio; PULSE_SERVER
+        // dialihkan ke soket mati supaya klien pulse gagal cepat, bukan menunggu server (EXTRA_OPT ditaruh setelah
+        // PULSE_SERVER bawaan di perintah boot, jadi menimpanya).
+        if (directAudioActive()) extraOpt.append("SDL_AUDIODRIVER=alsa AUDIODRIVER=alsa PULSE_SERVER=unix:/tmp/.tiny-no-pulse ")
         // log peluncuran: jalur berkas sesi untuk skrip Shortcut, shim Wine, dan Xsession desktop
         extraOpt.append(LaunchLog.envFor(log))
         return GuestSpec(extraMount, extraOpt.toString())

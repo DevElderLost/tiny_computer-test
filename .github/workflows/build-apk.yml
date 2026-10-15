@@ -143,6 +143,18 @@ jobs:
             echo "::warning::Build libfakedrm.so gagal; APK dibuat tanpa tiny/extra/libfakedrm.so."
           }
 
+      # ---- libasound_module_pcm_tinyaudio.so (extra/tinyaudio): plugin ALSA guest -> audio native Android (tanpa pulse) ----
+      # Hanya butuh header ALSA (libasound2-dev) + cross compiler aarch64.
+      - name: Build libasound_module_pcm_tinyaudio.so (aarch64)
+        continue-on-error: true
+        run: |
+          sudo apt-get install -y gcc-aarch64-linux-gnu libasound2-dev
+          mkdir -p /tmp/tinyaudio-out
+          sh extra/tinyaudio/build.sh /tmp/tinyaudio-out || {
+            rm -rf /tmp/tinyaudio-out/*
+            echo "::warning::Build plugin ALSA tinyaudio gagal; APK memakai jalur pulseaudio (audio langsung tidak tersedia)."
+          }
+
       # AGP/AAPT meng-gunzip asset berakhiran .gz lalu membuang akhiran-nya (patch.tar.gz -> patch.tar).
       # Supaya tidak bergantung pada perilaku itu, patch dari rilis dikonversi di sini: tar.gz -> tar.zst,
       # disimpan sebagai assets/patch.tzst (lebih kecil dari gzip). Rootfs mengenali zstd dari magic number.
@@ -167,6 +179,13 @@ jobs:
             echo "libfakedrm.so disisipkan"
           else
             echo "::warning::tiny/extra/libfakedrm.so tidak ada; DRM palsu tidak tersedia di APK ini."
+          fi
+          if [ -s /tmp/tinyaudio-out/libasound_module_pcm_tinyaudio.so ]; then
+            cp /tmp/tinyaudio-out/libasound_module_pcm_tinyaudio.so /tmp/xwl-stage/tiny/extra/libasound_module_pcm_tinyaudio.so
+            tar --append -f /tmp/patch.tar -C /tmp/xwl-stage --owner=0 --group=0 --mode=755 "${P}tiny/extra/libasound_module_pcm_tinyaudio.so"
+            echo "libasound_module_pcm_tinyaudio.so disisipkan"
+          else
+            echo "::warning::tiny/extra/libasound_module_pcm_tinyaudio.so tidak ada; audio langsung tidak tersedia di APK ini."
           fi
           zstd -19 -T0 -q -f /tmp/patch.tar -o android/app/src/main/assets/patch.tzst
           zstd -t android/app/src/main/assets/patch.tzst

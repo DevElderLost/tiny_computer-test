@@ -13,6 +13,11 @@ add_library(native-socket SHARED native-socket.cpp)
 find_library(log-lib log)
 target_link_libraries(native-socket ${log-lib})
 
+# --- audio native langsung ke Android (tanpa PulseAudio): soket unix dari plugin ALSA di guest -> AAudio ---
+add_library(tinyaudio SHARED tinyaudio/tinyaudio_core.c tinyaudio/tinyaudio_jni.cpp)
+target_include_directories(tinyaudio PRIVATE tinyaudio)
+target_link_libraries(tinyaudio aaudio ${log-lib})
+
 # --- dari DroidDeck ---
 # Loader driver Turnip (dipakai compositor untuk dmabuf import).
 add_subdirectory(adrenotools)

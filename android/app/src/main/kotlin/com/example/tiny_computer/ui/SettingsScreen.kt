@@ -138,6 +138,8 @@ fun SettingsScreen() {
         }
 
         DeckGroup(stringResource(R.string.tc_group_audio)) {
+            DeckSwitchRow(stringResource(R.string.tc_ui_direct_audio), stringResource(R.string.tc_ui_direct_audio_hint), Cfg.directAudio) { Cfg.directAudio = it }
+            DeckTextRow(stringResource(R.string.tc_ui_direct_audio_buffer), Cfg.directAudioBufferMs.toString(), number = true) { it.toIntOrNull()?.let { v -> if (v in 10..200) Cfg.directAudioBufferMs = v } }
             DeckTextRow(stringResource(R.string.tc_ui_pulseaudio_port), Cfg.defaultAudioPort.toString(), number = true) { it.toIntOrNull()?.let { v -> if (v in 1024..65535) Cfg.defaultAudioPort = v } }
             var mic by remember { mutableStateOf(micStreaming) }
             var monitoring by remember { mutableStateOf(micMonitoring) }
@@ -169,6 +171,7 @@ fun SettingsScreen() {
                             micReset++ // kembalikan saklar ke posisi mati
                         } else {
                             // server soket di sisi Android dulu (guest menyambung), lalu klien di guest
+                            Launcher.ensurePulseForMic() // mode audio langsung tidak menyalakan pulseaudio sendiri
                             AudioStream.startStreaming("${TinyEnv.dataPath}/containers/${TinyEnv.currentContainer}$MIC_SOCKET")
                             term().writeLine(Launcher.micCommand(MIC_SOCKET))
                             micStreaming = true

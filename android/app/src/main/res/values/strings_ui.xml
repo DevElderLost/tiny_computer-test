@@ -169,6 +169,9 @@
     <string name="tc_group_appearance">Appearance</string>
     <string name="tc_group_terminal">Terminal</string>
     <string name="tc_group_startup">Startup</string>
+    <string name="tc_ui_direct_audio">Direct audio (native, no PulseAudio)</string>
+    <string name="tc_ui_direct_audio_hint">Plays sound straight through Android AAudio via an ALSA plugin in the guest (libasound_module_pcm_tinyaudio.so). Fixes dropouts and crackling in emulators such as PPSSPP and Dolphin. Wine, SDL and ALSA apps use it automatically; PulseAudio is only started for the virtual mic. Applies on next launch.</string>
+    <string name="tc_ui_direct_audio_buffer">Direct audio start buffer (ms, 10-200)</string>
     <string name="tc_group_audio">Audio</string>
     <string name="tc_group_session">Session</string>
     <string name="tc_status_running">Container running</string>

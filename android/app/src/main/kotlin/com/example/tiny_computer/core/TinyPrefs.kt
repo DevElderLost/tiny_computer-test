@@ -71,6 +71,14 @@ object Cfg {
     var defaultAudioPort: Int
         get() = TinyPrefs.getInt("defaultAudioPort", 4718)
         set(v) = TinyPrefs.setInt("defaultAudioPort", v)
+    /** Audio native langsung ke Android (AAudio) lewat plugin ALSA di guest; mematikan pulseaudio untuk output. */
+    var directAudio: Boolean
+        get() = TinyPrefs.getBool("directAudio", true)
+        set(v) = TinyPrefs.setBool("directAudio", v)
+    /** Buffer awal stream AAudio (ms). Naik otomatis bila terjadi xrun (maks 150 ms). */
+    var directAudioBufferMs: Int
+        get() = TinyPrefs.getInt("directAudioBufferMs", 40)
+        set(v) = TinyPrefs.setInt("directAudioBufferMs", v.coerceIn(10, 200))
     /** Kunci lama `autoLaunchVnc`. Tidak dipakai lagi: desktop hanya dibuka lewat tombol Open desktop. */
     var autoLaunchGui: Boolean
         get() = TinyPrefs.getBool("autoLaunchVnc", true)

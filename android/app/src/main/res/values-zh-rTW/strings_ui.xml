@@ -169,6 +169,9 @@
     <string name="tc_group_appearance">外观</string>
     <string name="tc_group_terminal">终端</string>
     <string name="tc_group_startup">启动</string>
+    <string name="tc_ui_direct_audio">直接音訊（原生，無需 PulseAudio）</string>
+    <string name="tc_ui_direct_audio_hint">透過客戶機內的 ALSA 外掛（libasound_module_pcm_tinyaudio.so）直接經 Android AAudio 播放聲音，修復 PPSSPP、Dolphin 等模擬器的聲音遺失與爆音。Wine、SDL、ALSA 應用自動使用；PulseAudio 僅在使用虛擬麥克風時啟動。下次啟動生效。</string>
+    <string name="tc_ui_direct_audio_buffer">直接音訊起始緩衝（毫秒，10-200）</string>
     <string name="tc_group_audio">音频</string>
     <string name="tc_group_session">会话</string>
     <string name="tc_status_running">容器运行中</string>
