@@ -106,8 +106,6 @@ fi
                 sb.append("pgrep -x wineserver >/dev/null 2>&1 || rm -f \"\$HOME/.vnc/no-wm\"\n")
             }
         }
-        // Driver tampilan Wine untuk peluncuran ini (lihat WineContents.x11Preferred): env.sh membacanya
-        if (isWine) sb.append("export TINY_WINE_DISPLAY=${if (WineContents.displayWayland()) "wayland" else "x11"}\n")
         // Turnip aktif bila dipilih untuk aplikasi ini, atau (GPU "default") bila Turnip global menyala
         val turnipOn = when (s.gpu) {
             ShortcutPrefs.GPU_TURNIP -> true
@@ -140,14 +138,14 @@ fi
         // per aplikasi DAN untuk GPU "default" saat Turnip global menyala (dulu hanya yang pertama, sehingga aplikasi
         // dengan GPU default tetap lewat X11 dan Vulkan-nya gagal). Variabel ini hanya untuk proses aplikasi ini, tidak
         // diekspor ke seluruh guest (GTK/Qt/Firefox tetap X11 lewat GDK_BACKEND/QT_QPA_PLATFORM). vkcube/vkcubepp
-        // mendapat `--wsi wayland` dari pembungkus [WsiWayland]. Wine: shim `wine` (env.sh) memilih driver
-        // winewayland.drv dengan X11 sebagai cadangan; SDL_VIDEODRIVER tidak diatur untuk Wine (dipakai winebus).
+        // mendapat `--wsi wayland` dari pembungkus [WsiWayland]. Wine: driver winewayland.drv dengan X11 sebagai
+        // cadangan (registri prefix); SDL_VIDEODRIVER tidak diatur untuk Wine (dipakai winebus).
         if (turnipOn) {
             val sdl = if (isWine) "" else " SDL_VIDEODRIVER=wayland"
             sb.append("if [ -S /tmp/wayland-0 ]; then export XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0$sdl; fi\n")
             // WSI Wayland memakai dmabuf langsung; jalur WSI software (MESA_VK_WSI_DEBUG=sw) hanya untuk X11 tanpa DRI3
             // dan akan memaksa Vulkan/DXVK Wine menyalin lewat shm.
-            if (isWine && WineContents.displayWayland())
+            if (isWine && WineSystem.displayWayland())
                 sb.append("if [ -S /tmp/wayland-0 ]; then unset MESA_VK_WSI_DEBUG; fi\n")
         }
         // HiDPI khusus aplikasi ini
@@ -208,16 +206,13 @@ fi
         // Shortcut yang berjalan tanpa desktop tidak pernah memperbaikinya. Dicek tiap peluncuran (murah: satu grep);
         // `wine reg add` hanya dijalankan bila nilainya belum benar. Tanpa `wineserver -w`: bila wineserver prefix ini
         // sedang dipakai aplikasi lain, perintah itu akan menunggu sampai aplikasinya keluar.
-        if (isWine && WineContents.displayWayland()) {
-            // cabang .wcp: $TINY_WINE_ROOT/<lib>/...; cabang Wine sistem: /usr/lib/wine/...
-            val soPath = WineContents.waylandSoShellPath()
+        if (isWine && WineSystem.displayWayland()) {
+            val soPath = WineSystem.waylandSoShellPath()
             sb.append(
                 """
 if [ -S /tmp/wayland-0 ]; then
   (
-    [ -f "${'$'}HOME/.local/share/tiny/wine/env.sh" ] && . "${'$'}HOME/.local/share/tiny/wine/env.sh"
-    unset HODLL
-    if ! grep -qs '^"Graphics"="wayland,x11"' "${'$'}WINEPREFIX/user.reg"; then
+    if ! grep -qs '^"Graphics"="wayland,x11"' "${'$'}{WINEPREFIX:-${'$'}HOME/.wine}/user.reg"; then
       echo "[tiny] Wine: driver tampilan di registri bukan wayland; ditulis ulang ke wayland,x11"
       wine reg add 'HKCU\Software\Wine\Drivers' /v Graphics /d wayland,x11 /f
     fi
@@ -237,38 +232,16 @@ if [ -S /tmp/wayland-0 ]; then
     fi
   )
 else
-  echo "[tiny] Wine: soket /tmp/wayland-0 tidak ada; Wine memakai X11 (Vulkan/DXVK lewat Xwayland tanpa DRI3 bisa hang)"
+  echo "[tiny] Wine: soket /tmp/wayland-0 tidak ada; Wine memakai X11 (Vulkan lewat Xwayland tanpa DRI3 bisa hang)"
 fi
 """.trimStart(),
             )
-        } else if (isWine && WineContents.waylandCapable()) {
-            // winewayland tersedia tetapi jalur grafisnya OpenGL (WineD3D): paksa X11 di registri, kalau
-            // tidak Wine tetap memilih winewayland (daftar "wayland,x11") dan OpenGL jatuh ke llvmpipe.
-            sb.append(
-                """
-(
-  [ -f "${'$'}HOME/.local/share/tiny/wine/env.sh" ] && . "${'$'}HOME/.local/share/tiny/wine/env.sh"
-  unset HODLL
-  if ! grep -qs '^"Graphics"="x11"' "${'$'}WINEPREFIX/user.reg"; then
-    echo "[tiny] Wine: driver tampilan di registri ditulis ulang ke x11"
-    wine reg add 'HKCU\Software\Wine\Drivers' /v Graphics /d x11 /f
-  fi
-)
-echo "[tiny] Wine: memakai X11 (Xwayland) + Zink/Turnip untuk OpenGL WineD3D; OpenGL lewat Wayland jatuh ke llvmpipe"
-""".trimStart(),
-            )
         } else if (isWine && Cfg.wineDisplay != "x11") {
-            sb.append("echo \"[tiny] Wine: build Wine aktif tidak punya winewayland.so; memakai X11 (DXVK/Vulkan bisa hang tanpa DRI3)\"\n")
+            sb.append("echo \"[tiny] Wine: build Wine terpasang tidak punya winewayland.so; memakai X11 (Vulkan bisa hang tanpa DRI3)\"\n")
         }
 
-        // Diagnosis DXVK: jenis DLL yang benar-benar ada di system32 prefix (arm64ec = benar; x64 = salah untuk prefix arm64ec).
-        if (isWine && D3dMode.isDxvk()) {
-            val sys32 = File(WineContents.prefixDir(), "drive_c/windows/system32")
-            val kinds = listOf("dxgi", "d3d11", "d3d9").joinToString(", ") { n ->
-                n + "=" + PeArch.kind(File(sys32, "$n.dll")).name.lowercase()
-            }
-            sb.append("echo \"[tiny] dxvk diag: system32 $kinds\"\n")
-        }
+        // Mode Direct3D (WineD3D / DXVK) pilihan pengguna: registri prefix disamakan bila belum sesuai.
+        if (isWine) WineSystem.d3dSyncScript()?.let { sb.append(it) }
 
         var cmd = cleanExec(app.exec)
         if (s.args.isNotBlank()) cmd += " " + s.args.trim()
@@ -287,7 +260,7 @@ echo "[tiny] Wine: memakai X11 (Xwayland) + Zink/Turnip untuk OpenGL WineD3D; Op
             // Di driver Wayland tidak ada XRandR 5K yang perlu dihindari, dan explorer /desktop tidak cocok dengan
             // winewayland.drv (jendela game bukan toplevel Wayland sendiri). Bawaan: tanpa virtual desktop bila Wayland
             // aktif; TINY_WINE_VDESKTOP=1 memaksanya menyala.
-            if (WineContents.displayWayland()) sb.append("TINY_VD_DEF=1; [ -S /tmp/wayland-0 ] && TINY_VD_DEF=0\n")
+            if (WineSystem.displayWayland()) sb.append("TINY_VD_DEF=1; [ -S /tmp/wayland-0 ] && TINY_VD_DEF=0\n")
             else sb.append("TINY_VD_DEF=1\n")
             sb.append("echo \"[tiny] Wine virtual desktop ${vw}x$vh (bawaan: \$TINY_VD_DEF, 1 = nyala)\"\n")
             sb.append("if [ \"\${TINY_WINE_VDESKTOP:-\$TINY_VD_DEF}\" = 0 ]; then TINY_CMD=${q(cmd)}; else TINY_CMD=${q(vd)}; fi\n")

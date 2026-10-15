@@ -82,12 +82,4 @@ object LaunchLog {
         val cmd = ShortcutRunner.cleanExec(app.exec) + if (args.isNotEmpty()) " $args" else ""
         return "${app.name} [$appId]: $cmd"
     }
-
-    /**
-     * Dipanggil saat saklar diubah. Shim Wine di kontainer (`/usr/local/bin/wine`, dipakai peluncuran .exe dari
-     * menu desktop) ditulis ulang supaya memuat kode log; tidak berpengaruh bila Wine belum disiapkan.
-     */
-    fun onToggled() {
-        Thread({ runCatching { WineContents.onSelectionChanged() } }, "tiny-launchlog-shim").apply { isDaemon = true }.start()
-    }
 }

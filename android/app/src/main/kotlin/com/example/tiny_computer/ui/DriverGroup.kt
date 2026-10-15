@@ -52,8 +52,7 @@ fun DriverGroup() {
         }
     }
 
-    DeckGroup(stringResource(R.string.tc_drv_title)) {
-        DeckNote(stringResource(R.string.tc_drv_hint))
+    DeckGroup(stringResource(R.string.tc_drv_title), help = stringResource(R.string.tc_drv_hint)) {
         DeckActionRow(
             stringResource(R.string.tc_drv_import), null,
             stringResource(if (busy) R.string.tc_drv_importing else R.string.tc_btn_import),

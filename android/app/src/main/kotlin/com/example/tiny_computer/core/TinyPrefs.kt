@@ -174,48 +174,28 @@ object Cfg {
     var linuxDriver: String
         get() = TinyPrefs.getString("linuxDriver", "")
         set(v) = TinyPrefs.setString("linuxDriver", v)
-    /** Konten Wine (.wcp) aktif, id `<Tipe>/<nama>-<kode>`; kosong = tidak dipilih. */
-    var wineActive: String
-        get() = TinyPrefs.getString("wineActive", "")
-        set(v) = TinyPrefs.setString("wineActive", v)
-    var fexActive: String
-        get() = TinyPrefs.getString("fexActive", "")
-        set(v) = TinyPrefs.setString("fexActive", v)
-    var dxvkActive: String
-        get() = TinyPrefs.getString("dxvkActive", "")
-        set(v) = TinyPrefs.setString("dxvkActive", v)
-    var vkd3dActive: String
-        get() = TinyPrefs.getString("vkd3dActive", "")
-        set(v) = TinyPrefs.setString("vkd3dActive", v)
-    /** Box64 (biner x86_64 native, ke /usr/local/bin) dan WOWBox64 (wowbox64.dll untuk i386) hasil impor .wcp. */
-    /** Renderer Direct3D di Wine: "dxvk" (bawaan) atau "wined3d"; lihat D3dMode. */
-    var d3dMode: String
-        get() = TinyPrefs.getString("d3dMode", "dxvk")
-        set(v) = TinyPrefs.setString("d3dMode", v)
     /**
-     * Konfigurasi DXVK hemat memori (D3dMode.TUNE_CONFIG) lewat DXVK_CONFIG, bawaan AKTIF. Tanpa ini DXVK di Turnip Adreno 610
-     * gagal membuat pipeline internal (VK_ERROR_OUT_OF_HOST_MEMORY) dan layar hitam. Matikan untuk membandingkan.
+     * Mode Direct3D Wine: "dxvk", "wined3d", atau kosong (belum dipilih lewat Pengaturan: registri prefix dibiarkan apa
+     * adanya, mis. hasil perintah cepat Enable/Disable DXVK). Lihat WineSystem.applyD3dModeAsync.
+     */
+    var d3dMode: String
+        get() = TinyPrefs.getString("d3dMode", "")
+        set(v) = TinyPrefs.setString("d3dMode", v)
+    /** Kirim DXVK_CONFIG (lihat DxvkConfig) ke kontainer dan peluncuran Shortcut; bawaan AKTIF. */
+    var dxvkConfigOn: Boolean
+        get() = TinyPrefs.getBool("dxvkConfigOn", true)
+        set(v) = TinyPrefs.setBool("dxvkConfigOn", v)
+    /**
+     * Dasar DXVK hemat memori (DxvkConfig.TUNE), bawaan AKTIF. Tanpa ini DXVK di Turnip Adreno 610 gagal membuat pipeline
+     * internal (VK_ERROR_OUT_OF_HOST_MEMORY) dan layar hitam. Nilai buatan pengguna menimpanya.
      */
     var dxvkTune: Boolean
         get() = TinyPrefs.getBool("dxvkTune", true)
         set(v) = TinyPrefs.setBool("dxvkTune", v)
-    var box64Active: String
-        get() = TinyPrefs.getString("box64Active", "")
-        set(v) = TinyPrefs.setString("box64Active", v)
-    var wowbox64Active: String
-        get() = TinyPrefs.getString("wowbox64Active", "")
-        set(v) = TinyPrefs.setString("wowbox64Active", v)
-    /** Emulator i386 untuk Wine arm64ec: "auto" (FEXCore bila terpasang, selain itu WOWBox64), "fex", atau "box64". */
-    var emu32: String
-        get() = TinyPrefs.getString("emu32", "auto")
-        set(v) = TinyPrefs.setString("emu32", v)
-    /** Id preset terpilih (lihat EmuPresets); bawaan: stability, compatibility, intermediate, performance, atau id preset pengguna. */
-    var box64Preset: String
-        get() = TinyPrefs.getString("box64Preset", "compatibility")
-        set(v) = TinyPrefs.setString("box64Preset", v)
-    var fexPreset: String
-        get() = TinyPrefs.getString("fexPreset", "compatibility")
-        set(v) = TinyPrefs.setString("fexPreset", v)
+    /** Nilai DXVK_CONFIG buatan pengguna: baris `kunci=nilai` (lihat DxvkConfig). */
+    var dxvkConfig: String
+        get() = TinyPrefs.getString("dxvkConfig", "")
+        set(v) = TinyPrefs.setString("dxvkConfig", v)
     /** 0 None 1 Linear 2 Nearest 3 SGSR 4 FSR 5 FSR Fit 6 Sharpen 7 NIS 8 SGSR HQ */
     var upscaler: Int
         get() = TinyPrefs.getInt("upscaler", 1)

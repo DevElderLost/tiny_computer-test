@@ -6,9 +6,6 @@ import java.io.File
 
 /**
  * Pemasangan Hangover lewat apt (skrip `install-hangover` / `install-hangover-stable`, logika tiny_computer original).
- * Berdampingan dengan Wine/Proton .wcp ([WineContents]), tetapi keduanya tidak boleh aktif bersamaan: pemasangan
- * ini baru boleh dipakai setelah SEMUA build Wine/Proton .wcp dihapus ([oldWineInstalled] false), supaya shim `wine`
- * di /usr/local/bin kontainer tidak menutupi `wine` milik paket Hangover.
  *
  * Skrip dijalankan di terminal kontainer (hasilnya terlihat di tab Terminal), jadi kontainer harus sudah menyala.
  */
@@ -22,15 +19,28 @@ object HangoverSetup {
     /** Berkas yang disalin ke `~/.local/share/tiny/extra`; chn_fonts.reg tidak menimpa berkas yang sudah ada. */
     private val FILES = listOf("install-hangover", "install-hangover-stable", "chn_fonts.reg")
 
-    /** Masih ada Wine/Proton versi lama (.wcp) yang terpasang? */
-    fun oldWineInstalled(): Boolean =
-        WineContents.installed(WineContents.Type.WINE).isNotEmpty() ||
-            WineContents.installed(WineContents.Type.PROTON).isNotEmpty()
+    private const val SHIM_MARK = "# tiny-wine-shim"
+
+    /**
+     * Membuang sisa env.sh + shim `wine`/`wineserver`/... buatan versi lama aplikasi (Wine .wcp) dari /usr/local/bin
+     * kontainer, supaya tidak menutupi `wine` hasil apt. Hanya berkas yang bertanda shim lama yang dihapus.
+     */
+    private fun removeLegacyShims() {
+        val wineDir = File(TinyEnv.dataPath, "tiny/wine")
+        val list = File(wineDir, "shims.txt")
+        val bin = File(TinyEnv.containerDir(), "usr/local/bin")
+        if (list.isFile) {
+            for (n in list.readLines().filter { it.isNotBlank() }) {
+                val f = File(bin, n)
+                if (f.isFile && runCatching { f.readText().contains(SHIM_MARK) }.getOrDefault(false)) f.delete()
+            }
+            list.delete()
+        }
+        File(wineDir, "env.sh").delete()
+    }
 
     /** Mengembalikan pesan galat, atau null bila perintah sudah dikirim ke terminal. */
     fun install(ctx: Context, mode: Mode): String? {
-        if (oldWineInstalled()) return "Remove every Wine/Proton build above first, then install Hangover."
-        if (WineSetup.phase == WineSetup.Phase.RUNNING) return "Wait for Prepare to finish, then try again."
         if (!Launcher.isStarted) return "Start the container first (Open desktop), then run this again."
         try {
             val dir = File(TinyEnv.dataPath, "tiny/extra").apply { mkdirs() }
@@ -41,8 +51,8 @@ object HangoverSetup {
                 dst.setReadable(true, false)
                 dst.setExecutable(true, false)
             }
-            // env.sh + shim lama dibuang supaya `wine` hasil apt yang dipakai
-            WineContents.removeRuntime()
+            // env.sh + shim lama (versi sebelumnya) dibuang supaya `wine` hasil apt yang dipakai
+            removeLegacyShims()
         } catch (t: Throwable) {
             Log.e(TAG, "menyiapkan skrip Hangover gagal", t)
             return t.message ?: t.javaClass.simpleName

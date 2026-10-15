@@ -276,4 +276,8 @@
     <string name="tc_trackpad_stick">摇杆（左对左，右对右）</string>
     <string name="tc_trackpad_hid">仅 Deck 报告</string>
     <string name="tc_ctrl_rumble_hint">游戏震动会让正在使用的实体手柄震动，没有则本机震动。</string>
+    <string name="tc_help_desc">帮助</string>
+    <string name="tc_btn_close">关闭</string>
+    <string name="tc_btn_save">保存</string>
+    <string name="tc_btn_cancel">取消</string>
 </resources>

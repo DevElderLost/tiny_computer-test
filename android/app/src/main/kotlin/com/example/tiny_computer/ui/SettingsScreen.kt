@@ -51,8 +51,7 @@ fun SettingsScreen() {
             }
         }
 
-        DeckGroup(stringResource(R.string.tc_disp_title)) {
-            DeckNote(stringResource(R.string.tc_disp_restart))
+        DeckGroup(stringResource(R.string.tc_disp_title), help = stringResource(R.string.tc_disp_restart)) {
             // resolusi: pratetap lewat dropdown; "Custom" membuka isian lebar x tinggi
             var w by remember { mutableStateOf(Cfg.displayWidth) }
             var h by remember { mutableStateOf(Cfg.displayHeight) }
@@ -89,11 +88,9 @@ fun SettingsScreen() {
 
         DriverGroup()
 
-        WineGroup()
-
         HangoverGroup()
 
-        PresetGroup()
+        DxvkGroup()
 
         DeckGroup(stringResource(R.string.tc_group_terminal)) {
             DeckTextRow(stringResource(R.string.tc_ui_terminal_max_lines), Cfg.termMaxLines.toString(), number = true) { it.toIntOrNull()?.let { v -> Cfg.termMaxLines = v.coerceIn(100, 50000) } }
@@ -103,8 +100,7 @@ fun SettingsScreen() {
             DeckSwitchRow(stringResource(R.string.tc_ui_keep_screen_on), null, Cfg.wakelock) { Cfg.wakelock = it }
         }
 
-        DeckGroup(stringResource(R.string.tc_group_startup)) {
-            DeckNote(stringResource(R.string.tc_ui_restart_required_hint))
+        DeckGroup(stringResource(R.string.tc_group_startup), help = stringResource(R.string.tc_ui_restart_required_hint)) {
             DeckSwitchRow(stringResource(R.string.tc_ui_reinstall_boot_package), null, Cfg.reinstallBootstrap) { Cfg.reinstallBootstrap = it }
             DeckSwitchRow(stringResource(R.string.tc_ui_getifaddrs_bridge), stringResource(R.string.tc_ui_fix_getifaddrs_permission), Cfg.getifaddrsBridge) { Cfg.getifaddrsBridge = it }
             var bootKey by remember { mutableStateOf(0) }
@@ -118,8 +114,7 @@ fun SettingsScreen() {
             }
         }
 
-        DeckGroup(stringResource(R.string.tc_ui_graphics_acceleration)) {
-            DeckNote(stringResource(R.string.tc_ui_graphics_acceleration_hint))
+        DeckGroup(stringResource(R.string.tc_ui_graphics_acceleration), help = stringResource(R.string.tc_ui_graphics_acceleration_hint)) {
             DeckTextRow(stringResource(R.string.tc_ui_virgl_server_params), Cfg.defaultVirglCommand, multiline = true) { Cfg.defaultVirglCommand = it }
             DeckTextRow(stringResource(R.string.tc_ui_virgl_env_var), Cfg.defaultVirglOpt, multiline = true) { Cfg.defaultVirglOpt = it }
             DeckSwitchRow(stringResource(R.string.tc_ui_enable_virgl), stringResource(R.string.tc_ui_apply_on_next_launch), Cfg.virgl) { Cfg.virgl = it }
@@ -133,7 +128,6 @@ fun SettingsScreen() {
         DeckGroup(stringResource(R.string.tc_group_logs)) {
             DeckSwitchRow(stringResource(R.string.tc_ui_launch_log), stringResource(R.string.tc_ui_launch_log_hint), Cfg.launchLog) {
                 Cfg.launchLog = it
-                LaunchLog.onToggled()
             }
         }
 

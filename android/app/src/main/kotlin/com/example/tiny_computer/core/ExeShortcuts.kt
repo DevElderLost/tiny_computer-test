@@ -15,8 +15,8 @@ import java.security.MessageDigest
  * `Exec=wine "<path .exe>"` dan `Path=<folder .exe>`. Karena itu entri ini diperlakukan persis seperti
  * aplikasi Linux lain: tampil di grid Shortcut, dijalankan di sesi proot BARU oleh [ShortcutRunner]
  * (Xwayland + window manager ringan, tanpa membuka desktop), dan punya pengaturan per aplikasi
- * ([ShortcutPrefs]) lewat tekan lama. Perintah `wine` berasal dari shim yang ditulis [WineContents]
- * di `/usr/local/bin` kontainer (shim itu sendiri memuat `env.sh` Wine aktif).
+ * ([ShortcutPrefs]) lewat tekan lama. Perintah `wine` berasal dari Hangover yang dipasang lewat apt
+ * ([HangoverSetup]).
  *
  * Ikon diambil dari resource .exe-nya ([ExeIconExtractor], logika Winlator) dan disimpan sebagai PNG di
  * tema ikon pengguna (`~/.local/share/icons/hicolor/256x256/apps/<id>.png`, `Icon=<id>`), sehingga ikon
@@ -36,9 +36,8 @@ object ExeShortcuts {
 
     fun isExeShortcut(id: String) = id.startsWith(ID_PREFIX)
 
-    /** Wine sudah disiapkan (shim `wine` ada di /usr/local/bin kontainer). */
-    fun wineReady(): Boolean = File(TinyEnv.containerDir(), "usr/local/bin/wine").exists() ||
-        File(TinyEnv.containerDir(), "usr/bin/wine").exists() // Hangover lewat apt ([HangoverSetup])
+    /** Wine sudah terpasang di kontainer (Hangover lewat apt, [HangoverSetup]). */
+    fun wineReady(): Boolean = WineSystem.installed()
 
     private fun appsDir() = File(TinyEnv.containerDir(), "home/tiny/.local/share/applications")
 
