@@ -259,4 +259,18 @@
     <string name="tc_sc_opt_off">关</string>
     <string name="tc_sc_hide">从列表中隐藏</string>
     <string name="tc_sc_reset">重置</string>
+    <string name="tc_ctrl_motion_group">陀螺仪与触控板</string>
+    <string name="tc_ctrl_gyro">陀螺仪</string>
+    <string name="tc_ctrl_gyro_hint">将本机陀螺仪发送给 Steam Deck (hidraw) 手柄，设置映射后也会驱动摇杆。立即生效。</string>
+    <string name="tc_ctrl_gyro_map">陀螺仪映射</string>
+    <string name="tc_ctrl_gyro_map_hint">陀螺仪驱动哪个摇杆。关闭：仅发送 Deck 手柄自身的陀螺仪数据。</string>
+    <string name="tc_gyro_off">关闭（仅 hidraw）</string>
+    <string name="tc_gyro_left">左摇杆</string>
+    <string name="tc_gyro_right">右摇杆</string>
+    <string name="tc_ctrl_gyro_sens">陀螺仪灵敏度</string>
+    <string name="tc_ctrl_trackpad">左 / 右触控板</string>
+    <string name="tc_ctrl_trackpad_hint">仅 Steam Deck 类型。摇杆：左触控板驱动左摇杆，右触控板驱动右摇杆；按住不动为点击。下次会话生效。</string>
+    <string name="tc_trackpad_stick">摇杆（左对左，右对右）</string>
+    <string name="tc_trackpad_hid">仅 Deck 报告</string>
+    <string name="tc_ctrl_rumble_hint">游戏震动会让正在使用的实体手柄震动，没有则本机震动。</string>
 </resources>

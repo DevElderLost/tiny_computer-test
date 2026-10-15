@@ -1,6 +1,7 @@
 package com.example.tiny_computer.controller
 
 import androidx.compose.foundation.background
+import android.os.SystemClock
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -16,6 +17,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,7 +60,7 @@ fun ControllerOverlay(pad: PadBridge, deck: Boolean, modifier: Modifier = Modifi
             },
             modifier = Modifier.fillMaxSize(),
         )
-        if (deck) DeckExtras()
+        if (deck) DeckExtras(pad)
     }
 }
 
@@ -76,7 +79,7 @@ private class Look(tint: Int, opacity: Int) {
 }
 
 @Composable
-private fun BoxScope.DeckExtras() {
+private fun BoxScope.DeckExtras(pad: PadBridge) {
     val ctx = LocalContext.current
     val settings = remember { ControllerPrefs.read(ctx) }
     val look = remember { Look(settings.tint, settings.opacity) }
@@ -92,8 +95,10 @@ private fun BoxScope.DeckExtras() {
         Box(Modifier.width(6.dp))
         Grip("R4", DeckControls.R4, 44.dp * scale, look)
     }
-    Box(Modifier.align(Alignment.Center).offset(x = (-110).dp * scale, y = 40.dp * scale)) { TrackPad(false, 96.dp * scale, look) }
-    Box(Modifier.align(Alignment.Center).offset(x = 110.dp * scale, y = 40.dp * scale)) { TrackPad(true, 96.dp * scale, look) }
+    // Mode trackpad: jadi stik kiri/kanan (default, game Wine membacanya sebagai stik) atau hanya laporan hidraw Deck.
+    val asStick = remember { ControllerPrefs.trackpadMode(ctx) == ControllerPrefs.PAD_STICK }
+    Box(Modifier.align(Alignment.Center).offset(x = (-122).dp * scale, y = 36.dp * scale)) { TrackPad(false, 112.dp * scale, 92.dp * scale, look, pad, asStick) }
+    Box(Modifier.align(Alignment.Center).offset(x = 122.dp * scale, y = 36.dp * scale)) { TrackPad(true, 112.dp * scale, 92.dp * scale, look, pad, asStick) }
 }
 
 @Composable
@@ -120,34 +125,95 @@ private fun Grip(label: String, bit: Int, size: Dp, look: Look) {
     ) { Text(label, color = if (down) Color.White else look.idleText, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
 }
 
-/** Trackpad Steam Deck: posisi -1..1 (y ke atas); ketuk lama = klik. */
+/**
+ * Trackpad Steam Deck: kotak bersudut agak melengkung, tanpa tulisan. Posisi jari -1..1 (y ke atas) masuk
+ * ke laporan hidraw Deck ([DeckControls.setPad]); tahan agak lama tanpa menggeser = klik trackpad
+ * ([DeckControls.setClick]). Bila [asStick], posisi jari juga menggerakkan stik di sisinya
+ * (kiri = stik kiri, kanan = stik kanan) lewat [PadBridge.setAuxStick], dan stik kembali ke tengah saat
+ * jari diangkat - tanpa ini game Wine tidak membaca trackpad sama sekali.
+ */
 @Composable
-private fun TrackPad(right: Boolean, size: Dp, look: Look) {
+private fun TrackPad(right: Boolean, width: Dp, height: Dp, look: Look, pad: PadBridge, asStick: Boolean) {
     var touching by remember { mutableStateOf(false) }
+    var clicking by remember { mutableStateOf(false) }
+    // titik jari (0..1 dari lebar/tinggi kotak) untuk penanda sentuhan
+    var fx by remember { mutableFloatStateOf(0.5f) }
+    var fy by remember { mutableFloatStateOf(0.5f) }
+    val source = if (right) PadBridge.SRC_PAD_RIGHT else PadBridge.SRC_PAD_LEFT
+    val stick = if (right) PadBridge.STICK_RIGHT else PadBridge.STICK_LEFT
+    val shape = RoundedCornerShape(14.dp)
+    // jari masih di atas trackpad saat panel hilang: lepaskan semuanya
+    DisposableEffect(right) {
+        onDispose {
+            DeckControls.setPad(right, false)
+            DeckControls.setClick(right, false)
+            pad.clearAuxStick(source)
+        }
+    }
     Box(
-        Modifier.size(size)
-            .background(if (touching) look.heldFill else look.idleFill, CircleShape)
-            .border(1.5.dp, if (touching) look.heldStroke else look.idleStroke, CircleShape)
-            .pointerInput(right) {
+        Modifier.size(width, height)
+            .background(if (touching) look.heldFill else look.idleFill, shape)
+            .border(if (clicking) 2.5.dp else 1.5.dp, if (touching) look.heldStroke else look.idleStroke, shape)
+            .pointerInput(right, asStick) {
                 awaitEachGesture {
                     val first = awaitFirstDown(requireUnconsumed = false)
-                    val w = this.size.width.toFloat()
-                    val h = this.size.height.toFloat()
+                    val w = size.width.toFloat().coerceAtLeast(1f)
+                    val h = size.height.toFloat().coerceAtLeast(1f)
+                    val slop = viewConfiguration.touchSlop
+                    val pointer = first.id
+                    var longPressed = false
                     fun report(px: Float, py: Float) {
                         val x = ((px / w) * 2f - 1f).coerceIn(-1f, 1f)
                         val y = (1f - (py / h) * 2f).coerceIn(-1f, 1f)
+                        fx = (px / w).coerceIn(0f, 1f)
+                        fy = (py / h).coerceIn(0f, 1f)
                         DeckControls.setPad(right, true, x, y)
+                        // evdev: y positif = ke bawah; sedikit area mati di tepi supaya stik bisa penuh
+                        if (asStick) pad.setAuxStick(source, stick, (x * 1.15f).coerceIn(-1f, 1f), (-y * 1.15f).coerceIn(-1f, 1f))
                     }
+                    first.consume()
                     touching = true
                     report(first.position.x, first.position.y)
-                    do {
-                        val ev = awaitPointerEvent(PointerEventPass.Main)
-                        ev.changes.firstOrNull()?.let { report(it.position.x, it.position.y) }
-                    } while (ev.changes.any { it.pressed })
+                    var moved = false
+                    val startAt = SystemClock.uptimeMillis()
+                    while (true) {
+                        // Compose hanya mengirim kejadian bila jari berubah; tahan diam butuh batas waktu sendiri
+                        val waitMs = if (longPressed || moved) 0L else LONG_PRESS_MS - (SystemClock.uptimeMillis() - startAt)
+                        val ev = if (waitMs > 0L) withTimeoutOrNull(waitMs) { awaitPointerEvent(PointerEventPass.Main) }
+                        else awaitPointerEvent(PointerEventPass.Main)
+                        if (ev == null) {
+                            // jari diam cukup lama: klik trackpad
+                            longPressed = true
+                            clicking = true
+                            DeckControls.setClick(right, true)
+                            continue
+                        }
+                        val change = ev.changes.firstOrNull { it.id == pointer } ?: ev.changes.firstOrNull() ?: break
+                        if (!change.pressed) break
+                        report(change.position.x, change.position.y)
+                        if (!moved && (change.position - first.position).getDistance() > slop * 2f) moved = true
+                        change.consume()
+                    }
+                    if (longPressed) DeckControls.setClick(right, false)
+                    clicking = false
                     touching = false
                     DeckControls.setPad(right, false)
+                    pad.clearAuxStick(source)
                 }
             },
-        contentAlignment = Alignment.Center,
-    ) { Text(if (right) "R" else "L", color = look.idleText, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+    ) {
+        // penanda sentuhan: titik kecil di posisi jari (bukan tulisan)
+        if (touching) {
+            val dot = 12.dp
+            Box(
+                Modifier.align(Alignment.TopStart)
+                    .offset(x = width * fx - dot / 2, y = height * fy - dot / 2)
+                    .size(dot)
+                    .background(look.heldStroke, CircleShape),
+            )
+        }
+    }
 }
+
+/** Tahan tanpa menggeser selama ini = klik trackpad. */
+private const val LONG_PRESS_MS = 350L

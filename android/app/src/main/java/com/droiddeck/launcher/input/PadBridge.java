@@ -63,6 +63,18 @@ public final class PadBridge {
     private final FakeInputWriter[] playerWriters = new FakeInputWriter[SLOTS];
     private final PadState[] playerStates = new PadState[SLOTS];
     private final PadState effectiveState = new PadState();
+    /** Sumber stik tambahan (gyro, trackpad) yang dijumlahkan ke stik pad slot 0; lihat [setAuxStick]. */
+    public static final int SRC_GYRO = 0;
+    public static final int SRC_PAD_LEFT = 1;
+    public static final int SRC_PAD_RIGHT = 2;
+    /** Stik tujuan: stik kiri / stik kanan. */
+    public static final int STICK_LEFT = 0;
+    public static final int STICK_RIGHT = 1;
+    private static final int AUX_SOURCES = 3;
+    /** Per sumber: stik tujuan, lalu x dan y dalam konvensi evdev (-1..1, y ke bawah). */
+    private final int[] auxTarget = new int[AUX_SOURCES];
+    private final float[] auxX = new float[AUX_SOURCES];
+    private final float[] auxY = new float[AUX_SOURCES];
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private boolean open;
     private boolean systemGuidePressed;
@@ -139,6 +151,8 @@ public final class PadBridge {
         qamSyntheticAPressed = false;
         qamTapPressed = false;
         qamChordGeneration++;
+        java.util.Arrays.fill(auxX, 0f);
+        java.util.Arrays.fill(auxY, 0f);
         if (open) {
             state.clear();
             writer.writePad(state);
@@ -296,6 +310,51 @@ public final class PadBridge {
         publish();
     }
 
+    /**
+     * Gyro dan trackpad menggerakkan stik pad lewat sini: nilainya dijumlahkan ke stik fisik/layar
+     * (dibatasi -1..1) tanpa mengubah state mereka, jadi semuanya bisa dipakai bersamaan. {@code x}/{@code y}
+     * mengikuti evdev: y positif = ke bawah. Nilai 0,0 melepas sumber itu.
+     */
+    public synchronized void setAuxStick(int source, int stick, float x, float y) {
+        if (source < 0 || source >= AUX_SOURCES) return;
+        x = Math.max(-1f, Math.min(1f, x));
+        y = Math.max(-1f, Math.min(1f, y));
+        boolean released = x == 0f && y == 0f;
+        // gerak sangat kecil tidak dipublikasikan ulang (gyro 250 Hz), tetapi melepas selalu berlaku
+        if (!released && auxTarget[source] == stick && Math.abs(auxX[source] - x) < 0.004f && Math.abs(auxY[source] - y) < 0.004f) return;
+        if (released && auxX[source] == 0f && auxY[source] == 0f) return;
+        auxTarget[source] = stick;
+        auxX[source] = x;
+        auxY[source] = y;
+        if (Math.max(Math.abs(x), Math.abs(y)) > 0.5f && source != SRC_GYRO) notePlayerInput();
+        publish();
+    }
+
+    /** Melepas satu sumber stik tambahan (gyro dimatikan, jari trackpad diangkat). */
+    public synchronized void clearAuxStick(int source) {
+        setAuxStick(source, auxTarget[Math.max(0, Math.min(AUX_SOURCES - 1, source))], 0f, 0f);
+    }
+
+    private boolean auxActive() {
+        for (int i = 0; i < AUX_SOURCES; i++) {
+            if (auxX[i] != 0f || auxY[i] != 0f) return true;
+        }
+        return false;
+    }
+
+    private void applyAux(PadState into) {
+        for (int i = 0; i < AUX_SOURCES; i++) {
+            if (auxX[i] == 0f && auxY[i] == 0f) continue;
+            if (auxTarget[i] == STICK_RIGHT) {
+                into.rightX = Math.max(-1f, Math.min(1f, into.rightX + auxX[i]));
+                into.rightY = Math.max(-1f, Math.min(1f, into.rightY + auxY[i]));
+            } else {
+                into.leftX = Math.max(-1f, Math.min(1f, into.leftX + auxX[i]));
+                into.leftY = Math.max(-1f, Math.min(1f, into.leftY + auxY[i]));
+            }
+        }
+    }
+
     /** Touch-only Steam and QAM buttons, merged with physical input without changing its state. */
     public synchronized void setSystemButtons(boolean guidePressed, boolean qamPressed) {
         if (systemGuidePressed == guidePressed && systemQamPressed == qamPressed) return;
@@ -313,6 +372,8 @@ public final class PadBridge {
      */
     public synchronized void releaseAll() {
         state.clear();
+        java.util.Arrays.fill(auxX, 0f);
+        java.util.Arrays.fill(auxY, 0f);
         publish();
         for (int slot = 1; slot < SLOTS; slot++) {
             if (playerWriters[slot] == null) continue;
@@ -474,11 +535,13 @@ public final class PadBridge {
         }
         boolean guide = systemGuidePressed || qamChordActive;
         boolean qam = SessionState.getDeckPad() && (systemQamPressed || qamTapPressed);
-        if (!guide && !qam) {
+        boolean aux = auxActive();
+        if (!guide && !qam && !aux) {
             writer.writePad(state);
             return;
         }
         effectiveState.copyFrom(state);
+        if (aux) applyAux(effectiveState);
         if (guide) effectiveState.press(PadState.GUIDE, true);
         if (qam) effectiveState.press(PadState.QAM, true);
         if (qamSyntheticAPressed) effectiveState.press(PadState.A, true);

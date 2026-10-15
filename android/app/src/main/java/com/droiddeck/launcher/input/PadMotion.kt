@@ -9,6 +9,8 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.util.Log
 import android.view.Surface
+import kotlin.math.abs
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
@@ -24,7 +26,12 @@ import kotlin.math.roundToInt
  * as the Deck reports (4 ms); each reading goes straight into the pad's ring
  * ([FakeInputWriter.writeMotion]), where libfakeinput's 4 ms report picks up the latest.
  */
-class PadMotion(private val context: Context, private val rotation: () -> Int) : SensorEventListener {
+class PadMotion(
+    private val context: Context,
+    private val rotation: () -> Int,
+    /** Tujuan mapping gyro ke stik; null = gyro hanya dikirim ke laporan hidraw Deck. */
+    private val pad: PadBridge? = null,
+) : SensorEventListener {
     private val sensors = context.getSystemService(SensorManager::class.java)
     private var thread: HandlerThread? = null
     /** Readings are taken only while this is set; a callback already queued when [stop] ran drops. */
@@ -32,6 +39,22 @@ class PadMotion(private val context: Context, private val rotation: () -> Int) :
     // Touched only on the worker thread.
     private val accel = ShortArray(3)
     private val gyro = ShortArray(3)
+    private var smoothX = 0f
+    private var smoothY = 0f
+
+    /** Mapping gyro -> stik; diubah dari thread UI, dibaca di worker. */
+    @Volatile private var stick = PadBridge.STICK_RIGHT
+    @Volatile private var mapped = false
+    @Volatile private var sensitivity = 5
+
+    /** [target] = [ControllerPrefs.GYRO_OFF] / GYRO_LEFT / GYRO_RIGHT, [sens] 1..10. */
+    fun configure(target: String, sens: Int) {
+        sensitivity = sens.coerceIn(1, 10)
+        stick = if (target == ControllerPrefs.GYRO_LEFT) PadBridge.STICK_LEFT else PadBridge.STICK_RIGHT
+        val wasMapped = mapped
+        mapped = target == ControllerPrefs.GYRO_LEFT || target == ControllerPrefs.GYRO_RIGHT
+        if (wasMapped && !mapped) pad?.clearAuxStick(PadBridge.SRC_GYRO)
+    }
 
     fun start() {
         if (thread != null || sensors == null) return
@@ -60,6 +83,7 @@ class PadMotion(private val context: Context, private val rotation: () -> Int) :
         Handler(worker.looper).post {
             gyro.fill(0)
             FakeInputWriter.writeMotion(SLOT, accel, gyro)
+            pad?.clearAuxStick(PadBridge.SRC_GYRO)
         }
         worker.quitSafely()
     }
@@ -85,6 +109,28 @@ class PadMotion(private val context: Context, private val rotation: () -> Int) :
         target[1] = counts(-z * scale)
         target[2] = counts(y * scale)
         FakeInputWriter.writeMotion(SLOT, accel, gyro)
+        if (event.sensor.type == Sensor.TYPE_GYROSCOPE && mapped) mapToStick(x, y)
+    }
+
+    /**
+     * Gyro sebagai stik: kecepatan putar (rad/s, bingkai layar: x kanan, y atas, z ke arah pemain)
+     * menjadi simpangan stik. Menoleh ke kanan (putar mengitari y) = stik ke kanan; mengangguk ke bawah
+     * (putar mengitari x) = stik ke bawah (evdev: y positif = bawah). Penuh pada 8 / sensitivitas rad/s;
+     * putaran sangat kecil (drift sensor) diabaikan dan sisanya diperhalus sedikit.
+     */
+    private fun mapToStick(x: Float, y: Float) {
+        val full = FULL_DEFLECTION_RAD_S / sensitivity
+        val rawX = shape(-y / full)
+        val rawY = shape(x / full)
+        smoothX += (rawX - smoothX) * SMOOTHING
+        smoothY += (rawY - smoothY) * SMOOTHING
+        pad?.setAuxStick(PadBridge.SRC_GYRO, stick, smoothX, smoothY)
+    }
+
+    private fun shape(value: Float): Float {
+        val magnitude = abs(value)
+        if (magnitude < DEAD_ZONE) return 0f
+        return (if (value < 0f) -1f else 1f) * min(1f, (magnitude - DEAD_ZONE) / (1f - DEAD_ZONE))
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
@@ -98,6 +144,11 @@ class PadMotion(private val context: Context, private val rotation: () -> Int) :
         /** The Deck controller's report interval (libfakeinput: DECK_REPORT_INTERVAL_US). */
         private const val SAMPLING_US = 4000
         private const val ACCEL_COUNTS_PER_M_S2 = 16384f / SensorManager.GRAVITY_EARTH
+        /** Putaran (rad/s) yang menggerakkan stik penuh pada sensitivitas 1; dibagi sensitivitas. */
+        private const val FULL_DEFLECTION_RAD_S = 8f
+        /** Sisa drift gyro di bawah ini (bagian dari simpangan penuh) dianggap diam. */
+        private const val DEAD_ZONE = 0.025f
+        private const val SMOOTHING = 0.5f
         private const val GYRO_COUNTS_PER_RAD_S = (32768f / 2000f) * (180f / Math.PI.toFloat())
     }
 }

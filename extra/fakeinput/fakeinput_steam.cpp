@@ -21,6 +21,7 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include <dirent.h>
@@ -276,6 +277,14 @@ static std::unordered_map<int, struct ff_effect> &ff_effects() {
   return *map;
 }
 
+// Effects that are playing right now (EV_FF value > 0 and not yet stopped/erased) and the pad's FF_GAIN,
+// so the app is told about a rumble only when the game actually plays it - not merely uploads it.
+static std::unordered_set<int> &ff_playing() {
+  static auto *set = new std::unordered_set<int>();
+  return *set;
+}
+static uint16_t g_ff_gain = 0xFFFF;
+
 static const char *fake_hook_dir() { return config().hook_dir; }
 static const char *fake_udev_data_dir() { return config().udev_data_dir; }
 static bool fake_vibration_enabled() { return config().vibration_enabled; }
@@ -421,27 +430,57 @@ send_vibration(int strong, int weak, uint16_t duration_ms, uint16_t slot) {
   syscall(SYS_close, sock);
 }
 
+// An evdev force-feedback effect, converted to what the phone (or the physical pad behind this slot)
+// can play: strong (low-frequency) and weak (high-frequency) motor magnitudes, 0..65535, scaled by the
+// pad's FF_GAIN, and the length in ms (0 = until stopped). The app's RumbleReceiver does the rest.
+__attribute__((visibility("hidden"))) static void
+play_ff_effect(const struct ff_effect &effect, uint16_t slot) {
+  uint32_t strong = 0, weak = 0;
+  switch (effect.type) {
+  case FF_RUMBLE:
+    strong = effect.u.rumble.strong_magnitude;
+    weak = effect.u.rumble.weak_magnitude;
+    break;
+  case FF_PERIODIC:
+    strong = weak = effect.u.periodic.magnitude < 0 ? 0 : effect.u.periodic.magnitude;
+    break;
+  case FF_CONSTANT: {
+    int level = effect.u.constant.level;
+    strong = weak = static_cast<uint32_t>(std::min(65535, std::abs(level) * 2));
+    break;
+  }
+  default:
+    return;
+  }
+  strong = strong * g_ff_gain / 0xFFFF;
+  weak = weak * g_ff_gain / 0xFFFF;
+  uint32_t length = effect.replay.length;
+  send_vibration(static_cast<int>(strong), static_cast<int>(weak),
+                 static_cast<uint16_t>(std::min<uint32_t>(length, 0xFFFF)), slot);
+}
+
 __attribute__((visibility("hidden"))) static void
 check_ff_event(const struct input_event *ev, uint16_t slot) {
   if (ev->type != EV_FF)
     return;
+
+  if (ev->code == FF_GAIN) {
+    g_ff_gain = static_cast<uint16_t>(std::max(0, std::min(0xFFFF, ev->value)));
+    return;
+  }
 
   int id = ev->code;
   if (ev->value > 0) {
     auto it = ff_effects().find(id);
     if (it == ff_effects().end())
       return;
-
-    uint16_t duration = it->second.replay.length;
-    if (it->second.type == FF_RUMBLE) {
-      send_vibration(it->second.u.rumble.strong_magnitude,
-                     it->second.u.rumble.weak_magnitude, duration, slot);
-    } else if (it->second.type == FF_PERIODIC) {
-      send_vibration(it->second.u.periodic.magnitude,
-                     it->second.u.periodic.magnitude, duration, slot);
-    }
+    ff_playing().insert(id);
+    play_ff_effect(it->second, slot);
   } else {
-    send_vibration(0, 0, 0, slot);
+    ff_playing().erase(id);
+    // Another effect may still be playing; only a pad with nothing left playing goes quiet.
+    if (ff_playing().empty())
+      send_vibration(0, 0, 0, slot);
   }
 }
 
@@ -1944,7 +1983,9 @@ deck_feature(DeckHidraw &deck, ioctl_request_t op, uint8_t *buf, bool set) {
     deck.pending_feature = buf[1];
     if (buf[1] == DECK_TRIGGER_RUMBLE_CMD && size >= 10) {
       int left = buf[6] | buf[7] << 8, right = buf[8] | buf[9] << 8;
-      send_vibration(left, right, left || right ? 1000 : 0, 0);
+      // SDL (HIDAPI Steam Deck) sends the strengths and later a zero report when the rumble's time is
+      // up, so the app plays until told to stop (0 = no length; RumbleReceiver caps it).
+      send_vibration(left, right, 0, 0);
     }
     log_deck_feature("set", buf[1]);
     return static_cast<int>(size);
@@ -2719,19 +2760,16 @@ EXPORT int ioctl(int fd, ioctl_request_t op, ...) {
       effect->id = next_ff_id++;
     ff_effects()[effect->id] = *effect;
 
-    uint16_t duration = effect->replay.length;
-    uint16_t slot = static_cast<uint16_t>(event_number);
-    if (effect->type == FF_RUMBLE) {
-      send_vibration(effect->u.rumble.strong_magnitude,
-                     effect->u.rumble.weak_magnitude, duration, slot);
-    } else if (effect->type == FF_PERIODIC) {
-      send_vibration(effect->u.periodic.magnitude, effect->u.periodic.magnitude,
-                     duration, slot);
-    }
+    // An upload alone is silent: the game plays it with a write of EV_FF value 1 (check_ff_event).
+    // An effect that is already playing and is re-uploaded is an update - the new strength applies at once.
+    if (ff_playing().count(effect->id))
+      play_ff_effect(*effect, static_cast<uint16_t>(event_number));
     return 0;
   } else if (type == 0x45 && number == 0x81) {
     int id = (intptr_t)argp;
     ff_effects().erase(id);
+    if (ff_playing().erase(id) && ff_playing().empty())
+      send_vibration(0, 0, 0, static_cast<uint16_t>(event_number));
     return 0;
   } else if (type == 0x45 && number == 0x84) {
     int max_effects = 16;

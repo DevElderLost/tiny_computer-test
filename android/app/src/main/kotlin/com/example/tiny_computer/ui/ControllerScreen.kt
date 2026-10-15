@@ -57,6 +57,10 @@ fun ControllerScreen() {
     var opacity by remember { mutableIntStateOf((Cfg.padOverlayOpacity * 100).roundToInt().coerceIn(OPACITY_RANGE.first, OPACITY_RANGE.last)) }
     var size by remember { mutableIntStateOf((Cfg.padOverlayScale * 100).roundToInt().coerceIn(SIZE_RANGE.first, SIZE_RANGE.last)) }
     var mappingOpen by remember { mutableStateOf(false) }
+    var gyro by remember { mutableStateOf(ControllerPrefs.gyroEnabled(ctx)) }
+    var gyroTarget by remember { mutableStateOf(ControllerPrefs.gyroTarget(ctx)) }
+    var gyroSens by remember { mutableIntStateOf(ControllerPrefs.gyroSensitivity(ctx)) }
+    var trackpad by remember { mutableStateOf(ControllerPrefs.trackpadMode(ctx)) }
     val hasLib = File(TinyEnv.dataPath, "tiny/extra/libfakeinput.so").isFile
     val land = isLandscape()
 
@@ -70,6 +74,11 @@ fun ControllerScreen() {
     LaunchedEffect(size) {
         delay(200)
         if ((Cfg.padOverlayScale * 100).roundToInt() != size) Cfg.padOverlayScale = size / 100.0
+    }
+
+    LaunchedEffect(gyroSens) {
+        delay(150)
+        if (ControllerPrefs.gyroSensitivity(ctx) != gyroSens) ControllerPrefs.setGyroSensitivity(ctx, gyroSens)
     }
 
     if (mappingOpen) {
@@ -130,6 +139,32 @@ fun ControllerScreen() {
             DeckToggleRow(stringResource(R.string.ctrl_steam_button), null, c.steamButton) { ControllerPrefs.setSteamButton(ctx, it); refresh() }
             DeckToggleRow(stringResource(R.string.ctrl_qam_button), null, c.qamButton) { ControllerPrefs.setQamButton(ctx, it); refresh() }
             DeckToggleRow(stringResource(R.string.ctrl_keyboard_button), null, c.keyboardButton) { ControllerPrefs.setKeyboardButton(ctx, it); refresh() }
+            DeckToggleRow(stringResource(R.string.ctrl_rumble), stringResource(R.string.tc_ctrl_rumble_hint), c.rumble) {
+                ControllerPrefs.setRumble(ctx, it); refresh()
+            }
+        }
+        DeckGroup(stringResource(R.string.tc_ctrl_motion_group)) {
+            DeckToggleRow(stringResource(R.string.tc_ctrl_gyro), stringResource(R.string.tc_ctrl_gyro_hint), gyro) {
+                gyro = it; ControllerPrefs.setGyro(ctx, it)
+            }
+            DeckChoiceRow(
+                stringResource(R.string.tc_ctrl_gyro_map), stringResource(R.string.tc_ctrl_gyro_map_hint),
+                listOf(
+                    ControllerPrefs.GYRO_OFF to stringResource(R.string.tc_gyro_off),
+                    ControllerPrefs.GYRO_LEFT to stringResource(R.string.tc_gyro_left),
+                    ControllerPrefs.GYRO_RIGHT to stringResource(R.string.tc_gyro_right),
+                ),
+                gyroTarget,
+            ) { gyroTarget = it; ControllerPrefs.setGyroTarget(ctx, it) }
+            DeckSliderRow(stringResource(R.string.tc_ctrl_gyro_sens), null, gyroSens, 1..10) { gyroSens = it }
+            DeckChoiceRow(
+                stringResource(R.string.tc_ctrl_trackpad), stringResource(R.string.tc_ctrl_trackpad_hint),
+                listOf(
+                    ControllerPrefs.PAD_STICK to stringResource(R.string.tc_trackpad_stick),
+                    ControllerPrefs.PAD_HID to stringResource(R.string.tc_trackpad_hid),
+                ),
+                trackpad,
+            ) { trackpad = it; ControllerPrefs.setTrackpadMode(ctx, it) }
         }
         DeckGroup(stringResource(R.string.ctrl_layout)) {
             DeckRow(
@@ -153,6 +188,7 @@ fun ControllerScreen() {
             DeckRow(stringResource(R.string.ctrl_reset_all), stringResource(R.string.ctrl_reset_all_hint)) {
                 DeckButton(stringResource(R.string.ctrl_reset), primary = false) {
                     ControllerPrefs.resetAll(ctx)
+                    gyro = false; gyroTarget = ControllerPrefs.GYRO_RIGHT; gyroSens = 5; trackpad = ControllerPrefs.PAD_STICK
                     identity = "xbox360"; Cfg.padIdentity = identity
                     overlay = false; Cfg.padOverlay = overlay
                     opacity = 65; size = 100

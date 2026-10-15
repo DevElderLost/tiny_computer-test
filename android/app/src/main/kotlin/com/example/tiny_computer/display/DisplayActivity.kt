@@ -26,7 +26,11 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import android.content.SharedPreferences
+import com.droiddeck.launcher.input.ControllerPrefs
 import com.droiddeck.launcher.input.EvdevKeys
+import com.droiddeck.launcher.input.PadMotion
+import com.droiddeck.launcher.input.RumbleReceiver
 import com.droiddeck.launcher.input.PadBridge
 import com.droiddeck.launcher.session.SessionState
 import com.droiddeck.launcher.wayland.CompositorHost
@@ -52,6 +56,10 @@ class DisplayUiState {
     var cursorScale by mutableStateOf(Cfg.cursorScale.toFloat())
     var padOverlay by mutableStateOf(Cfg.padOverlay)
     var padIdentity by mutableStateOf(Cfg.padIdentity)
+    /** Gyro controller: saklar, tujuan stik ("off" / "left" / "right"), dan sensitivitas 1..10 (ControllerPrefs). */
+    var gyro by mutableStateOf(false)
+    var gyroTarget by mutableStateOf(ControllerPrefs.GYRO_RIGHT)
+    var gyroSens by mutableStateOf(5)
     /** Keyboard PC di layar (dari DroidDeck): tombol evdev asli, bukan keyboard Android. */
     var pcKeyboard by mutableStateOf(false)
     /** True bila layar ini menjalankan aplikasi Shortcut (bukan desktop): tombol Shutdown dan layar progres aktif. */
@@ -68,6 +76,10 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
     private lateinit var surfaceView: DeskSurface
     private var pad: PadBridge? = null
     private lateinit var touchpadInput: TouchpadInput
+    /** Gyro + akselerometer HP sebagai gyro controller (hidraw Deck) dan/atau stik; hanya hidup selama layar ini tampil. */
+    private var motion: PadMotion? = null
+    private var resumed = false
+    private val controllerPrefsListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> runOnUiThread { syncMotion() } }
     private var lastTouchpad = false
 
     // menu sesi: geser dari tepi kiri ke kanan
@@ -130,6 +142,9 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
         val p = PadBridge(File(File(filesDir, "session"), "dev/input"))
         p.start()
         pad = p
+        // rumble dari game (evdev FF + hidraw Deck) -> getar HP / controller fisik
+        RumbleReceiver.start(this)
+        ControllerPrefs.prefs(this).registerOnSharedPreferenceChangeListener(controllerPrefsListener)
         Launcher.onAppSessionEnded = onAppEnded
 
         surfaceView = DeskSurface(this).apply {
@@ -235,11 +250,47 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
         ui.padIdentity = Cfg.padIdentity
         ui.touchpad = Cfg.touchpadMode
         ui.showCursor = Cfg.showCursor
+        resumed = true
+        syncMotion()
         surfaceView.requestFocus()
+    }
+
+    override fun onPause() {
+        // sensor tidak dibaca saat layar ini tidak tampil
+        resumed = false
+        stopMotion()
+        super.onPause()
+    }
+
+    /** Menyalakan/mematikan gyro sesuai saklar di Pengaturan Controller dan menu samping, dan memasang mapping-nya. */
+    private fun syncMotion() {
+        ui.gyro = ControllerPrefs.gyroEnabled(this)
+        ui.gyroTarget = ControllerPrefs.gyroTarget(this)
+        ui.gyroSens = ControllerPrefs.gyroSensitivity(this)
+        if (!ui.gyro || pad == null || !resumed) {
+            stopMotion()
+            return
+        }
+        val m = motion ?: PadMotion(this, { displayRotation() }, pad).also {
+            motion = it
+            it.start()
+        }
+        m.configure(ui.gyroTarget, ui.gyroSens)
+    }
+
+    @Suppress("DEPRECATION")
+    private fun displayRotation(): Int = windowManager.defaultDisplay.rotation
+
+    private fun stopMotion() {
+        motion?.stop()
+        motion = null
     }
 
     override fun onDestroy() {
         if (Launcher.onAppSessionEnded === onAppEnded) Launcher.onAppSessionEnded = null
+        ControllerPrefs.prefs(this).unregisterOnSharedPreferenceChangeListener(controllerPrefsListener)
+        stopMotion()
+        RumbleReceiver.stop()
         pad?.stop()
         pad = null
         super.onDestroy()

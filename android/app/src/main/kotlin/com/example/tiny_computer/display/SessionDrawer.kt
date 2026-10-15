@@ -64,6 +64,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.tiny_computer.R
 import com.example.tiny_computer.core.Cfg
+import com.droiddeck.launcher.input.ControllerPrefs
+import androidx.compose.ui.platform.LocalContext
+import com.example.tiny_computer.ui.DeckChoiceRow
 import com.example.tiny_computer.ui.DeckGroup
 import com.example.tiny_computer.ui.DeckSliderRow
 import com.example.tiny_computer.ui.DeckToggle
@@ -250,6 +253,30 @@ private fun InputPage(state: DisplayUiState, onPadOverlayChange: (Boolean) -> Un
         DrawerToggleRow(stringResource(R.string.tc_pad_overlay), state.padOverlay) {
             state.padOverlay = it
             onPadOverlayChange(it)
+        }
+        // gyro: saklar yang sama dengan Pengaturan > Controller (ControllerPrefs); DisplayActivity menyalakan sensornya
+        val ctx = LocalContext.current
+        DrawerToggleRow(stringResource(R.string.tc_ctrl_gyro), state.gyro) {
+            state.gyro = it
+            ControllerPrefs.setGyro(ctx, it)
+        }
+        if (state.gyro) {
+            DeckChoiceRow(
+                stringResource(R.string.tc_ctrl_gyro_map), null,
+                listOf(
+                    ControllerPrefs.GYRO_OFF to stringResource(R.string.tc_gyro_off),
+                    ControllerPrefs.GYRO_LEFT to stringResource(R.string.tc_gyro_left),
+                    ControllerPrefs.GYRO_RIGHT to stringResource(R.string.tc_gyro_right),
+                ),
+                state.gyroTarget,
+            ) {
+                state.gyroTarget = it
+                ControllerPrefs.setGyroTarget(ctx, it)
+            }
+            DeckSliderRow(stringResource(R.string.tc_ctrl_gyro_sens), null, state.gyroSens, 1..10) {
+                state.gyroSens = it
+                ControllerPrefs.setGyroSensitivity(ctx, it)
+            }
         }
     }
 }

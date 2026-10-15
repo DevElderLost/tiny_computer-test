@@ -110,6 +110,44 @@ object ControllerPrefs {
         prefs(context).edit().putBoolean("rumble", on).apply()
     }
 
+    // ---- gyro (hidraw Steam Deck + mapping ke stik) dan trackpad L/R
+
+    const val GYRO_OFF = "off"
+    const val GYRO_LEFT = "left"
+    const val GYRO_RIGHT = "right"
+    const val PAD_STICK = "stick"
+    const val PAD_HID = "hid"
+
+    /** Saklar gyro: bila mati sensor tidak dibaca sama sekali (hemat baterai). */
+    fun gyroEnabled(context: Context): Boolean = prefs(context).getBoolean("gyro", false)
+
+    fun setGyro(context: Context, on: Boolean) {
+        prefs(context).edit().putBoolean("gyro", on).apply()
+    }
+
+    /** Gyro menggerakkan stik apa: [GYRO_OFF] (hanya dikirim ke hidraw), [GYRO_LEFT] atau [GYRO_RIGHT]. */
+    fun gyroTarget(context: Context): String =
+        prefs(context).getString("gyroTarget", GYRO_RIGHT)?.takeIf { it == GYRO_OFF || it == GYRO_LEFT || it == GYRO_RIGHT } ?: GYRO_RIGHT
+
+    fun setGyroTarget(context: Context, target: String) {
+        prefs(context).edit().putString("gyroTarget", target).apply()
+    }
+
+    /** 1..10; makin tinggi makin kecil putaran yang dibutuhkan untuk menggerakkan stik penuh. */
+    fun gyroSensitivity(context: Context): Int = prefs(context).getInt("gyroSens", 5).coerceIn(1, 10)
+
+    fun setGyroSensitivity(context: Context, value: Int) {
+        prefs(context).edit().putInt("gyroSens", value.coerceIn(1, 10)).apply()
+    }
+
+    /** Trackpad L/R menjadi stik kiri/kanan ([PAD_STICK]) atau hanya dikirim ke laporan hidraw Deck ([PAD_HID]). */
+    fun trackpadMode(context: Context): String =
+        prefs(context).getString("trackpadMode", PAD_STICK)?.takeIf { it == PAD_STICK || it == PAD_HID } ?: PAD_STICK
+
+    fun setTrackpadMode(context: Context, mode: String) {
+        prefs(context).edit().putString("trackpadMode", mode).apply()
+    }
+
     fun setSteamButton(context: Context, on: Boolean) {
         prefs(context).edit().putBoolean("steamButton", on).apply()
     }
