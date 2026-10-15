@@ -43,6 +43,13 @@ object ShortcutRunner {
         return s.replace("\u0000", "%").replace(Regex("\\s+"), " ").trim()
     }
 
+    /** Aplikasi Wine (shortcut .exe atau perintah `wine ...`)? Dipakai untuk memutuskan window manager sesi Shortcut. */
+    fun isWineApp(appId: String): Boolean {
+        val app = DesktopApps.find(appId) ?: return false
+        val prog = cleanExec(app.exec).substringBefore(' ').substringAfterLast('/')
+        return prog == "wine" || prog == "wine64"
+    }
+
     /** `K=V K=V` -> pasangan; token tanpa `=` dibuang. */
     private fun pairs(opts: String): List<Pair<String, String>> =
         opts.trim().split(Regex("\\s+")).mapNotNull { t ->
@@ -86,6 +93,19 @@ fi
         // Aplikasi Wine? (dipakai untuk memilih jalur Wayland di bawah)
         val prog = cleanExec(app.exec).substringBefore(' ').substringAfterLast('/')
         val isWine = prog == "wine" || prog == "wine64"
+        // Window manager sesi Shortcut (xfwm4 dst.) bawaannya menyala untuk aplikasi Linux. Aplikasi Wine butuh layar penuh
+        // (WM memberi bingkai dan menahan jendela game), jadi aplikasi Wine mematikan WM dan menulis ~/.vnc/no-wm; penjaga
+        // di skrip sesi ([prepareSession]) menjeda WM selama berkas itu ada. Aplikasi Linux menghapus berkas itu sehingga WM
+        // menyala lagi, kecuali masih ada Wine yang berjalan (WM tidak boleh mengambil alih jendela game).
+        // Desktop yang menyala punya WM sendiri (xfwm4 desktop): tidak disentuh.
+        if (!Launcher.guiStarted) {
+            if (isWine) {
+                sb.append(": > \"\$HOME/.vnc/no-wm\"\n")
+                sb.append("for w in xfwm4 openbox metacity marco icewm fluxbox; do pkill -x \$w 2>/dev/null; done\n")
+            } else {
+                sb.append("pgrep -x wineserver >/dev/null 2>&1 || rm -f \"\$HOME/.vnc/no-wm\"\n")
+            }
+        }
         // Driver tampilan Wine untuk peluncuran ini (lihat WineContents.x11Preferred): env.sh membacanya
         if (isWine) sb.append("export TINY_WINE_DISPLAY=${if (WineContents.displayWayland()) "wayland" else "x11"}\n")
         // Turnip aktif bila dipilih untuk aplikasi ini, atau (GPU "default") bila Turnip global menyala
@@ -291,9 +311,13 @@ exec sh -c "${'$'}TINY_CMD"
      * dan mengembalikan path-nya di dalam guest. Ukuran layar = [size] (ukuran khusus aplikasi yang
      * memulai sesi, atau ukuran desktop; lihat [Launcher.displaySize]). Skrip menunggu soket Wayland, lalu MENJADI Xwayland (`exec`): proot-nya
      * hidup selama X hidup dan, karena `--kill-on-exit`, window manager ikut berhenti bersamanya.
+     * [withWm] false (sesi dimulai aplikasi Wine): window manager dijeda supaya game bisa layar penuh; aplikasi Linux
+     * yang dijalankan kemudian menyalakannya lagi.
      */
-    fun prepareSession(ctx: Context, size: Pair<Int, Int>): String {
+    fun prepareSession(ctx: Context, size: Pair<Int, Int>, withWm: Boolean = true): String {
         val (w, h) = size
+        // berkas penanda: penjaga window manager di skrip sesi tidak menyalakannya (aplikasi Wine juga membuatnya sendiri)
+        val noWm = if (withWm) "" else ": > \"${'$'}HOME/.vnc/no-wm\"\n"
         write(
             SESSION_SCRIPT,
             """
@@ -302,7 +326,9 @@ mkdir -p "${'$'}HOME/.vnc"
 command -v Xwayland >/dev/null 2>&1 || { echo "Xwayland belum terpasang"; exit 1; }
 rm -f /tmp/.X11-unix/X4 /tmp/.X4-lock
 i=0; while [ ${'$'}i -lt 150 ] && [ ! -S /tmp/wayland-0 ]; do sleep 0.2; i=${'$'}((i+1)); done
-# window manager (title bar + tombol tutup/maksimalkan/kecilkan) untuk aplikasi Shortcut.
+rm -f "${'$'}HOME/.vnc/no-wm"
+${'$'}{noWm}# window manager (title bar + tombol tutup/maksimalkan/kecilkan) untuk aplikasi Shortcut.
+# Berkas ~/.vnc/no-wm (dibuat aplikasi Wine) = window manager dijeda; aplikasi Linux menghapusnya agar WM menyala lagi.
 # - berjalan di bus D-Bus sendiri: xfwm4 butuh xfconf lewat D-Bus, tanpa itu langsung mati dan jendela
 #   tampil tanpa bingkai;
 # - tiap kandidat diperiksa masih hidup setelah 2 detik, kalau tidak lanjut ke kandidat berikutnya;
@@ -313,7 +339,14 @@ i=0; while [ ${'$'}i -lt 150 ] && [ ! -S /tmp/wayland-0 ]; do sleep 0.2; i=${'$'
   WMLOG="${'$'}HOME/.vnc/wm.log"
   : > "${'$'}WMLOG"
   tries=0
+  idle=0
   while [ ${'$'}tries -lt 20 ]; do
+    if [ -e "${'$'}HOME/.vnc/no-wm" ]; then
+      [ "${'$'}idle" = 1 ] || echo "[wm] dijeda: aplikasi Wine butuh layar penuh tanpa window manager" >> "${'$'}WMLOG"
+      idle=1; tries=0; sleep 1; continue
+    fi
+    [ "${'$'}idle" = 1 ] && echo "[wm] dilanjutkan" >> "${'$'}WMLOG"
+    idle=0
     tries=${'$'}((tries+1))
     started=0
     for wm in xfwm4 openbox metacity marco icewm fluxbox; do

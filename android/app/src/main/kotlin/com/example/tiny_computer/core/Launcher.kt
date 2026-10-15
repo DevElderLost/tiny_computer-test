@@ -764,7 +764,10 @@ ${WsiWayland.probeForDesktop(sessionEnv)}
             val sLog = LaunchLog.begin("shortcut")
             appSessionLog = sLog
             LaunchLog.write(sLog, "session", "sesi aplikasi Shortcut dimulai (Xwayland ${size.first}x${size.second}), dipicu oleh $appId")
-            val session = spawnDetached(appProotScript(ctx, ShortcutRunner.prepareSession(ctx, size), killOnExit = true, log = sLog), "TinyAppSession")
+            // sesi yang dimulai aplikasi Wine (.exe) mulai tanpa window manager (layar penuh); aplikasi Linux menyalakannya lagi
+            val withWm = !ShortcutRunner.isWineApp(appId)
+            if (!withWm) LaunchLog.write(sLog, "session", "window manager dijeda (sesi dimulai aplikasi Wine, layar penuh)")
+            val session = spawnDetached(appProotScript(ctx, ShortcutRunner.prepareSession(ctx, size, withWm), killOnExit = true, log = sLog), "TinyAppSession")
             appSession = session
             // Xwayland mati sendiri (crash): aplikasinya ikut putus, tutup sesi dan kembali ke Shortcut
             watch("tiny-session-wait") {

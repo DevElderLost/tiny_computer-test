@@ -18,9 +18,8 @@ import java.nio.file.LinkOption
  *  - socat             : klien soket mikrofon (cadangan bila `tiny_virtual_mic` tidak ada)
  *  - pulseaudio-utils  : `pactl` / `pacat` untuk sink + source mikrofon virtual
  *  - libxkbregistry0   : pustaka registri keymap xkb
- * Keempatnya (beserta dependensinya) sudah dibungkus sebagai .deb di patch.tzst (`tiny/extra/debs`) dan
- * dipasang OFFLINE dengan `dpkg -i`; apt hanya jadi cadangan bila .deb tidak ada atau gagal dipasang.
- * Hanya paket yang BELUM terpasang yang dipasang, sehingga peluncuran berikutnya tidak butuh internet.
+ * Keempatnya dipasang ONLINE lewat apt (butuh internet sekali, saat instalasi pertama). Hanya paket yang
+ * BELUM terpasang yang dipasang, sehingga peluncuran berikutnya tidak butuh internet.
  */
 object ExtraSetup {
     private const val TAG = "TinyExtras"
@@ -33,13 +32,6 @@ object ExtraSetup {
         "pulseaudio-utils" to "usr/bin/pacat",
         "libxkbregistry0" to "usr/lib/aarch64-linux-gnu/libxkbregistry.so.0",
     )
-
-    /** Folder .deb offline di sisi Android; di guest terlihat sebagai ~/.local/share/tiny/extra/debs. */
-    private fun debDir() = File(TinyEnv.dataPath, "tiny/extra/debs")
-
-    /** Semua .deb offline hasil ekstraksi patch.tzst (paket + dependensinya). */
-    private fun bundledDebs(): List<File> =
-        debDir().listFiles { f -> f.isFile && f.name.endsWith(".deb") }?.sortedBy { it.name } ?: emptyList()
 
     /** Paket yang belum ada di kontainer saat ini; dibaca langsung dari rootfs, tanpa menjalankan apa pun. */
     fun missing(): List<String> {
@@ -78,10 +70,9 @@ object ExtraSetup {
     }
 
     /**
-     * Memasang paket yang kurang lewat terminal kontainer dan menunggu selesai. Mengembalikan null bila
-     * semuanya sudah ada, atau pesan peringatan berbahasa Inggris untuk Beranda bila gagal.
-     * Seluruh .deb di patch.tzst (Wayland, Sound, libxkbregistry0 + dependensi) dipasang dulu dengan
-     * `dpkg -i` (offline); internet hanya dibutuhkan sebagai cadangan lewat apt bila masih ada yang kurang. Dipanggil di thread latar.
+     * Memasang paket yang kurang lewat terminal kontainer (`sudo apt update && sudo apt install -y ...`) dan menunggu
+     * selesai. Mengembalikan null bila semuanya sudah ada, atau pesan peringatan berbahasa Inggris untuk Beranda bila
+     * gagal (internet mati, koneksi putus, atau paket tidak ditemukan). Dipanggil di thread latar.
      */
     fun run(ctx: Context): String? {
         val need = missing()
@@ -89,29 +80,11 @@ object ExtraSetup {
         Rootfs.percent = -1
         Rootfs.statusText = "installingExtras"
 
-        val offline = bundledDebs()
-        val hasNet = internetActive(ctx)
-
-        // 1) semua .deb dari patch.tzst sekaligus: `dpkg -i`, tanpa internet. -E melewati versi yang sama,
-        //    -G tidak menurunkan paket yang di rootfs sudah lebih baru.
-        if (offline.isNotEmpty()) {
-            val code = runInTerminal(
-                ctx,
-                "sudo env DEBIAN_FRONTEND=noninteractive dpkg -i -E -G ~/.local/share/tiny/extra/debs/*.deb",
-            )
-            Log.i(TAG, "dpkg offline kode=$code, ${offline.size} berkas, masih kurang=${missing()}")
-            if (code == -2) return failure(ctx)
-        }
-        // 2) cadangan: paket yang masih kurang (tanpa .deb, atau gagal dipasang) lewat apt, butuh internet
-        val left = missing()
-        if (left.isNotEmpty() && hasNet) {
-            val code = runInTerminal(ctx, "sudo apt update && sudo apt install -y ${left.joinToString(" ")}")
-            Log.i(TAG, "apt kode=$code, dipasang=$left, masih kurang=${missing()}")
-            if (code == -2) return failure(ctx)
-        }
-        if (missing().isEmpty()) return null
-        // tersisa paket yang butuh apt tetapi internet mati
-        return if (!hasNet) ctx.getString(R.string.tc_extras_no_internet) else failure(ctx)
+        if (!internetActive(ctx)) return ctx.getString(R.string.tc_extras_no_internet)
+        val code = runInTerminal(ctx, "sudo apt update && sudo apt install -y ${need.joinToString(" ")}")
+        Log.i(TAG, "apt kode=$code, diminta=$need, masih kurang=${missing()}")
+        if (code == -2) return failure(ctx)
+        return if (missing().isEmpty()) null else failure(ctx)
     }
 
     /** Menjalankan [command] di terminal kontainer dan menunggu kode keluarnya; -2 bila shell mati / waktu habis. */
