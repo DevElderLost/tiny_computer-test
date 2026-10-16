@@ -171,6 +171,8 @@
     <string name="tc_group_startup">启动</string>
     <string name="tc_ui_direct_audio">直接音频（原生，无需 PulseAudio）</string>
     <string name="tc_ui_direct_audio_hint">通过客户机内的 ALSA 插件（libasound_module_pcm_tinyaudio.so）直接经 Android AAudio 播放声音，修复 PPSSPP、Dolphin 等模拟器的声音丢失与爆音。Wine、SDL、ALSA 应用自动使用；PulseAudio 仅在使用虚拟麦克风时启动。下次启动生效。</string>
+    <string name="tc_ui_direct_audio_alsa">强制使用 ALSA 音频驱动</string>
+    <string name="tc_ui_direct_audio_alsa_hint">让 SDL、Wine 等应用直接使用 ALSA 驱动（SDL_AUDIODRIVER=alsa），而不是自动检测。仅在开启直接音频时有效。下次启动生效。</string>
     <string name="tc_ui_direct_audio_buffer">直接音频起始缓冲（毫秒，10-200）</string>
     <string name="tc_group_audio">音频</string>
     <string name="tc_group_session">会话</string>
