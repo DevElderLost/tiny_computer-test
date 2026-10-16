@@ -18,6 +18,11 @@ int ta_server_pump(ta_server *s, int timeout_ms);
 void ta_server_render(ta_server *s, int16_t *out, int32_t frames);
 int ta_server_clients(const ta_server *s);
 uint32_t ta_server_underruns(const ta_server *s);
+/* Jembatan PulseAudio: server menyambung KE module-simple-protocol-tcp (record dari monitor sink null) di
+ * 127.0.0.1:port dan memperlakukan aliran s16le stereo 48 kHz itu sebagai satu klien lagi. Dengan begitu aplikasi yang
+ * memaksa pulse (SDL, Firefox, mixer desktop) tetap bersuara lewat mixer AAudio yang sama, bukan OpenSL ES.
+ * port <= 0 mematikan jembatan. */
+void ta_server_set_bridge(ta_server *s, int port);
 /* Prefill (ms) sebelum sebuah stream mulai diputar; dibatasi oleh ukuran buffer klien. */
 void ta_server_set_prefill_ms(ta_server *s, int ms);
 

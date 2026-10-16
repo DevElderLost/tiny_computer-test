@@ -117,6 +117,7 @@ object ControllerPrefs {
     const val GYRO_RIGHT = "right"
     const val PAD_STICK = "stick"
     const val PAD_HID = "hid"
+    const val PAD_MOUSE = "mouse"
 
     /** Saklar gyro: bila mati sensor tidak dibaca sama sekali (hemat baterai). */
     fun gyroEnabled(context: Context): Boolean = prefs(context).getBoolean("gyro", false)
@@ -140,12 +141,22 @@ object ControllerPrefs {
         prefs(context).edit().putInt("gyroSens", value.coerceIn(1, 10)).apply()
     }
 
-    /** Trackpad L/R menjadi stik kiri/kanan ([PAD_STICK]) atau hanya dikirim ke laporan hidraw Deck ([PAD_HID]). */
+    /**
+     * Trackpad L/R menjadi stik kiri/kanan ([PAD_STICK]), hanya dikirim ke laporan hidraw Deck ([PAD_HID]), atau
+     * menggerakkan kursor mouse ([PAD_MOUSE]: geser = gerak kursor, ketuk = klik).
+     */
     fun trackpadMode(context: Context): String =
-        prefs(context).getString("trackpadMode", PAD_STICK)?.takeIf { it == PAD_STICK || it == PAD_HID } ?: PAD_STICK
+        prefs(context).getString("trackpadMode", PAD_STICK)?.takeIf { it == PAD_STICK || it == PAD_HID || it == PAD_MOUSE } ?: PAD_STICK
 
     fun setTrackpadMode(context: Context, mode: String) {
         prefs(context).edit().putString("trackpadMode", mode).apply()
+    }
+
+    /** 1..10; kecepatan kursor saat trackpad berada di mode [PAD_MOUSE] (5 = sedang). */
+    fun trackpadMouseSpeed(context: Context): Int = prefs(context).getInt("trackpadMouseSpeed", 5).coerceIn(1, 10)
+
+    fun setTrackpadMouseSpeed(context: Context, value: Int) {
+        prefs(context).edit().putInt("trackpadMouseSpeed", value.coerceIn(1, 10)).apply()
     }
 
     fun setSteamButton(context: Context, on: Boolean) {

@@ -24,6 +24,8 @@ class OnScreenControls(
     private val pad: PadBridge?,
     private val editing: Boolean = false,
     private val onKeyboard: (() -> Unit)? = null,
+    /** Mode edit: ikut menampilkan grip belakang dan trackpad Steam Deck ([DeckLayout]) supaya bisa digeser. */
+    private val deckExtras: Boolean = false,
 ) : View(context) {
 
     private class Control(
@@ -89,6 +91,9 @@ class OnScreenControls(
     )
 
     private val groups = controls.map { it.group }.distinct()
+
+    /** Titik tengah (piksel) grip dan trackpad Deck di mode edit, per [DeckLayout.Spec.id]: [x, y]. */
+    private val extraPos = HashMap<String, FloatArray>()
 
     private var buttonsOnly = false
     private var quickHidden = false
@@ -211,7 +216,60 @@ class OnScreenControls(
             }
         }
         groups.forEach { clamp(it) }
+        if (deckExtras && editing) layoutExtras()
         invalidate()
+    }
+
+    /** Posisi grip dan trackpad Deck: nilai tersimpan, atau bawaan ([DeckLayout.defaultCenter]) bila belum diatur / direset. */
+    private fun layoutExtras() {
+        val saved = if (ignoreSaved) emptyMap() else ControllerPrefs.layout(context, width, height)
+        val placed = DeckLayout.resolve(saved, width, height, resources.displayMetrics.density, settings.size / 100f)
+        for ((id, c) in placed) extraPos[id] = floatArrayOf(c.first, c.second)
+    }
+
+    private fun extraHalf(spec: DeckLayout.Spec): Pair<Float, Float> {
+        val k = settings.size / 100f * resources.displayMetrics.density / 2f
+        return spec.wDp * k to spec.hDp * k
+    }
+
+    private fun extraAt(x: Float, y: Float): String? = DeckLayout.specs.lastOrNull { spec ->
+        val c = extraPos[spec.id] ?: return@lastOrNull false
+        val (hw, hh) = extraHalf(spec)
+        val slack = dp(4f)
+        abs(x - c[0]) <= hw + slack && abs(y - c[1]) <= hh + slack
+    }?.id
+
+    private fun moveExtra(id: String, x: Float, y: Float) {
+        val (hw, hh) = extraHalf(DeckLayout.spec(id))
+        val (cx, cy) = DeckLayout.clamp(x, y, width.toFloat(), height.toFloat(), hw, hh)
+        extraPos[id] = floatArrayOf(cx, cy)
+    }
+
+    private fun centreOf(group: String): Pair<Float, Float> = extraPos[group]?.let { it[0] to it[1] } ?: centre(group)
+
+    private fun drawExtras(canvas: Canvas) {
+        for (spec in DeckLayout.specs) {
+            val c = extraPos[spec.id] ?: continue
+            val (hw, hh) = extraHalf(spec)
+            box.set(c[0] - hw, c[1] - hh, c[0] + hw, c[1] + hh)
+            val corner = if (spec.pad) dp(14f) else hw * 2f * 0.2f
+            fill.color = idleFill
+            canvas.drawRoundRect(box, corner, corner, fill)
+            stroke.color = idleStroke
+            canvas.drawRoundRect(box, corner, corner, stroke)
+            text.color = idleText
+            text.textSize = dp(11f)
+            canvas.drawText(if (spec.pad) "${spec.label} pad" else spec.label, c[0], c[1] + text.textSize * 0.35f, text)
+        }
+    }
+
+    private fun drawExtraSelection(canvas: Canvas, id: String) {
+        val c = extraPos[id] ?: return
+        val (hw, hh) = extraHalf(DeckLayout.spec(id))
+        val pad = dp(6f)
+        stroke.color = heldStroke
+        box.set(c[0] - hw - pad, c[1] - hh - pad, c[0] + hw + pad, c[1] + hh + pad)
+        canvas.drawRoundRect(box, dp(14f), dp(14f), stroke)
     }
 
     private fun pxPerMm(dpi: Float): Float {
@@ -341,10 +399,14 @@ class OnScreenControls(
     fun saveLayout() {
         if (width <= 0 || height <= 0) return
         if (ignoreSaved) { ControllerPrefs.resetLayout(context, width, height); return }
-        ControllerPrefs.setLayout(context, width, height, groups.associateWith { group ->
+        // yang tidak ikut diedit (mis. grip dan trackpad Deck saat identitas bukan Deck) tetap seperti tersimpan
+        val out = LinkedHashMap<String, Pair<Float, Float>>(ControllerPrefs.layout(context, width, height))
+        for (group in groups) {
             val (x, y) = centre(group)
-            x / width to y / height
-        })
+            out[group] = x / width to y / height
+        }
+        if (deckExtras) for ((id, c) in extraPos) out[id] = c[0] / width to c[1] / height
+        ControllerPrefs.setLayout(context, width, height, out)
     }
 
     fun resetLayout() {
@@ -411,8 +473,10 @@ class OnScreenControls(
                 canvas.drawText(name, control.cx, control.cy + text.textSize * 0.35f, text)
             }
         }
+        if (editing && deckExtras) drawExtras(canvas)
         if (editing) {
             val group = selected ?: return
+            if (extraPos.containsKey(group)) { drawExtraSelection(canvas, group); return }
             val (x, y) = centre(group)
             stroke.color = heldStroke
             val single = members(group).singleOrNull()
@@ -588,9 +652,9 @@ class OnScreenControls(
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 val control = controlAt(event.x, event.y)
-                selected = control?.group
+                selected = control?.group ?: if (deckExtras) extraAt(event.x, event.y) else null
                 val group = selected ?: run { invalidate(); return false }
-                val (x, y) = centre(group)
+                val (x, y) = centreOf(group)
                 grabX = x - event.x
                 grabY = y - event.y
                 invalidate()
@@ -598,8 +662,11 @@ class OnScreenControls(
             MotionEvent.ACTION_MOVE -> {
                 val group = selected ?: return true
                 ignoreSaved = false
-                put(group, event.x + grabX, event.y + grabY)
-                clamp(group)
+                if (extraPos.containsKey(group)) moveExtra(group, event.x + grabX, event.y + grabY)
+                else {
+                    put(group, event.x + grabX, event.y + grabY)
+                    clamp(group)
+                }
                 invalidate()
             }
         }

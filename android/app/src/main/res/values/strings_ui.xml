@@ -422,7 +422,7 @@
     <string name="tc_gyro_right">Right joystick</string>
     <string name="tc_ctrl_gyro_sens">Gyro sensitivity</string>
     <string name="tc_ctrl_trackpad">Trackpad L / R</string>
-    <string name="tc_ctrl_trackpad_hint">Steam Deck identity only. Joystick: the left pad moves the left stick and the right pad the right stick; hold still for a click. Applies on next session.</string>
+    <string name="tc_ctrl_trackpad_hint">Steam Deck identity only. Joystick: the left pad moves the left stick and the right pad the right stick; hold still for a click. Mouse cursor: both pads move the mouse cursor; tap the right pad to left-click, the left pad to right-click, hold the right pad still to drag. Applies on next session.</string>
     <string name="tc_trackpad_stick">Joystick (L to L, R to R)</string>
     <string name="tc_trackpad_hid">Deck report only</string>
     <string name="tc_ctrl_rumble_hint">Game rumble vibrates the physical pad in use, or this device if there is none.</string>
@@ -430,4 +430,7 @@
     <string name="tc_btn_close">Close</string>
     <string name="tc_btn_save">Save</string>
     <string name="tc_btn_cancel">Cancel</string>
+    <string name="tc_trackpad_mouse">Mouse cursor</string>
+    <string name="tc_ctrl_trackpad_speed">Trackpad cursor speed</string>
+    <string name="tc_drawer_edit_layout">Edit controller layout</string>
 </resources>

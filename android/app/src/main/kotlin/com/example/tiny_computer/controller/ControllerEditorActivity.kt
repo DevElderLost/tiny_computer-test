@@ -27,13 +27,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.droiddeck.launcher.input.OnScreenControls
 import com.example.tiny_computer.R
+import com.example.tiny_computer.core.Cfg
 import com.example.tiny_computer.ui.LocalPalette
 import com.example.tiny_computer.ui.TinyTheme
 import com.example.tiny_computer.ui.onSignal
 
 /**
  * Editor posisi controller (port ControllerEditorActivity DroidDeck): layar penuh, seret tiap
- * kelompok tombol lalu Simpan. Posisi disimpan per ukuran layar di ControllerPrefs, jadi sesi
+ * kelompok tombol (dan, bila identitas Steam Deck, grip L4/L5/R4/R5 serta trackpad L/R) lalu Simpan. Posisi disimpan per ukuran layar di ControllerPrefs, jadi sesi
  * desktop (DisplayActivity, ukuran sama) langsung memakainya.
  */
 class ControllerEditorActivity : ComponentActivity() {
@@ -44,7 +45,8 @@ class ControllerEditorActivity : ComponentActivity() {
         immersive()
         val root = FrameLayout(this)
         root.setBackgroundColor(0xFF0B0F14.toInt())
-        controls = OnScreenControls(this, null, editing = true)
+        // identitas Steam Deck: grip belakang dan trackpad ikut bisa digeser (DeckLayout)
+        controls = OnScreenControls(this, null, editing = true, deckExtras = Cfg.padIdentity == "deck")
         root.addView(controls, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         val bar = ComposeView(this).apply {
             setContent {

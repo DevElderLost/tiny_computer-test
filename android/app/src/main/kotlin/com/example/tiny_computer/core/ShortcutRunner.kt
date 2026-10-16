@@ -183,13 +183,13 @@ fi
 
         // Audio langsung (tanpa pulse): Wine memakai winealsa yang diarahkan asound.conf ke plugin tinyaudio. Dicek tiap
         // peluncuran (satu grep); `wine reg add` hanya bila nilainya belum alsa.
-        if (isWine && Launcher.directAudioActive()) {
+        if (isWine && Launcher.directAudioActive() && Cfg.directAudioPreferAlsa) {
             sb.append(
                 """
 (
   [ -f "${'$'}HOME/.local/share/tiny/wine/env.sh" ] && . "${'$'}HOME/.local/share/tiny/wine/env.sh"
   unset HODLL
-  if ! grep -qs '^"Audio"="alsa"' "${'$'}WINEPREFIX/user.reg"; then
+  if ! grep -qs '^"Audio"="alsa"' "${'$'}{WINEPREFIX:-${'$'}HOME/.wine}/user.reg"; then
     echo "[tiny] Wine: driver audio ditulis ke alsa (audio langsung ke Android)"
     wine reg add 'HKCU\Software\Wine\Drivers' /v Audio /d alsa /f
   fi

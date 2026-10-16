@@ -155,7 +155,7 @@ void *serverThread(void *) {
 } // namespace
 
 extern "C" JNIEXPORT jboolean JNICALL
-Java_com_example_tiny_1computer_core_TinyAudio_nativeStart(JNIEnv *env, jobject, jstring path, jint prefillMs, jint bufferMs) {
+Java_com_example_tiny_1computer_core_TinyAudio_nativeStart(JNIEnv *env, jobject, jstring path, jint prefillMs, jint bufferMs, jint bridgePort) {
     if (g_run.load()) return JNI_TRUE;
     signal(SIGPIPE, SIG_IGN);
     const char *p = env->GetStringUTFChars(path, nullptr);
@@ -165,6 +165,7 @@ Java_com_example_tiny_1computer_core_TinyAudio_nativeStart(JNIEnv *env, jobject,
     g_server = ta_server_create(g_path.c_str());
     if (!g_server) { LOGE("bind %s gagal", g_path.c_str()); return JNI_FALSE; }
     ta_server_set_prefill_ms(g_server, prefillMs);
+    ta_server_set_bridge(g_server, bridgePort);
     g_buffer_ms = bufferMs < 10 ? 10 : (bufferMs > 200 ? 200 : bufferMs);
     g_need_reopen = false;
     g_run = true;
@@ -174,7 +175,7 @@ Java_com_example_tiny_1computer_core_TinyAudio_nativeStart(JNIEnv *env, jobject,
         ta_server_destroy(g_server); g_server = nullptr;
         return JNI_FALSE;
     }
-    LOGI("server audio native aktif di %s (prefill %d ms, buffer %d ms)", g_path.c_str(), prefillMs, g_buffer_ms.load());
+    LOGI("server audio native aktif di %s (prefill %d ms, buffer %d ms, jembatan pulse port %d)", g_path.c_str(), prefillMs, g_buffer_ms.load(), bridgePort);
     return JNI_TRUE;
 }
 

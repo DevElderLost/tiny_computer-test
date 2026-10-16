@@ -37,7 +37,10 @@ fun DisplayOverlay(
 ) {
     Box(Modifier.fillMaxSize()) {
         if (state.padOverlay) {
-            ControllerOverlay(pad = pad, deck = state.padIdentity == "deck", onKeyboard = { state.pcKeyboard = !state.pcKeyboard })
+            ControllerOverlay(
+                pad = pad, deck = state.padIdentity == "deck", onKeyboard = { state.pcKeyboard = !state.pcKeyboard },
+                reloadKey = state.padLayoutRev, sceneSize = state.sceneW to state.sceneH,
+            )
         }
         // petunjuk tipis di tepi kiri: dari sinilah menu digeser keluar
         if (!state.menuOpen) {

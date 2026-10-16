@@ -1,5 +1,6 @@
 package com.example.tiny_computer.display
 
+import android.content.Intent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -32,6 +33,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Keyboard
 import androidx.compose.material.icons.outlined.Mouse
 import androidx.compose.material.icons.outlined.PowerSettingsNew
@@ -63,6 +65,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.tiny_computer.R
+import com.example.tiny_computer.controller.ControllerEditorActivity
 import com.example.tiny_computer.core.Cfg
 import com.droiddeck.launcher.input.ControllerPrefs
 import androidx.compose.ui.platform.LocalContext
@@ -277,6 +280,14 @@ private fun InputPage(state: DisplayUiState, onPadOverlayChange: (Boolean) -> Un
                 state.gyroSens = it
                 ControllerPrefs.setGyroSensitivity(ctx, it)
             }
+        }
+        // editor tata letak controller (sama dengan Pengaturan > Controller > Edit); menu menutup agar layar editor terlihat
+        val pal = LocalPalette.current
+        Column(Modifier.fillMaxWidth().padding(10.dp)) {
+            DrawerActionButton(stringResource(R.string.tc_drawer_edit_layout), Icons.Outlined.Edit, pal.onBackground, {
+                state.menuOpen = false
+                ctx.startActivity(Intent(ctx, ControllerEditorActivity::class.java))
+            })
         }
     }
 }

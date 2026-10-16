@@ -61,6 +61,7 @@ fun ControllerScreen() {
     var gyroTarget by remember { mutableStateOf(ControllerPrefs.gyroTarget(ctx)) }
     var gyroSens by remember { mutableIntStateOf(ControllerPrefs.gyroSensitivity(ctx)) }
     var trackpad by remember { mutableStateOf(ControllerPrefs.trackpadMode(ctx)) }
+    var trackpadSpeed by remember { mutableIntStateOf(ControllerPrefs.trackpadMouseSpeed(ctx)) }
     val hasLib = File(TinyEnv.dataPath, "tiny/extra/libfakeinput.so").isFile
     val land = isLandscape()
 
@@ -74,6 +75,11 @@ fun ControllerScreen() {
     LaunchedEffect(size) {
         delay(200)
         if ((Cfg.padOverlayScale * 100).roundToInt() != size) Cfg.padOverlayScale = size / 100.0
+    }
+
+    LaunchedEffect(trackpadSpeed) {
+        delay(150)
+        if (ControllerPrefs.trackpadMouseSpeed(ctx) != trackpadSpeed) ControllerPrefs.setTrackpadMouseSpeed(ctx, trackpadSpeed)
     }
 
     LaunchedEffect(gyroSens) {
@@ -162,9 +168,13 @@ fun ControllerScreen() {
                 listOf(
                     ControllerPrefs.PAD_STICK to stringResource(R.string.tc_trackpad_stick),
                     ControllerPrefs.PAD_HID to stringResource(R.string.tc_trackpad_hid),
+                    ControllerPrefs.PAD_MOUSE to stringResource(R.string.tc_trackpad_mouse),
                 ),
                 trackpad,
             ) { trackpad = it; ControllerPrefs.setTrackpadMode(ctx, it) }
+            if (trackpad == ControllerPrefs.PAD_MOUSE) {
+                DeckSliderRow(stringResource(R.string.tc_ctrl_trackpad_speed), null, trackpadSpeed, 1..10) { trackpadSpeed = it }
+            }
         }
         DeckGroup(stringResource(R.string.ctrl_layout)) {
             DeckRow(
@@ -188,7 +198,7 @@ fun ControllerScreen() {
             DeckRow(stringResource(R.string.ctrl_reset_all), stringResource(R.string.ctrl_reset_all_hint)) {
                 DeckButton(stringResource(R.string.ctrl_reset), primary = false) {
                     ControllerPrefs.resetAll(ctx)
-                    gyro = false; gyroTarget = ControllerPrefs.GYRO_RIGHT; gyroSens = 5; trackpad = ControllerPrefs.PAD_STICK
+                    gyro = false; gyroTarget = ControllerPrefs.GYRO_RIGHT; gyroSens = 5; trackpad = ControllerPrefs.PAD_STICK; trackpadSpeed = 5
                     identity = "xbox360"; Cfg.padIdentity = identity
                     overlay = false; Cfg.padOverlay = overlay
                     opacity = 65; size = 100

@@ -133,6 +133,7 @@ fun SettingsScreen() {
 
         DeckGroup(stringResource(R.string.tc_group_audio)) {
             DeckSwitchRow(stringResource(R.string.tc_ui_direct_audio), stringResource(R.string.tc_ui_direct_audio_hint), Cfg.directAudio) { Cfg.directAudio = it }
+            DeckSwitchRow(stringResource(R.string.tc_ui_direct_audio_alsa), stringResource(R.string.tc_ui_direct_audio_alsa_hint), Cfg.directAudioPreferAlsa) { Cfg.directAudioPreferAlsa = it }
             DeckTextRow(stringResource(R.string.tc_ui_direct_audio_buffer), Cfg.directAudioBufferMs.toString(), number = true) { it.toIntOrNull()?.let { v -> if (v in 10..200) Cfg.directAudioBufferMs = v } }
             DeckTextRow(stringResource(R.string.tc_ui_pulseaudio_port), Cfg.defaultAudioPort.toString(), number = true) { it.toIntOrNull()?.let { v -> if (v in 1024..65535) Cfg.defaultAudioPort = v } }
             var mic by remember { mutableStateOf(micStreaming) }

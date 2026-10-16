@@ -64,6 +64,10 @@ class DisplayUiState {
     var pcKeyboard by mutableStateOf(false)
     /** True bila layar ini menjalankan aplikasi Shortcut (bukan desktop): tombol Shutdown dan layar progres aktif. */
     var appMode by mutableStateOf(false)
+    /** Ukuran scene compositor (kecepatan kursor trackpad mode mouse) dan penghitung muat-ulang tata letak controller. */
+    var sceneW by mutableStateOf(1280)
+    var sceneH by mutableStateOf(720)
+    var padLayoutRev by mutableStateOf(0)
 }
 
 /**
@@ -132,6 +136,8 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
         val size = Launcher.sessionSize(this, currentApp)
         outW = size.first
         outH = size.second
+        ui.sceneW = outW
+        ui.sceneH = outH
 
         // seret dimulai (tekan lama / tiga jari): getaran singkat sebagai tanda tombol kiri tertahan
         density = resources.displayMetrics.density
@@ -221,6 +227,8 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
         if (size.first == outW && size.second == outH) return
         outW = size.first
         outH = size.second
+        ui.sceneW = outW
+        ui.sceneH = outH
         if (surfaceReady) {
             WaylandCompositor.nativeResizeOutput(outW, outH)
             lastOutput = outW to outH
@@ -250,6 +258,8 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
         ui.padIdentity = Cfg.padIdentity
         ui.touchpad = Cfg.touchpadMode
         ui.showCursor = Cfg.showCursor
+        // kembali dari editor tata letak (atau pengaturan lain): controller layar membaca ulang posisi dan mode
+        ui.padLayoutRev++
         resumed = true
         syncMotion()
         surfaceView.requestFocus()

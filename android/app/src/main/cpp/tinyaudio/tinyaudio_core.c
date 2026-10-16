@@ -8,6 +8,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
@@ -37,6 +39,8 @@ typedef struct {
     double pos;                     /* posisi sampel keluaran berikutnya relatif ke x[] */
     double step;                    /* rate_in / 48000 */
     uint64_t last_ack;
+    int bridge;                     /* 1 = klien dari jembatan PulseAudio (tanpa hello, tanpa rekaman) */
+    int64_t last_rx;                /* ms; kapan byte terakhir diterima */
     /* --- ring SPSC (server menulis, callback membaca) --- */
     int16_t *ring;                  /* RING_FRAMES * 2 */
     atomic_uint_fast64_t wpos, rpos;
@@ -55,6 +59,8 @@ struct ta_server {
     atomic_uint underruns;
     atomic_int nclients;
     int64_t last_check;             /* ms; pemeriksaan berkas soket masih ada */
+    int bridge_port;
+    int64_t bridge_try;
     int32_t *mix;                   /* akumulator callback */
     int32_t mix_cap;
 };
@@ -104,7 +110,7 @@ ta_server *ta_server_create(const char *path)
 static void slot_reset(client_t *c)
 {
     if (c->fd >= 0) close(c->fd);
-    c->fd = -1; c->hello_n = 0; c->ready = 0; c->in_n = 0; c->pos = 1.0; c->last_ack = 0;
+    c->fd = -1; c->hello_n = 0; c->ready = 0; c->in_n = 0; c->pos = 1.0; c->last_ack = 0; c->bridge = 0; c->last_rx = 0;
     memset(c->hist, 0, sizeof c->hist);
     atomic_store(&c->wpos, 0); atomic_store(&c->rpos, 0); atomic_store(&c->played, 0);
     c->playing = 0; c->fade_in = 0;
@@ -133,6 +139,49 @@ uint32_t ta_server_underruns(const ta_server *s) { return atomic_load(&s->underr
 
 /* ------------------------------------------------------------------ server thread */
 
+static void activate(ta_server *s, client_t *c);
+
+static int64_t now_ms(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
+
+void ta_server_set_bridge(ta_server *s, int port) { s->bridge_port = port; }
+
+static void bridge_try(ta_server *s, int64_t now)
+{
+    if (s->bridge_port <= 0 || now - s->bridge_try < 1000) return;
+    s->bridge_try = now;
+    client_t *slot = NULL;
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        client_t *c = &s->c[i];
+        if (c->bridge) return;                                   /* sudah ada (atau sedang ditutup) */
+        if (!slot && atomic_load(&c->state) == SLOT_FREE && c->fd < 0) slot = c;
+    }
+    if (!slot) return;
+    int fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    if (fd < 0) return;
+    struct timeval tv = { 0, 200 * 1000 };
+    setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof tv);
+    struct sockaddr_in sa;
+    memset(&sa, 0, sizeof sa);
+    sa.sin_family = AF_INET;
+    sa.sin_port = htons((uint16_t)s->bridge_port);
+    sa.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    if (connect(fd, (struct sockaddr *)&sa, sizeof sa) < 0) { close(fd); return; }
+    fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
+    slot_reset(slot);
+    slot->fd = fd;
+    slot->bridge = 1;
+    slot->last_rx = now;
+    slot->hello = (struct ta_hello){ .magic = TA_MAGIC, .rate = TA_OUT_RATE, .channels = 2, .format = TA_FMT_S16LE,
+                                     .period_frames = 960, .buffer_frames = 9600 };
+    slot->hello_n = (int)sizeof slot->hello;
+    activate(s, slot);
+}
+
 static void accept_new(ta_server *s)
 {
     for (;;) {
@@ -148,6 +197,26 @@ static void accept_new(ta_server *s)
     }
 }
 
+static void activate(ta_server *s, client_t *c)
+{
+    const struct ta_hello *h = &c->hello;
+    c->step = (double)h->rate / TA_OUT_RATE;
+    c->pos = 1.0;
+    uint32_t period = (uint32_t)((uint64_t)h->period_frames * TA_OUT_RATE / h->rate);
+    uint32_t buffer = (uint32_t)((uint64_t)h->buffer_frames * TA_OUT_RATE / h->rate);
+    if (period < 64) period = 64;
+    uint32_t ms = (uint32_t)atomic_load(&s->prefill_ms);
+    if (c->bridge && ms < 100) ms = 100;        /* pulse mengirim berkelompok: butuh prefill lebih besar */
+    uint32_t want = ms * (TA_OUT_RATE / 1000);
+    uint32_t max = buffer > period * 2 ? buffer - period : period;
+    if (want > max) want = max;
+    if (want < period) want = period;
+    c->prefill = want;
+    c->ready = 1;
+    atomic_store(&c->state, SLOT_ACTIVE);
+    atomic_fetch_add(&s->nclients, 1);
+}
+
 static int client_hello(ta_server *s, client_t *c)
 {
     while (c->hello_n < (int)sizeof c->hello) {
@@ -161,19 +230,7 @@ static int client_hello(ta_server *s, client_t *c)
     if (h->magic != TA_MAGIC || h->rate < 8000 || h->rate > 96000 || h->channels < 1 ||
         h->channels > TA_MAX_CHANNELS || (h->format != TA_FMT_S16LE && h->format != TA_FMT_F32LE))
         return -1;
-    c->step = (double)h->rate / TA_OUT_RATE;
-    c->pos = 1.0;
-    uint32_t period = (uint32_t)((uint64_t)h->period_frames * TA_OUT_RATE / h->rate);
-    uint32_t buffer = (uint32_t)((uint64_t)h->buffer_frames * TA_OUT_RATE / h->rate);
-    if (period < 64) period = 64;
-    uint32_t want = (uint32_t)atomic_load(&s->prefill_ms) * (TA_OUT_RATE / 1000);
-    uint32_t max = buffer > period * 2 ? buffer - period : period;
-    if (want > max) want = max;
-    if (want < period) want = period;
-    c->prefill = want;
-    c->ready = 1;
-    atomic_store(&c->state, SLOT_ACTIVE);
-    atomic_fetch_add(&s->nclients, 1);
+    activate(s, c);
     return 0;
 }
 
@@ -275,6 +332,7 @@ static void client_read(ta_server *s, client_t *c)
             return;
         }
         c->in_n += (size_t)r;
+        c->last_rx = now_ms();
         size_t frames = c->in_n / fbytes;
         if (frames) {
             ingest(c, c->in, frames, room);
@@ -288,6 +346,7 @@ static void client_read(ta_server *s, client_t *c)
 
 static void send_ack(client_t *c)
 {
+    if (c->bridge) return;               /* soket record PulseAudio hanya searah */
     uint64_t played = atomic_load(&c->played);
     uint64_t ack = played * c->hello.rate / TA_OUT_RATE;
     if (ack == c->last_ack) return;
@@ -307,6 +366,8 @@ int ta_server_pump(ta_server *s, int timeout_ms)
         if (st == SLOT_FREE || st == SLOT_ACTIVE) { pf[n].fd = c->fd; pf[n].events = POLLIN; n++; }
     }
     poll(pf, (nfds_t)n, timeout_ms);
+    int64_t tnow = now_ms();
+    bridge_try(s, tnow);
     /* Berkas soket di /tmp kontainer bisa terhapus (pembersihan tmp oleh guest). Tanpa soket, plugin di guest
      * tidak bisa menyambung dan suara "hilang"; bind ulang tiap kali berkasnya tidak ada. */
     {
@@ -336,7 +397,14 @@ int ta_server_pump(ta_server *s, int timeout_ms)
             atomic_store(&c->state, SLOT_FREE);
         }
     }
-    return atomic_load(&s->nclients);
+    /* klien jembatan yang diam (sink null pulse tertidur) tidak menahan stream AAudio tetap terbuka */
+    int active = 0;
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        client_t *c = &s->c[i];
+        if (atomic_load(&c->state) != SLOT_ACTIVE) continue;
+        if (!c->bridge || tnow - c->last_rx < 1500) active++;
+    }
+    return active;
 }
 
 /* ------------------------------------------------------------------ audio callback */
@@ -379,6 +447,9 @@ void ta_server_render(ta_server *s, int16_t *out, int32_t frames)
                     fade_out = n > 0;
                     c->playing = 0;
                     atomic_fetch_add_explicit(&s->underruns, 1, memory_order_relaxed);
+                    /* jembatan pulse: klien dengan latency besar (bawaan paplay: kelompok ~300 ms) -> prefill belajar
+                     * naik tiap underrun sampai 500 ms; klien berlatency kecil (SDL/Firefox) tak pernah memicunya */
+                    if (c->bridge && c->prefill < 24000) c->prefill = c->prefill + c->prefill / 2 + 480;
                 }
             }
         }

@@ -288,7 +288,10 @@ pcm.!default {
     /**
      * pulseaudio.conf ditulis ulang di sini (bukan dari assets.zip) tanpa modul yang membuat suara hilang:
      * suspend-on-idle (sink tertidur dan tidak bangun lagi), role-cork, *-restore (volume lama 0 / mute), filter-*.
-     * Mode langsung: tanpa module-opensles, pulseaudio hanya dipakai sebagai perantara mikrofon.
+     * Mode langsung: tanpa module-opensles. Sink null `tinydirect` menjadi sink bawaan dan monitor-nya dibuka lewat
+     * module-simple-protocol-tcp (port pulse + 1, hanya 127.0.0.1) supaya server audio native (AAudio) mengambilnya:
+     * aplikasi yang memaksa pulse (SDL, Firefox) dan mixer desktop tetap bekerja tanpa OpenSL ES. Sink null aman diberi
+     * suspend-on-idle (tak ada perangkat keras yang perlu dibangunkan) sehingga stream AAudio ditutup saat hening.
      */
     private fun pulseConf(direct: Boolean): String = buildString {
         appendLine("# dibuat otomatis oleh Tiny Computer")
@@ -296,7 +299,12 @@ pcm.!default {
         appendLine("load-module module-native-protocol-unix")
         appendLine("load-module module-native-protocol-tcp auth-anonymous=true port=${Cfg.defaultAudioPort}")
         appendLine("load-module module-always-sink")
-        if (!direct) {
+        if (direct) {
+            appendLine("load-module module-null-sink sink_name=tinydirect rate=48000 channels=2 format=s16le")
+            appendLine("set-default-sink tinydirect")
+            appendLine("load-module module-suspend-on-idle timeout=3")
+            appendLine("load-module module-simple-protocol-tcp rate=48000 format=s16le channels=2 source=tinydirect.monitor record=true port=${Cfg.defaultAudioPort + 1} listen=127.0.0.1")
+        } else {
             appendLine("load-module module-opensles")
             appendLine("set-default-sink opensles")
         }
@@ -325,6 +333,8 @@ TMPDIR=${'$'}DATA_DIR/pulseaudio_tmp HOME=${'$'}DATA_DIR/pulseaudio_tmp XDG_CONF
         val direct = directAudioActive()
         installGuestAudio(direct)
         if (direct) {
+            // pulseaudio tetap dinyalakan: mixer desktop dan aplikasi pulse-only memakainya (keluaran lewat jembatan)
+            if (audioProcess?.isAlive != true) setupAudio()
             if (!TinyAudio.start()) Log.w("Launcher", "server audio native gagal start; suara tidak keluar")
             return
         }
@@ -332,7 +342,7 @@ TMPDIR=${'$'}DATA_DIR/pulseaudio_tmp HOME=${'$'}DATA_DIR/pulseaudio_tmp XDG_CONF
         if (audioProcess?.isAlive != true) setupAudio()
     }
 
-    /** Mikrofon virtual masih memakai pulseaudio (pactl/pacat); pada mode langsung ia dinyalakan hanya saat mik dipakai. */
+    /** Mikrofon virtual memakai pulseaudio (pactl/pacat); pastikan menyala. */
     fun ensurePulseForMic() {
         if (audioProcess?.isAlive != true) setupAudio()
     }
@@ -532,10 +542,13 @@ $data/bin/virgl_test_server ${Cfg.defaultVirglCommand}""".trimIndent(),
         if (File(extraDir, "tiny_virtual_mic").isFile) {
             extraMount += "--mount=\$DATA_DIR/tiny/extra/tiny_virtual_mic:/home/tiny/.local/bin/tiny_virtual_mic "
         }
-        // Audio langsung: SDL (PPSSPP, dll.) dipaksa ke ALSA yang diarahkan asound.conf ke plugin tinyaudio; PULSE_SERVER
-        // dialihkan ke soket mati supaya klien pulse gagal cepat, bukan menunggu server (EXTRA_OPT ditaruh setelah
-        // PULSE_SERVER bawaan di perintah boot, jadi menimpanya).
-        if (directAudioActive()) extraOpt.append("SDL_AUDIODRIVER=alsa AUDIODRIVER=alsa PULSE_SERVER=unix:/tmp/.tiny-no-pulse ")
+        // Audio langsung: klien pulse meminta latency kecil (membuat jembatan pulse mengirim potongan ~10 ms, bukan ~300 ms).
+        // Bila "Prefer ALSA" menyala, SDL (PPSSPP, dll.; nama env SDL2 dan SDL3) dipaksa ke ALSA yang diarahkan
+        // asound.conf ke plugin tinyaudio. Tanpa itu SDL memilih pulse lebih dulu dan tetap bersuara lewat jembatan.
+        if (directAudioActive()) {
+            extraOpt.append("PULSE_LATENCY_MSEC=40 ")
+            if (Cfg.directAudioPreferAlsa) extraOpt.append("SDL_AUDIODRIVER=alsa SDL_AUDIO_DRIVER=alsa AUDIODRIVER=alsa ")
+        }
         // log peluncuran: jalur berkas sesi untuk skrip Shortcut, shim Wine, dan Xsession desktop
         extraOpt.append(LaunchLog.envFor(log))
         return GuestSpec(extraMount, extraOpt.toString())

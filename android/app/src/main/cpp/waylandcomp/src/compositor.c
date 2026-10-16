@@ -1154,7 +1154,14 @@ static void surface_commit(struct wl_client *c, struct wl_resource *r) {
         s->pending_attach = 0;
 
         surface_drop_idle(s);  /* replaced, whatever the surface is now */
-        if (s->role == ROLE_CURSOR) {
+        if (s->role == ROLE_CURSOR && s != g_cursor_surface) {
+            /* A cursor surface that is not the pointer's current image (its client no longer holds the pointer,
+             * or set another surface / none): Wine runs several Wayland clients per prefix (explorer.exe,
+             * conhost.exe, the game), and each keeps updating its own cursor surface in the background.
+             * Publishing those commits overwrote or hid the image of the client the pointer is really over,
+             * so the pointer vanished. Keep the buffer for a set_cursor to come, as for a role-less surface. */
+            if (buffer) surface_hold_idle(s, buffer);
+        } else if (s->role == ROLE_CURSOR) {
             /* The client's pointer image, copied out for the app's overlay (see cursor_publish_*)
              * rather than composited, so it survives the zero-copy and HDR layer paths. */
             if (!buffer) {
@@ -2665,8 +2672,29 @@ static uint32_t now_ms(void) {
  * means "no cursor" and is authoritative. The surface itself is snapshotted on its next commit. */
 static void pointer_set_cursor(struct wl_client *c, struct wl_resource *r, uint32_t serial,
                                struct wl_resource *surface, int32_t hx, int32_t hy) {
+    /* Only the client the pointer is over may change the image (what weston and wlroots enforce with the
+     * enter serial). Every Wine process has its own wl_pointer and keeps calling set_cursor, also with a
+     * NULL surface (explorer.exe hiding its own cursor) while the pointer is over the game: that hid or
+     * replaced the game's cursor. During a window drag the pointer has no focus (see drag_begin) and
+     * Wine sets its cursor again on the enter that ends it. */
+    struct seat_pointer *sp = NULL;
+    for (int i = 0; i < g_nptrs; i++)
+        if (g_ptrs[i].ptr == r) { sp = &g_ptrs[i]; break; }
+    if (!sp || !sp->focus) {
+        static int ignored;
+        if (ignored < 20) {
+            pid_t pid = 0; uid_t uid; gid_t gid;
+            wl_client_get_credentials(c, &pid, &uid, &gid);
+            droiddeck_log("cursor", "set_cursor %s ignored: pid %d does not hold the pointer",
+                          surface ? "image" : "hide", (int)pid);
+            ignored++;
+        }
+        return;
+    }
     if (!surface) {
-        if (g_cursor_surface) g_cursor_surface->role = ROLE_NONE;
+        /* Only demote the current cursor surface when it is this client's own. */
+        if (g_cursor_surface && wl_resource_get_client(g_cursor_surface->resource) == c)
+            g_cursor_surface->role = ROLE_NONE;
         g_cursor_surface = NULL;
         cursor_publish_hidden();
         return;

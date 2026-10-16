@@ -75,6 +75,10 @@ object Cfg {
     var directAudio: Boolean
         get() = TinyPrefs.getBool("directAudio", true)
         set(v) = TinyPrefs.setBool("directAudio", v)
+    /** Paksa SDL (PPSSPP, dll.) dan Wine memakai ALSA langsung, bukan pulse. Bila gagal di guest, matikan: pulse tetap jalan lewat jembatan. */
+    var directAudioPreferAlsa: Boolean
+        get() = TinyPrefs.getBool("directAudioPreferAlsa", false)
+        set(v) = TinyPrefs.setBool("directAudioPreferAlsa", v)
     /** Buffer awal stream AAudio (ms). Naik otomatis bila terjadi xrun (maks 150 ms). */
     var directAudioBufferMs: Int
         get() = TinyPrefs.getInt("directAudioBufferMs", 40)

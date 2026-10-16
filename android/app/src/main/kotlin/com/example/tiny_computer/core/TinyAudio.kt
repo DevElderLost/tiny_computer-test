@@ -5,7 +5,8 @@ import java.io.File
 
 /**
  * Server audio native: menerima PCM dari plugin ALSA `tinyaudio` di guest lewat soket unix lalu memutarnya
- * lewat AAudio. Tidak memakai PulseAudio/OpenSL ES. Implementasi ada di cpp/tinyaudio.
+ * lewat AAudio (tanpa OpenSL ES). Aplikasi yang memaksa PulseAudio tetap bersuara lewat "jembatan": pulseaudio
+ * hanya menjadi sink null dan keluarannya diambil server ini. Implementasi ada di cpp/tinyaudio.
  */
 object TinyAudio {
     private const val TAG = "TinyAudio"
@@ -18,7 +19,7 @@ object TinyAudio {
 
     @Volatile private var path: String? = null
 
-    private external fun nativeStart(path: String, prefillMs: Int, bufferMs: Int): Boolean
+    private external fun nativeStart(path: String, prefillMs: Int, bufferMs: Int, bridgePort: Int): Boolean
     private external fun nativeStop()
     private external fun nativeRunning(): Boolean
     private external fun nativeStats(): LongArray
@@ -38,7 +39,8 @@ object TinyAudio {
         }
         File(want).parentFile?.mkdirs()
         val buffer = Cfg.directAudioBufferMs
-        val ok = nativeStart(want, minOf(30, buffer), buffer)
+        // jembatan PulseAudio: module-simple-protocol-tcp di port pulse + 1 (lihat Launcher.pulseConf)
+        val ok = nativeStart(want, minOf(30, buffer), buffer, Cfg.defaultAudioPort + 1)
         path = if (ok) want else null
         Log.i(TAG, "start($want) -> $ok")
         return ok

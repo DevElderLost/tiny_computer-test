@@ -272,7 +272,7 @@
     <string name="tc_gyro_right">右搖桿</string>
     <string name="tc_ctrl_gyro_sens">陀螺儀靈敏度</string>
     <string name="tc_ctrl_trackpad">左 / 右觸控板</string>
-    <string name="tc_ctrl_trackpad_hint">僅 Steam Deck 類型。搖桿：左觸控板驅動左搖桿，右觸控板驅動右搖桿；按住不動為點擊。下次工作階段生效。</string>
+    <string name="tc_ctrl_trackpad_hint">僅 Steam Deck 類型。搖桿：左觸控板驅動左搖桿，右觸控板驅動右搖桿；按住不動為點擊。滑鼠游標：兩個觸控板都移動滑鼠游標；輕點右觸控板為左鍵點擊，輕點左觸控板為右鍵點擊，按住右觸控板不動可拖曳。下次工作階段生效。</string>
     <string name="tc_trackpad_stick">搖桿（左對左，右對右）</string>
     <string name="tc_trackpad_hid">僅 Deck 回報</string>
     <string name="tc_ctrl_rumble_hint">遊戲震動會讓使用中的實體手把震動，沒有則本機震動。</string>
@@ -280,4 +280,7 @@
     <string name="tc_btn_close">關閉</string>
     <string name="tc_btn_save">儲存</string>
     <string name="tc_btn_cancel">取消</string>
+    <string name="tc_trackpad_mouse">滑鼠游標</string>
+    <string name="tc_ctrl_trackpad_speed">觸控板游標速度</string>
+    <string name="tc_drawer_edit_layout">編輯控制器配置</string>
 </resources>
