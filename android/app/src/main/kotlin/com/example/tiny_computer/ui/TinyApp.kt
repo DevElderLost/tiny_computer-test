@@ -23,7 +23,10 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -215,7 +218,7 @@ private fun TinyShell(
     // papan ketik terbuka: isi naik, dan di mode potret bilah bawah disembunyikan agar terminal tidak tertutup
     val imeOpen = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     val content: @Composable () -> Unit = {
-        if (showSettings) SettingsPage(onBack = onCloseSettings)
+        if (showSettings) SettingsPage()
         else when (Page.values()[page]) {
             Page.HOME -> HomeScreen(onOpenDesktop, onOpenSettings)
             Page.SHORTCUT -> ShortcutScreen(onLaunchApp, onShowTerminal = { onPage(Page.TERMINAL.ordinal) })
@@ -228,9 +231,14 @@ private fun TinyShell(
         // Lanskap seperti DroidDeck: rel navigasi di kiri (bukan bilah bawah yang memakan tinggi
         // layar), isi halaman di sisi kanan dengan inset sistem (tombol navigasi, poni) dihormati.
         Row(Modifier.fillMaxSize().background(pal.background)) {
-            NavigationRail(containerColor = pal.surface, modifier = Modifier.fillMaxHeight()) {
+            NavigationRail(
+                containerColor = pal.surface, modifier = Modifier.fillMaxHeight(),
+                // layar penuh: bilah sistem disembunyikan, jadi yang dihormati hanya poni/lubang kamera
+                windowInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout)
+                    .only(WindowInsetsSides.Start + WindowInsetsSides.Vertical),
+            ) {
                 // rata ke atas (gaya rel Material 3); ruang kosong tersisa di bawah, jadi tab baru muncul di bawah item yang ada
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(4.dp))
                 Page.values().forEach { p ->
                     NavigationRailItem(
                         selected = !showSettings && page == p.ordinal, onClick = { onPage(p.ordinal) },
@@ -377,16 +385,14 @@ private fun SettingsCog(onClick: () -> Unit) {
     }
 }
 
-/** Halaman Pengaturan dengan tombol kembali; tampil di area isi, navigasi (rel/bilah bawah) tetap terlihat. */
+/**
+ * Halaman Pengaturan; tampil di area isi, navigasi (rel/bilah bawah) tetap terlihat. Tanpa panah kembali:
+ * keluar dengan tombol Back sistem (BackHandler di [TinyApp]) atau dengan memilih salah satu tab navigasi.
+ */
 @Composable
-private fun SettingsPage(onBack: () -> Unit) {
+private fun SettingsPage() {
     val pal = LocalPalette.current
     Column(Modifier.fillMaxSize().background(pal.background)) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.Filled.ArrowBack, stringResource(R.string.tc_start_back), tint = pal.onBackground)
-            }
-        }
         // formulir panjang: dibatasi lebarnya supaya baris tidak melebar sepanjang layar lanskap
         Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.TopCenter) {
             Box(Modifier.widthIn(max = 720.dp).fillMaxSize()) { SettingsScreen() }

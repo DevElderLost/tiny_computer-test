@@ -8,6 +8,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.example.tiny_computer.core.AppPermissions
 import com.example.tiny_computer.core.Cfg
 import com.example.tiny_computer.core.Startup
@@ -34,10 +36,29 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
         )
         setContent { TinyTheme { TinyApp() } }
+        hideSystemBars()
+    }
+
+    /**
+     * Layar penuh: jam/baterai (status bar) dan tombol navigasi Android disembunyikan. Geser dari tepi layar
+     * memunculkannya sebentar saja (transient), seperti layar desktop.
+     */
+    private fun hideSystemBars() {
+        WindowInsetsControllerCompat(window, window.decorView).apply {
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            hide(WindowInsetsCompat.Type.systemBars())
+        }
+    }
+
+    // bilah sistem muncul lagi setelah dialog/papan ketik/layar lain menutup: sembunyikan ulang saat fokus kembali
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) hideSystemBars()
     }
 
     override fun onResume() {
         super.onResume()
+        hideSystemBars()
         if (Cfg.wakelock) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
