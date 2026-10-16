@@ -69,6 +69,7 @@ import com.example.tiny_computer.core.DesktopApps
 import com.example.tiny_computer.core.ExeShortcuts
 import com.example.tiny_computer.core.Launcher
 import com.example.tiny_computer.core.ShortcutPrefs
+import com.example.tiny_computer.core.ShortcutRunner
 import com.example.tiny_computer.core.Startup
 import com.example.tiny_computer.core.TinyEnv
 import kotlinx.coroutines.Dispatchers
@@ -209,7 +210,7 @@ fun ShortcutScreen(onLaunch: (String) -> Unit, onShowTerminal: () -> Unit = {}) 
     }
 
     editing?.let { app ->
-        AppSettingsDialog(app, onRemoved = { editing = null; refresh++ }) { editing = null }
+        AppSettingsDialog(app, onRemoved = { editing = null; refresh++ }, onShowTerminal = onShowTerminal) { editing = null }
     }
 }
 
@@ -308,7 +309,7 @@ private const val SCREEN_CUSTOM = "custom"
  * disimpan terpisah ([ShortcutPrefs]); pengaturan desktop utama tidak disentuh.
  */
 @Composable
-private fun AppSettingsDialog(app: DesktopApps.App, onRemoved: () -> Unit, onDismiss: () -> Unit) {
+private fun AppSettingsDialog(app: DesktopApps.App, onRemoved: () -> Unit, onShowTerminal: () -> Unit, onDismiss: () -> Unit) {
     val pal = LocalPalette.current
     val ctx = LocalContext.current
     var s by remember(app.id) { mutableStateOf(ShortcutPrefs.get(app.id)) }
@@ -319,6 +320,15 @@ private fun AppSettingsDialog(app: DesktopApps.App, onRemoved: () -> Unit, onDis
     val off = stringResource(R.string.tc_sc_opt_off)
     val shape = RoundedCornerShape(20.dp)
     val maxH = (LocalConfiguration.current.screenHeightDp * 0.9f).dp
+    // Isian yang kosong diisi dari berkas .desktop (Name, Exec, awalan env di Exec, Path); bila .desktop tidak memuatnya
+    // tetap kosong. Teks isian disimpan di state lokal supaya mengosongkannya tidak langsung terisi lagi; nilai yang
+    // sama dengan bawaan .desktop disimpan sebagai kosong (= ikuti .desktop).
+    val d = remember(app.id) { ShortcutRunner.desktopDefaults(app) }
+    var nameText by remember(app.id) { mutableStateOf(s.name.ifBlank { d.name }) }
+    var commandText by remember(app.id) { mutableStateOf(s.command.ifBlank { d.command }) }
+    var workText by remember(app.id) { mutableStateOf(s.workDir.ifBlank { d.workDir }) }
+    var envText by remember(app.id) { mutableStateOf(s.env.ifBlank { d.env }) }
+    fun stored(text: String, def: String) = if (text.trim() == def.trim()) "" else text
     // ukuran layar: pratetap atau isian sendiri; dinaikkan ke sini agar Reset ikut mengosongkannya
     var customScreen by remember(app.id) { mutableStateOf(s.screen.isNotEmpty() && s.screen !in SCREEN_PRESETS) }
     var cw by remember(app.id) { mutableStateOf(ShortcutPrefs.parseSize(s.screen)?.first?.toString().orEmpty()) }
@@ -342,10 +352,13 @@ private fun AppSettingsDialog(app: DesktopApps.App, onRemoved: () -> Unit, onDis
                 HintText(stringResource(R.string.tc_sc_settings_hint))
 
                 DeckGroup(stringResource(R.string.tc_sc_group_launch)) {
-                    DeckTextRow(stringResource(R.string.tc_sc_name), s.name) { update(s.copy(name = it)) }
+                    DeckTextRow(stringResource(R.string.tc_sc_name), nameText) { nameText = it; update(s.copy(name = stored(it, d.name))) }
+                    DeckTextRow(
+                        stringResource(R.string.tc_sc_command), commandText, hint = stringResource(R.string.tc_sc_command_hint), multiline = true,
+                    ) { commandText = it; update(s.copy(command = stored(it, d.command))) }
                     DeckTextRow(stringResource(R.string.tc_sc_args), s.args) { update(s.copy(args = it)) }
-                    DeckTextRow(stringResource(R.string.tc_sc_workdir), s.workDir) { update(s.copy(workDir = it)) }
-                    DeckTextRow(stringResource(R.string.tc_sc_env), s.env, multiline = true) { update(s.copy(env = it)) }
+                    DeckTextRow(stringResource(R.string.tc_sc_workdir), workText) { workText = it; update(s.copy(workDir = stored(it, d.workDir))) }
+                    DeckTextRow(stringResource(R.string.tc_sc_env), envText, multiline = true) { envText = it; update(s.copy(env = stored(it, d.env))) }
                 }
                 DeckGroup(stringResource(R.string.tc_sc_group_display)) {
                     DeckChoiceRow(
@@ -410,6 +423,7 @@ private fun AppSettingsDialog(app: DesktopApps.App, onRemoved: () -> Unit, onDis
                     DeckButton(stringResource(R.string.tc_sc_reset), Modifier.weight(1f), primary = false) {
                         ShortcutPrefs.reset(app.id)
                         s = ShortcutPrefs.Settings()
+                        nameText = d.name; commandText = d.command; workText = d.workDir; envText = d.env
                         customScreen = false; cw = ""; ch = ""
                     }
                     DeckButton(stringResource(R.string.tc_close), Modifier.weight(1f), onClick = onDismiss)
@@ -418,7 +432,26 @@ private fun AppSettingsDialog(app: DesktopApps.App, onRemoved: () -> Unit, onDis
                 if (ExeShortcuts.isExeShortcut(app.id) || AppImageInstaller.isAppImageShortcut(app.id)) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp)) {
                         DeckButton(stringResource(R.string.tc_sc_remove), Modifier.weight(1f), primary = false) {
-                            if (AppImageInstaller.isAppImageShortcut(app.id)) AppImageInstaller.remove(app.id) else ExeShortcuts.remove(app.id)
+                            if (AppImageInstaller.isAppImageShortcut(app.id)) {
+                                // uninstall AppImage = kebalikan pasang: skrip dijalankan di terminal kontainer
+                                // (langkahnya terlihat di tab Terminal); tanpa sistem terpasang, hapus langsung
+                                val id = app.id
+                                if (AppImageInstaller.prepareRemove(id)) {
+                                    val command = AppImageInstaller.terminalRemoveCommand(id)
+                                    AppImageInstaller.watchRemove(id)
+                                    if (Startup.phase == Startup.Phase.DONE && Launcher.isStarted) {
+                                        Launcher.runInTerminal(ctx, command)
+                                        onShowTerminal()
+                                    } else {
+                                        Startup.beginForTerminal(ctx, command)
+                                    }
+                                    Toast.makeText(ctx, ctx.getString(R.string.tc_sc_ai_removing, app.name), Toast.LENGTH_LONG).show()
+                                } else {
+                                    AppImageInstaller.remove(id)
+                                }
+                            } else {
+                                ExeShortcuts.remove(app.id)
+                            }
                             onRemoved()
                         }
                     }

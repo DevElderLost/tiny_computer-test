@@ -43,10 +43,77 @@ object ShortcutRunner {
         return s.replace("\u0000", "%").replace(Regex("\\s+"), " ").trim()
     }
 
+    /** Nilai bawaan satu shortcut menurut berkas .desktop-nya; kosong bila berkasnya tidak memuat bagian itu. */
+    class DesktopDefaults(val name: String, val command: String, val env: String, val workDir: String)
+
+    /** Satu token sh mulai [from]: (indeks akhir, nilai tanpa kutip). Kutip tunggal/ganda dan backslash dihormati. */
+    private fun shToken(s: String, from: Int): Pair<Int, String> {
+        var i = from
+        val sb = StringBuilder()
+        var quote = '\u0000'
+        while (i < s.length) {
+            val c = s[i]
+            when {
+                quote != '\u0000' -> when {
+                    c == quote -> quote = '\u0000'
+                    c == '\\' && quote == '"' && i + 1 < s.length -> sb.append(s[++i])
+                    else -> sb.append(c)
+                }
+                c == '\'' || c == '"' -> quote = c
+                c == '\\' && i + 1 < s.length -> sb.append(s[++i])
+                c.isWhitespace() -> return i to sb.toString()
+                else -> sb.append(c)
+            }
+            i++
+        }
+        return i to sb.toString()
+    }
+
+    private val ENV_ASSIGN = Regex("^[A-Za-z_][A-Za-z0-9_]*=")
+
+    /**
+     * Memisahkan awalan variabel lingkungan dari baris Exec yang sudah dibersihkan: `env A=1 B="x y" prog arg` atau
+     * `A=1 prog arg` -> ("A=1\nB=x y", "prog arg"). Awalan hanya dipisah bila setelahnya masih ada perintah dan
+     * semua token awalnya berbentuk KEY=VALUE polos; `env` dengan opsi (`-i`, `-u`, dst) dibiarkan utuh di perintah.
+     */
+    fun splitEnvPrefix(cmd: String): Pair<String, String> {
+        var j = 0
+        fun skipWs() { while (j < cmd.length && cmd[j].isWhitespace()) j++ }
+        skipWs()
+        val (e0, t0) = shToken(cmd, j)
+        if (t0 == "env") j = e0
+        val lines = ArrayList<String>()
+        while (true) {
+            skipWs()
+            if (j >= cmd.length) break
+            val (e, t) = shToken(cmd, j)
+            if (!ENV_ASSIGN.containsMatchIn(cmd.substring(j, e))) break
+            lines += t
+            j = e
+        }
+        skipWs()
+        if (lines.isEmpty() || j >= cmd.length) return "" to cmd
+        return lines.joinToString("\n") to cmd.substring(j)
+    }
+
+    /** Nama, perintah, variabel lingkungan, dan direktori kerja dari berkas .desktop (Name, Exec, Path). */
+    fun desktopDefaults(app: DesktopApps.App): DesktopDefaults {
+        val (env, command) = splitEnvPrefix(cleanExec(app.exec))
+        return DesktopDefaults(app.name, command, env, app.path)
+    }
+
+    /** Perintah yang dijalankan: isian pengguna bila ada, kalau tidak Exec dari .desktop (tanpa awalan env). */
+    fun effectiveCommand(app: DesktopApps.App, s: ShortcutPrefs.Settings): String =
+        cleanExec(s.command).ifEmpty { splitEnvPrefix(cleanExec(app.exec)).second }
+
+    /** Variabel lingkungan yang diekspor: isian pengguna bila ada, kalau tidak awalan `env` di Exec .desktop. */
+    fun effectiveEnv(app: DesktopApps.App, s: ShortcutPrefs.Settings): String =
+        if (s.env.isNotBlank()) s.env else splitEnvPrefix(cleanExec(app.exec)).first
+
     /** Aplikasi Wine (shortcut .exe atau perintah `wine ...`)? Dipakai untuk memutuskan window manager sesi Shortcut. */
     fun isWineApp(appId: String): Boolean {
         val app = DesktopApps.find(appId) ?: return false
-        val prog = cleanExec(app.exec).substringBefore(' ').substringAfterLast('/')
+        val prog = effectiveCommand(app, ShortcutPrefs.get(appId)).substringBefore(' ').substringAfterLast('/')
         return prog == "wine" || prog == "wine64"
     }
 
@@ -91,7 +158,7 @@ fi
         sb.append("i=0; while [ \$i -lt 150 ] && [ ! -S /tmp/.X11-unix/X4 ]; do sleep 0.2; i=\$((i+1)); done\n")
 
         // Aplikasi Wine? (dipakai untuk memilih jalur Wayland di bawah)
-        val prog = cleanExec(app.exec).substringBefore(' ').substringAfterLast('/')
+        val prog = effectiveCommand(app, s).substringBefore(' ').substringAfterLast('/')
         val isWine = prog == "wine" || prog == "wine64"
         // Window manager sesi Shortcut (xfwm4 dst.) bawaannya menyala untuk aplikasi Linux. Aplikasi Wine butuh layar penuh
         // (WM memberi bingkai dan menahan jendela game), jadi aplikasi Wine mematikan WM dan menulis ~/.vnc/no-wm; penjaga
@@ -154,7 +221,7 @@ fi
             ShortcutPrefs.OFF -> sb.append("unset GDK_SCALE QT_FONT_DPI\n")
         }
         // variabel lingkungan buatan pengguna
-        for (line in s.env.lineSequence()) {
+        for (line in effectiveEnv(app, s).lineSequence()) {
             val t = line.trim()
             val i = t.indexOf('=')
             if (i <= 0) continue
@@ -262,7 +329,7 @@ echo "[tiny] Wine: $why"
         // Mode Direct3D (WineD3D / DXVK) pilihan pengguna: registri prefix disamakan bila belum sesuai.
         if (isWine) WineSystem.d3dSyncScript()?.let { sb.append(it) }
 
-        var cmd = cleanExec(app.exec)
+        var cmd = effectiveCommand(app, s)
         if (s.args.isNotBlank()) cmd += " " + s.args.trim()
         if (app.terminal) cmd = "x-terminal-emulator -e sh -c ${q("exec $cmd")}"
         // Wine: jalankan di dalam virtual desktop seukuran layar X sesi. Xwayland rootful menawarkan mode XRandR

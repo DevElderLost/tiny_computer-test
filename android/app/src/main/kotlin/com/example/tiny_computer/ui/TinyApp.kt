@@ -175,6 +175,25 @@ fun TinyApp() {
         }
         AppImageInstaller.stopWatching(id)
     }
+    // uninstall AppImage selesai: sama seperti pemasangan, terminal ditutup dan tampilan kembali ke tab Shortcut.
+    // Sisa pembersihan sisi Android (pengaturan, log, cache ikon) dikerjakan setelah skrip menulis penanda selesai.
+    val uninstalling = AppImageInstaller.removing
+    LaunchedEffect(uninstalling) {
+        val id = uninstalling ?: return@LaunchedEffect
+        val deadline = System.currentTimeMillis() + INSTALL_WAIT_MS
+        while (System.currentTimeMillis() < deadline) {
+            if (withContext(Dispatchers.IO) { AppImageInstaller.isRemoved(id) }) {
+                withContext(Dispatchers.IO) { AppImageInstaller.finishRemove(id) }
+                delay(INSTALL_DONE_PAUSE_MS)
+                if (page == Page.TERMINAL.ordinal) page = Page.SHORTCUT.ordinal
+                if (!Launcher.guiStarted) Launcher.shutdownTerminal()
+                AppImageInstaller.stopWatchingRemove(id)
+                return@LaunchedEffect
+            }
+            delay(INSTALL_POLL_MS)
+        }
+        AppImageInstaller.stopWatchingRemove(id)
+    }
     // jangan keluar dari aplikasi di tengah pemasangan
     BackHandler(enabled = phase == Startup.Phase.RUNNING) {}
     // Pengaturan: dibuka dari ikon roda gigi di samping Open desktop, tampil di area isi dengan rel navigasi tetap terlihat
@@ -186,7 +205,7 @@ fun TinyApp() {
             phase == Startup.Phase.DONE, showSettings, { showSettings = false },
         )
         // tombol mengambang kembali ke desktop: hanya saat desktop sudah jalan, dan tidak saat memasang AppImage
-        if (phase == Startup.Phase.DONE && Launcher.guiStarted && AppImageInstaller.watching == null) {
+        if (phase == Startup.Phase.DONE && Launcher.guiStarted && AppImageInstaller.watching == null && AppImageInstaller.removing == null) {
             BackToDesktopButton(openDesktop)
         }
         if (phase == Startup.Phase.RUNNING || phase == Startup.Phase.FAILED) StartupOverlay(onClose = { Startup.dismiss() })

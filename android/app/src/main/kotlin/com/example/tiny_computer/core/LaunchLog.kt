@@ -78,8 +78,9 @@ object LaunchLog {
     /** Satu baris ringkas tentang aplikasi Shortcut yang akan dijalankan: id, nama, perintah + argumen. */
     fun describe(appId: String): String {
         val app = runCatching { DesktopApps.find(appId) }.getOrNull() ?: return appId
-        val args = ShortcutPrefs.get(appId).args.trim()
-        val cmd = ShortcutRunner.cleanExec(app.exec) + if (args.isNotEmpty()) " $args" else ""
+        val prefs = ShortcutPrefs.get(appId)
+        val args = prefs.args.trim()
+        val cmd = ShortcutRunner.effectiveCommand(app, prefs) + if (args.isNotEmpty()) " $args" else ""
         return "${app.name} [$appId]: $cmd"
     }
 }

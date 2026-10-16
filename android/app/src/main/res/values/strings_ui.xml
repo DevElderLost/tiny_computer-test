@@ -338,6 +338,8 @@
     <string name="tc_sc_group_launch">Launch</string>
     <string name="tc_sc_group_display">Graphics and input</string>
     <string name="tc_sc_name">Display name</string>
+    <string name="tc_sc_command">Launch command</string>
+    <string name="tc_sc_command_hint">The command this app runs, read from the Exec line of its .desktop file (the Wine command for .exe shortcuts). Edit it to run something else; clear it to go back to the .desktop value. Empty fields in this section are filled from the .desktop file when it has them. Extra launch arguments are added after this command.</string>
     <string name="tc_sc_args">Extra launch arguments</string>
     <string name="tc_sc_workdir">Working directory</string>
     <string name="tc_sc_env">Environment variables (one KEY=VALUE per line)</string>
@@ -361,6 +363,7 @@
     <string name="tc_sc_remove">Remove this shortcut</string>
     <string name="tc_sc_ai_checking">Checking the AppImage and copying it into the Linux system…</string>
     <string name="tc_sc_ai_installing">Installing %1$s. Follow the progress in the Terminal tab.</string>
+    <string name="tc_sc_ai_removing">Removing %1$s. Follow the progress in the Terminal tab.</string>
     <string name="tc_sc_ai_not_appimage">This is not a valid AppImage (it must be a Linux .AppImage file).</string>
     <string name="tc_sc_ai_wrong_arch">Installation cancelled: this AppImage is built for %1$s, not ARM64 (aarch64).</string>
     <string name="tc_sc_ai_bad_type">Installation cancelled: only type 2 AppImages are supported (this one is type %1$d).</string>

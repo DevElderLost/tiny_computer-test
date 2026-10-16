@@ -67,6 +67,26 @@ object AppImageInstaller {
 
     private const val DONE_MARK = "install.done"
 
+    /**
+     * Id AppImage yang skrip uninstall-nya sedang berjalan di terminal. Seperti [watching] untuk pemasangan:
+     * TinyApp menunggu penanda selesai ([isRemoved]) lalu menutup terminal dan kembali ke tab Shortcut.
+     */
+    var removing by mutableStateOf<String?>(null)
+        private set
+
+    fun watchRemove(id: String) { removing = id }
+
+    fun stopWatchingRemove(id: String) { if (removing == id) removing = null }
+
+    /**
+     * Skrip uninstall menulis berkas ini di langkah terakhir. Letaknya DI LUAR folder `<id>/` (folder itu ikut
+     * dihapus), dan tidak ada bila gagal supaya terminal dibiarkan terbuka dan galatnya terbaca.
+     */
+    fun isRemoved(id: String) = File(baseDir(), "$id$REMOVE_DONE_SUFFIX").exists()
+
+    private const val REMOVE_DONE_SUFFIX = ".uninstall.done"
+    private const val REMOVE_SCRIPT_SUFFIX = ".uninstall.sh"
+
     fun isAppImageName(name: String?) = name != null && name.endsWith(".appimage", ignoreCase = true)
 
     private fun baseDir() = File(TinyEnv.containerDir(), "home/tiny/.local/share/appimages")
@@ -277,6 +297,101 @@ echo "[4/4] Selesai: ${'$'}NAME terpasang."
 echo "Buka tab Shortcut (tekan tombol segarkan) lalu ketuk ikonnya untuk menjalankan."
 : > "${'$'}BASE/install.done"
 """
+
+    private fun validId(id: String) = isAppImageShortcut(id) && '/' !in id && !id.contains("..") && id.matches(Regex("[A-Za-z0-9._-]+"))
+
+    /** True bila AppImage [id] ada di sistem (folder pasang atau entri .desktop-nya). */
+    fun isInstalled(id: String) = validId(id) && (File(baseDir(), id).exists() || File(appsDir(), "$id.desktop").exists())
+
+    /**
+     * Menulis skrip uninstall untuk [id] ke `appimages/<id>.uninstall.sh` (di luar folder `<id>/` supaya tidak
+     * terhapus oleh dirinya sendiri). Skrip ditulis saat dibutuhkan, jadi AppImage yang dipasang sebelum fitur ini
+     * ada juga bisa dihapus. Mengembalikan false bila [id] tidak valid atau sistem Linux belum terpasang.
+     */
+    fun prepareRemove(id: String): Boolean {
+        if (!validId(id) || !Startup.installed || !File(TinyEnv.containerDir(), "home/tiny").isDirectory) return false
+        return try {
+            baseDir().mkdirs()
+            File(baseDir(), "$id$REMOVE_DONE_SUFFIX").delete()
+            val script = File(baseDir(), "$id$REMOVE_SCRIPT_SUFFIX")
+            script.writeText(uninstallScript(id))
+            script.setReadable(true, false)
+            script.setExecutable(true, false)
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /** Baris yang ditulis ke terminal kontainer untuk menjalankan uninstall [id]. */
+    fun terminalRemoveCommand(id: String): String = "clear; bash /home/tiny/.local/share/appimages/$id$REMOVE_SCRIPT_SUFFIX"
+
+    /**
+     * Skrip uninstall = kebalikan [installScript], langkahnya dibalik dari yang terakhir:
+     * - install [4/4] hapus image & tulis `install.done`   -> uninstall [1/4] hapus penanda `install.done`
+     * - install [3/4] buat ikon, peluncur, `.desktop`      -> uninstall [2/4] hapus `.desktop`, ikon, peluncur
+     * - install [2/4] ekstrak ke `app/` + symlink alias    -> uninstall [3/4] hapus `app/`, alias, sisa ekstraksi
+     * - install [1/4] salin image + skrip ke `<id>/`       -> uninstall [4/4] hapus folder `<id>/` dan skrip ini
+     * `.desktop` hanya dihapus bila penanda `X-Tiny-AppImage=<id>` cocok, jadi entri lain tidak tersentuh.
+     */
+    private fun uninstallScript(id: String): String = """#!/bin/bash
+ID='$id'
+BASE="${'$'}HOME/.local/share/appimages/${'$'}ID"
+APPS="${'$'}HOME/.local/share/applications"
+SELF="${'$'}HOME/.local/share/appimages/${'$'}ID$REMOVE_SCRIPT_SUFFIX"
+DONE="${'$'}HOME/.local/share/appimages/${'$'}ID$REMOVE_DONE_SUFFIX"
+DESK="${'$'}APPS/${'$'}ID.desktop"
+NAME=""
+[ -f "${'$'}DESK" ] && NAME="${'$'}(sed -n 's/^Name=//p' "${'$'}DESK" | head -n 1 | tr -d '\r')"
+[ -z "${'$'}NAME" ] && NAME="${'$'}ID"
+cd "${'$'}HOME" || exit 1
+echo "=== Hapus AppImage: ${'$'}NAME ==="
+echo "[1/4] Mencabut penanda pemasangan..."
+rm -f "${'$'}BASE/install.done"
+echo "[2/4] Menghapus shortcut (menu, ikon, peluncur)..."
+if [ -f "${'$'}DESK" ]; then
+  if grep -q "^X-Tiny-AppImage=${'$'}ID${'$'}" "${'$'}DESK"; then
+    rm -f "${'$'}DESK"
+  else
+    echo "    LEWATI: ${'$'}DESK bukan milik AppImage ini"
+  fi
+fi
+rm -f "${'$'}BASE/icon.png" "${'$'}BASE/icon.svg" "${'$'}BASE/app/tiny-launch.sh"
+echo "[3/4] Menghapus hasil ekstraksi AppImage..."
+if [ -d "${'$'}BASE/app" ]; then
+  echo "    ${'$'}(find "${'$'}BASE/app" -type f 2>/dev/null | wc -l) berkas dihapus"
+fi
+# rm -rf tidak mengikuti symlink: aman untuk isi AppImage yang penuh symlink absolut
+chmod -R u+w "${'$'}BASE/app" 2>/dev/null
+rm -rf "${'$'}BASE/app" "${'$'}BASE/squashfs-root" "${'$'}BASE/AppDir" "${'$'}BASE/extract.log" "${'$'}BASE/image.AppImage"
+# alias symlink nama folder ekstraksi lama -> app (dibuat saat pasang)
+find "${'$'}BASE" -maxdepth 1 -type l -exec rm -f {} + 2>/dev/null
+echo "[4/4] Menghapus folder AppImage..."
+chmod -R u+w "${'$'}BASE" 2>/dev/null
+rm -rf "${'$'}BASE"
+if [ -e "${'$'}BASE" ] || [ -L "${'$'}BASE" ]; then
+  echo "GAGAL: ${'$'}BASE tidak bisa dihapus."
+  exit 1
+fi
+echo "Selesai: ${'$'}NAME dihapus."
+echo "Kembali ke tab Shortcut..."
+: > "${'$'}DONE"
+rm -f "${'$'}SELF"
+"""
+
+    /**
+     * Sisa uninstall yang hanya bisa dikerjakan dari sisi Android setelah skrip selesai: pengaturan per aplikasi,
+     * skrip peluncur, log, cache ikon, dan penanda selesai. Dipanggil di thread latar.
+     */
+    fun finishRemove(id: String) {
+        if (!validId(id)) return
+        DesktopApps.forgetIcon(id)
+        ShortcutPrefs.reset(id)
+        File(TinyEnv.dataPath, "tiny/shortcuts/run-${safe(id)}.sh").delete()
+        File(TinyEnv.containerDir(), "home/tiny/.vnc/shortcut-${safe(id)}.log").delete()
+        File(baseDir(), "$id$REMOVE_DONE_SUFFIX").delete()
+        File(baseDir(), "$id$REMOVE_SCRIPT_SUFFIX").delete()
+    }
 
     /** Menghapus AppImage terpasang beserta entri menu, pengaturan, dan isi ekstraksinya. Entri lain tidak disentuh. */
     fun remove(id: String): Boolean {

@@ -22,6 +22,8 @@ object ShortcutPrefs {
     data class Settings(
         /** Nama tampilan; kosong = nama dari berkas .desktop. */
         val name: String = "",
+        /** Perintah peluncuran pengganti baris Exec; kosong = Exec dari berkas .desktop (tanpa awalan `env KEY=VALUE`). */
+        val command: String = "",
         /** Argumen tambahan di belakang perintah Exec. */
         val args: String = "",
         /** Variabel lingkungan, satu `KEY=VALUE` per baris. */
@@ -51,7 +53,7 @@ object ShortcutPrefs {
         return runCatching {
             val o = JSONObject(raw)
             Settings(
-                name = o.optString("name"), args = o.optString("args"), env = o.optString("env"),
+                name = o.optString("name"), command = o.optString("command"), args = o.optString("args"), env = o.optString("env"),
                 workDir = o.optString("workDir"), gpu = o.optString("gpu", DEFAULT), hidpi = o.optString("hidpi", DEFAULT),
                 pad = o.optString("pad", DEFAULT), screen = o.optString("screen"),
                 hidden = o.optBoolean("hidden", false),
@@ -63,7 +65,7 @@ object ShortcutPrefs {
         if (s == Settings()) sp.edit().remove("app.$id").apply()
         else {
             val o = JSONObject()
-                .put("name", s.name).put("args", s.args).put("env", s.env).put("workDir", s.workDir)
+                .put("name", s.name).put("command", s.command).put("args", s.args).put("env", s.env).put("workDir", s.workDir)
                 .put("gpu", s.gpu).put("hidpi", s.hidpi).put("pad", s.pad).put("screen", s.screen)
                 .put("hidden", s.hidden)
             sp.edit().putString("app.$id", o.toString()).apply()
