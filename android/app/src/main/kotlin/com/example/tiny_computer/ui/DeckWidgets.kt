@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -54,6 +55,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
@@ -86,7 +88,7 @@ import kotlin.math.roundToInt
 // Baris pengaturan bergaya DroidDeck (ui/SettingsWidgets.kt): judul kelompok + garis tipis; tiap baris berisi label di
 // kiri dan kontrol (saklar, menu turun, isian) di ujung kanan. Teks penjelasan tidak ditulis di baris: tombol "?" di
 // ujung kanan membukanya sebagai dialog. Isian teks panjang (multiline) tampil sebagai kotak ringkas yang membuka
-// dialog penuh untuk mengedit.
+// dialog kartu (seperti dialog pengaturan Shortcut) untuk mengedit.
 
 private val DeckGroupShape = RoundedCornerShape(14.dp)
 
@@ -366,7 +368,7 @@ private fun DeckField(value: String, number: Boolean, multiline: Boolean, modifi
 /**
  * Isian teks sebagai baris pengaturan: label di kiri, kolom isian ringkas di ujung kanan. Isian pendek diedit langsung di
  * kolom (disimpan setiap diubah). Bila [multiline], kolom hanya menampilkan baris-baris teks sebagai satu baris dan
- * menekannya membuka dialog penuh untuk mengedit; perubahan disimpan saat Save ditekan.
+ * menekannya membuka dialog kartu untuk mengedit; perubahan disimpan saat Save ditekan.
  */
 @Composable
 fun DeckTextRow(label: String, value: String, hint: String? = null, number: Boolean = false, multiline: Boolean = false, onCommit: (String) -> Unit) {
@@ -401,34 +403,51 @@ private fun DeckFieldPreview(text: String, onClick: () -> Unit) {
     }
 }
 
-/** Dialog layar penuh untuk mengedit teks panjang (perintah, variabel lingkungan): Cancel membuang, Save menyimpan. */
+/**
+ * Dialog untuk mengedit teks panjang (perintah, variabel lingkungan), bergaya sama dengan dialog pengaturan Shortcut:
+ * kartu membulat di tengah layar (bukan layar penuh) dan naik di atas papan ketik. Cancel membuang, Save menyimpan;
+ * ketukan di luar kartu diabaikan supaya hasil ketikan tidak hilang tak sengaja.
+ */
 @Composable
 private fun DeckTextEditDialog(title: String, initial: String, onDismiss: () -> Unit, onSave: (String) -> Unit) {
     val colors = MaterialTheme.colorScheme
     val pal = LocalPalette.current
     var draft by remember { mutableStateOf(TextFieldValue(initial, TextRange(initial.length))) }
+    var focused by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    val shape = RoundedCornerShape(20.dp)
+    val fieldShape = RoundedCornerShape(10.dp)
+    val maxH = (LocalConfiguration.current.screenHeightDp * 0.9f).dp
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnClickOutside = false)) {
-        Column(Modifier.fillMaxSize().background(colors.background)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+        Box(Modifier.fillMaxSize().imePadding().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+            Column(
+                Modifier.widthIn(max = 560.dp).fillMaxWidth(0.92f).heightIn(max = maxH)
+                    .clip(shape).background(pal.background, shape).border(1.dp, pal.line2, shape)
+                    .padding(16.dp),
             ) {
-                TextButton(onClick = onDismiss) { Text(stringResource(R.string.tc_btn_cancel), color = colors.onSurfaceVariant) }
                 Text(
                     title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = colors.onBackground, maxLines = 1,
-                    overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+                    overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 2.dp, bottom = 10.dp),
                 )
-                DeckButton(stringResource(R.string.tc_btn_save), Modifier.widthIn(min = 96.dp)) { onSave(draft.text) }
+                Box(
+                    Modifier.weight(1f, fill = false).fillMaxWidth().heightIn(min = 96.dp, max = 260.dp)
+                        .clip(fieldShape).background(colors.surfaceVariant)
+                        .border(1.dp, if (focused) pal.signal else pal.line2, fieldShape)
+                        .padding(horizontal = 12.dp, vertical = 11.dp),
+                ) {
+                    BasicTextField(
+                        value = draft, onValueChange = { draft = it },
+                        textStyle = TextStyle(color = colors.onBackground, fontSize = 13.5.sp, lineHeight = 19.sp, fontFamily = FontFamily.Monospace),
+                        cursorBrush = SolidColor(pal.signal),
+                        modifier = Modifier.fillMaxWidth().focusRequester(focus).onFocusChanged { focused = it.isFocused },
+                    )
+                }
+                Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    DeckButton(stringResource(R.string.tc_btn_cancel), Modifier.weight(1f), primary = false, onClick = onDismiss)
+                    DeckButton(stringResource(R.string.tc_btn_save), Modifier.weight(1f)) { onSave(draft.text) }
+                }
             }
-            Box(Modifier.fillMaxWidth().height(1.dp).background(pal.line))
-            BasicTextField(
-                value = draft, onValueChange = { draft = it },
-                textStyle = TextStyle(color = colors.onBackground, fontSize = 14.sp, lineHeight = 20.sp, fontFamily = FontFamily.Monospace),
-                cursorBrush = SolidColor(pal.signal),
-                modifier = Modifier.weight(1f).fillMaxWidth().padding(14.dp).focusRequester(focus),
-            )
         }
     }
 }

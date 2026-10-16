@@ -45,7 +45,8 @@ object Launcher {
     @Volatile private var started = false
 
     /** True setelah perintah Xwayland + Xsession dikirim ke kontainer yang sedang berjalan. */
-    @Volatile var guiStarted = false
+    // state Compose (bukan @Volatile biasa) supaya tombol "kembali ke desktop" muncul/hilang mengikuti status desktop
+    var guiStarted by mutableStateOf(false)
 
     /**
      * Proses proot terpisah yang menjalankan Xwayland (+ window manager ringan) khusus untuk aplikasi
@@ -779,6 +780,27 @@ ${WsiWayland.probeForDesktop(sessionEnv)}
                 onDone()
             }
         }, "tiny-stop-desktop").start()
+    }
+
+    /**
+     * Mematikan HANYA shell kontainer (terminal + proot di dalamnya), mis. setelah pemasangan AppImage selesai.
+     * Berbeda dengan [shutdownDesktop], sesi aplikasi Shortcut tidak disentuh dan layar progres tidak muncul.
+     * Setelah itu [started] false dan [Startup.phase] kembali IDLE (Beranda tidak lagi hijau). Jangan dipanggil
+     * saat desktop berjalan ([guiStarted]): desktop hidup di dalam kontainer yang sama. [onDone] di thread utama.
+     */
+    fun shutdownTerminal(onDone: () -> Unit = {}) {
+        Thread({
+            synchronized(spawnLock) {
+                val killed = killContainerShell()
+                waitGone(killed, 3000)
+            }
+            LaunchLog.write(containerLog, "session", "shell kontainer dimatikan setelah pasang AppImage")
+            mainHandler.post {
+                markStopped()
+                Startup.reset()
+                onDone()
+            }
+        }, "tiny-stop-terminal").start()
     }
 
     /**

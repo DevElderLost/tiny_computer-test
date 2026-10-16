@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -62,7 +63,8 @@ fun TerminalScreen() {
     var showCommands by remember { mutableStateOf(false) }
     var fontPx by remember { mutableStateOf((14f * Cfg.termFontScale.toFloat() * ctx.resources.displayMetrics.density).toInt()) }
 
-    Column(Modifier.fillMaxSize().background(LocalPalette.current.background)) {
+    // imePadding: saat papan ketik muncul, terminal + baris tombol naik di atasnya sehingga baris yang diketik tidak tertutup
+    Column(Modifier.fillMaxSize().background(LocalPalette.current.background).imePadding()) {
         AndroidView(
             modifier = Modifier.weight(1f).fillMaxWidth(),
             factory = { c ->

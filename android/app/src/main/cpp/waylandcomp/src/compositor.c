@@ -67,6 +67,10 @@
 
 static FILE *g_log;
 
+/* Set when the app turned the session log off (TINY_WAYLAND_LOG=0, from Settings > Logs): no file is
+ * created and nothing is kept back for one. Lines still reach logcat. */
+static int g_log_off;
+
 /* Lines logged before the session file exists are kept here and written into it, in order, the
  * moment it opens - the compositor runs on its own thread, so anything the app reports as that
  * thread starts (the display's HDR capability, for one) would otherwise only reach logcat. The
@@ -92,7 +96,7 @@ void droiddeck_log(const char *tag, const char *fmt, ...) {
              ts.tv_nsec / 1000000, tag, msg);
     pthread_mutex_lock(&g_log_lock);
     if (g_log) fputs(line, g_log);
-    else if (g_prelog_n < PRELOG_MAX) g_prelog[g_prelog_n++] = strdup(line);
+    else if (!g_log_off && g_prelog_n < PRELOG_MAX) g_prelog[g_prelog_n++] = strdup(line);
     pthread_mutex_unlock(&g_log_lock);
 }
 
@@ -101,6 +105,19 @@ static void open_session_log(void) {
     time_t now = time(NULL);
     struct tm tm;
     FILE *f;
+
+    /* The app's log switch (Settings > Logs) also governs this file: off means no wayland-*.log at all.
+     * Anything logged before this point and held for the file is dropped. */
+    const char *want = getenv("TINY_WAYLAND_LOG");
+    if (want && want[0] == '0') {
+        pthread_mutex_lock(&g_log_lock);
+        for (int i = 0; i < g_prelog_n; i++) { free(g_prelog[i]); g_prelog[i] = NULL; }
+        g_prelog_n = 0;
+        g_log_off = 1;
+        pthread_mutex_unlock(&g_log_lock);
+        WLOGI("session log off (launch log switch is off)");
+        return;
+    }
 
     localtime_r(&now, &tm);
     strftime(stamp, sizeof(stamp), "%Y-%m-%d_%H-%M-%S", &tm);

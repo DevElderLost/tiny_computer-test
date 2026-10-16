@@ -44,6 +44,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -68,6 +69,7 @@ import com.example.tiny_computer.R
 import com.example.tiny_computer.controller.ControllerEditorActivity
 import com.example.tiny_computer.core.Cfg
 import com.droiddeck.launcher.input.ControllerPrefs
+import kotlinx.coroutines.delay
 import androidx.compose.ui.platform.LocalContext
 import com.example.tiny_computer.ui.DeckChoiceRow
 import com.example.tiny_computer.ui.DeckGroup
@@ -280,6 +282,33 @@ private fun InputPage(state: DisplayUiState, onPadOverlayChange: (Boolean) -> Un
                 state.gyroSens = it
                 ControllerPrefs.setGyroSensitivity(ctx, it)
             }
+        }
+        // mapping trackpad L/R: pilihan dan penyimpanan sama dengan Pengaturan > Controller (ControllerPrefs)
+        DeckChoiceRow(
+            stringResource(R.string.tc_ctrl_trackpad), null,
+            listOf(
+                ControllerPrefs.PAD_STICK to stringResource(R.string.tc_trackpad_stick),
+                ControllerPrefs.PAD_HID to stringResource(R.string.tc_trackpad_hid),
+                ControllerPrefs.PAD_MOUSE to stringResource(R.string.tc_trackpad_mouse),
+            ),
+            state.trackpad,
+        ) {
+            state.trackpad = it
+            ControllerPrefs.setTrackpadMode(ctx, it)
+        }
+        if (state.trackpad == ControllerPrefs.PAD_MOUSE) {
+            DeckSliderRow(stringResource(R.string.tc_ctrl_trackpad_speed), null, state.trackpadSpeed, 1..10) {
+                state.trackpadSpeed = it
+                ControllerPrefs.setTrackpadMouseSpeed(ctx, it)
+            }
+        }
+        // controller layar membaca mode trackpad hanya saat padLayoutRev berubah: muat ulang (ditunda sejenak
+        // supaya menggeser seekbar tidak memuat ulang di setiap langkah); pembukaan pertama halaman dilewati
+        var trackpadSeen by remember { mutableStateOf(false) }
+        LaunchedEffect(state.trackpad, state.trackpadSpeed) {
+            if (!trackpadSeen) { trackpadSeen = true; return@LaunchedEffect }
+            delay(150)
+            state.padLayoutRev++
         }
         // editor tata letak controller (sama dengan Pengaturan > Controller > Edit); menu menutup agar layar editor terlihat
         val pal = LocalPalette.current

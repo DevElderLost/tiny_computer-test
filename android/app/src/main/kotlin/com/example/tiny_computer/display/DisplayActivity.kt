@@ -37,6 +37,7 @@ import com.droiddeck.launcher.wayland.CompositorHost
 import com.droiddeck.launcher.wayland.WaylandCompositor
 import com.example.tiny_computer.core.Cfg
 import com.example.tiny_computer.core.Launcher
+import com.example.tiny_computer.core.NavRequest
 import com.example.tiny_computer.core.ShortcutPrefs
 import com.example.tiny_computer.core.TinyEnv
 import com.example.tiny_computer.ui.TinyTheme
@@ -60,6 +61,9 @@ class DisplayUiState {
     var gyro by mutableStateOf(false)
     var gyroTarget by mutableStateOf(ControllerPrefs.GYRO_RIGHT)
     var gyroSens by mutableStateOf(5)
+    /** Mapping trackpad L/R (ControllerPrefs.PAD_STICK / PAD_HID / PAD_MOUSE) dan kecepatan kursornya 1..10 (mode mouse). */
+    var trackpad by mutableStateOf(ControllerPrefs.PAD_STICK)
+    var trackpadSpeed by mutableStateOf(5)
     /** Keyboard PC di layar (dari DroidDeck): tombol evdev asli, bukan keyboard Android. */
     var pcKeyboard by mutableStateOf(false)
     /** True bila layar ini menjalankan aplikasi Shortcut (bukan desktop): tombol Shutdown dan layar progres aktif. */
@@ -174,7 +178,8 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
                         state = ui,
                         pad = p,
                         sendKey = { code, down -> WaylandCompositor.nativeSendKey(code, if (down) 1 else 0) },
-                        onClose = { finish() },
+                        // Back to terminal: tutup layar desktop dan minta TinyApp membuka tab Terminal
+                        onClose = { NavRequest.terminal = true; finish() },
                         onShutdown = {
                             // matikan sekarang juga; layar progres tampil sampai semua proses benar-benar mati.
                             // Sesi aplikasi Shortcut: semua aplikasi + Xwayland-nya; desktop: Xwayland + sesi X11.
@@ -274,6 +279,9 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
 
     /** Menyalakan/mematikan gyro sesuai saklar di Pengaturan Controller dan menu samping, dan memasang mapping-nya. */
     private fun syncMotion() {
+        // mapping trackpad: sama dengan Pengaturan > Controller; diubah dari tab Controller atau menu samping
+        ui.trackpad = ControllerPrefs.trackpadMode(this)
+        ui.trackpadSpeed = ControllerPrefs.trackpadMouseSpeed(this)
         ui.gyro = ControllerPrefs.gyroEnabled(this)
         ui.gyroTarget = ControllerPrefs.gyroTarget(this)
         ui.gyroSens = ControllerPrefs.gyroSensitivity(this)
@@ -324,6 +332,9 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
         if (!CompositorHost.isStarted) {
             WaylandCompositor.nativeSetHdrRequest(WaylandCompositor.HDR_MODE_OFF, "tiny", false, false)
         }
+        // log sesi compositor (Download/Wayland-logs/wayland-*.log) ikut saklar Pengaturan > Log; dibaca compositor
+        // sekali saat dinyalakan, jadi perubahan saklar berlaku mulai peluncuran aplikasi berikutnya
+        android.system.Os.setenv("TINY_WAYLAND_LOG", if (Cfg.launchLog) "1" else "0", true)
         // DRM palsu (extra/fakedrm): compositor menyebut render node tiruan itu di dmabuf feedback, dibaca saat compositor mulai
         if (Cfg.fakeDrm) android.system.Os.setenv("DROIDDECK_WAYLAND_FAKE_RENDER_NODE", "1", true)
         else android.system.Os.unsetenv("DROIDDECK_WAYLAND_FAKE_RENDER_NODE")

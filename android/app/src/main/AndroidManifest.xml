@@ -25,6 +25,7 @@
             android:exported="true"
             android:launchMode="singleTask"
             android:theme="@style/App.Theme"
+            android:screenOrientation="sensorLandscape"
             android:configChanges="navigation|orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize">
@@ -38,6 +39,7 @@
             android:name=".OnboardingActivity"
             android:exported="false"
             android:theme="@style/App.Theme"
+            android:screenOrientation="sensorLandscape"
             android:configChanges="navigation|orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true" />
         <!-- Layar desktop: SurfaceView compositor Wayland (DroidDeck) + overlay Compose -->

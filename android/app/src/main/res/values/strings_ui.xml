@@ -138,6 +138,7 @@
     <string name="tc_display_cursor">Show cursor</string>
     <string name="tc_display_cursor_size">Cursor size</string>
     <string name="tc_display_back">Back to terminal</string>
+    <string name="tc_fab_back_desktop">Back to desktop</string>
     <string name="tc_close">Close</string>
     <string name="tc_pad_overlay">On-screen controller</string>
     <string name="tc_nav_home">Desktop</string>

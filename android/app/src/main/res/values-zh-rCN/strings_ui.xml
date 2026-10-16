@@ -138,6 +138,7 @@
     <string name="tc_display_cursor">显示光标</string>
     <string name="tc_display_cursor_size">光标大小</string>
     <string name="tc_display_back">返回终端</string>
+    <string name="tc_fab_back_desktop">返回桌面</string>
     <string name="tc_close">关闭</string>
     <string name="tc_pad_overlay">屏幕手柄</string>
     <string name="tc_nav_home">桌面</string>

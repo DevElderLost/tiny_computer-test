@@ -20,6 +20,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.widthIn
@@ -37,10 +40,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Computer
+import androidx.compose.material.icons.filled.DesktopWindows
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -62,6 +67,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -71,6 +77,7 @@ import com.example.tiny_computer.core.AppImageInstaller
 import com.example.tiny_computer.core.Cfg
 import com.example.tiny_computer.core.Containers
 import com.example.tiny_computer.core.Launcher
+import com.example.tiny_computer.core.NavRequest
 import com.example.tiny_computer.core.Startup
 import com.example.tiny_computer.core.TermSessions
 import com.example.tiny_computer.core.TinyEnv
@@ -132,12 +139,22 @@ fun TinyApp() {
                 // mis. pasang AppImage dari menu Shortcut: tulis ke terminal dan tampilkan tab Terminal
                 Startup.consumeOpen()
                 Launcher.runInTerminal(ctx, terminalCommand)
+                showSettings = false
                 page = Page.TERMINAL.ordinal
             } else if (app != null) { Startup.consumeOpen(); openApp(app) } else if (Startup.consumeOpen()) openDesktop()
         }
     }
-    // pemasangan AppImage selesai: tutup tampilan terminal dan kembali ke tab Shortcut (setelah jeda singkat
-    // supaya pesan "Selesai" sempat terbaca). Bila gagal, penanda tidak pernah ada dan terminal tetap terbuka.
+    // "Back to terminal" di menu samping layar desktop: langsung buka tab Terminal
+    LaunchedEffect(NavRequest.terminal) {
+        if (NavRequest.terminal) {
+            NavRequest.terminal = false
+            showSettings = false
+            page = Page.TERMINAL.ordinal
+        }
+    }
+    // pemasangan AppImage selesai: tutup tampilan terminal, kembali ke tab Shortcut, dan matikan terminalnya juga
+    // (setelah jeda singkat supaya pesan "Selesai" sempat terbaca). Bila gagal, penanda tidak pernah ada dan
+    // terminal tetap terbuka agar galatnya terbaca.
     val installing = AppImageInstaller.watching
     LaunchedEffect(installing) {
         val id = installing ?: return@LaunchedEffect
@@ -146,6 +163,8 @@ fun TinyApp() {
             if (withContext(Dispatchers.IO) { AppImageInstaller.isDone(id) }) {
                 delay(INSTALL_DONE_PAUSE_MS)
                 if (page == Page.TERMINAL.ordinal) page = Page.SHORTCUT.ordinal
+                // shell kontainer ikut dimatikan; bila desktop sedang berjalan di kontainer yang sama, biarkan hidup
+                if (!Launcher.guiStarted) Launcher.shutdownTerminal()
                 AppImageInstaller.stopWatching(id)
                 return@LaunchedEffect
             }
@@ -155,25 +174,49 @@ fun TinyApp() {
     }
     // jangan keluar dari aplikasi di tengah pemasangan
     BackHandler(enabled = phase == Startup.Phase.RUNNING) {}
-    // Pengaturan: halaman penuh dari ikon roda gigi di samping Open desktop (bukan lagi tab navigasi)
+    // Pengaturan: dibuka dari ikon roda gigi di samping Open desktop, tampil di area isi dengan rel navigasi tetap terlihat
     BackHandler(enabled = showSettings && phase != Startup.Phase.RUNNING) { showSettings = false }
 
     Box(Modifier.fillMaxSize()) {
-        TinyShell(page, { page = it }, requestDesktop, requestApp, { showSettings = true }, phase == Startup.Phase.DONE)
-        if (showSettings) SettingsPage(onBack = { showSettings = false })
+        TinyShell(
+            page, { page = it; showSettings = false }, requestDesktop, requestApp, { showSettings = true },
+            phase == Startup.Phase.DONE, showSettings, { showSettings = false },
+        )
+        // tombol mengambang kembali ke desktop: hanya saat desktop sudah jalan, dan tidak saat memasang AppImage
+        if (phase == Startup.Phase.DONE && Launcher.guiStarted && AppImageInstaller.watching == null) {
+            BackToDesktopButton(openDesktop)
+        }
         if (phase == Startup.Phase.RUNNING || phase == Startup.Phase.FAILED) StartupOverlay(onClose = { Startup.dismiss() })
+    }
+}
+
+/** Tombol mengambang di pojok kanan atas: membuka lagi layar desktop yang sedang berjalan. */
+@Composable
+private fun BackToDesktopButton(onClick: () -> Unit) {
+    val pal = LocalPalette.current
+    Box(
+        Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(16.dp),
+        contentAlignment = Alignment.TopEnd,
+    ) {
+        FloatingActionButton(
+            onClick = onClick, containerColor = pal.signal, contentColor = pal.onSignal,
+            modifier = Modifier.size(52.dp),
+        ) { Icon(Icons.Filled.DesktopWindows, stringResource(R.string.tc_fab_back_desktop)) }
     }
 }
 
 @Composable
 private fun TinyShell(
     page: Int, onPage: (Int) -> Unit, onOpenDesktop: () -> Unit, onLaunchApp: (String) -> Unit,
-    onOpenSettings: () -> Unit, started: Boolean,
+    onOpenSettings: () -> Unit, started: Boolean, showSettings: Boolean, onCloseSettings: () -> Unit,
 ) {
     val pal = LocalPalette.current
     val landscape = isLandscape()
+    // papan ketik terbuka: isi naik, dan di mode potret bilah bawah disembunyikan agar terminal tidak tertutup
+    val imeOpen = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     val content: @Composable () -> Unit = {
-        when (Page.values()[page]) {
+        if (showSettings) SettingsPage(onBack = onCloseSettings)
+        else when (Page.values()[page]) {
             Page.HOME -> HomeScreen(onOpenDesktop, onOpenSettings)
             Page.SHORTCUT -> ShortcutScreen(onLaunchApp, onShowTerminal = { onPage(Page.TERMINAL.ordinal) })
             Page.TERMINAL -> if (started) TerminalScreen() else TerminalGate()
@@ -186,10 +229,11 @@ private fun TinyShell(
         // layar), isi halaman di sisi kanan dengan inset sistem (tombol navigasi, poni) dihormati.
         Row(Modifier.fillMaxSize().background(pal.background)) {
             NavigationRail(containerColor = pal.surface, modifier = Modifier.fillMaxHeight()) {
-                Spacer(Modifier.weight(1f))
+                // rata ke atas (gaya rel Material 3); ruang kosong tersisa di bawah, jadi tab baru muncul di bawah item yang ada
+                Spacer(Modifier.height(20.dp))
                 Page.values().forEach { p ->
                     NavigationRailItem(
-                        selected = page == p.ordinal, onClick = { onPage(p.ordinal) },
+                        selected = !showSettings && page == p.ordinal, onClick = { onPage(p.ordinal) },
                         icon = { Icon(p.icon, null) },
                         label = { Text(stringResource(p.label), fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
                         alwaysShowLabel = true,
@@ -209,12 +253,13 @@ private fun TinyShell(
         }
     } else {
         Scaffold(
+            modifier = Modifier.imePadding(),
             containerColor = pal.background,
             bottomBar = {
-                NavigationBar(containerColor = pal.surface, tonalElevation = 0.dp) {
+                if (!(imeOpen && !showSettings && page == Page.TERMINAL.ordinal)) NavigationBar(containerColor = pal.surface, tonalElevation = 0.dp) {
                     Page.values().forEach { p ->
                         NavigationBarItem(
-                            selected = page == p.ordinal, onClick = { onPage(p.ordinal) },
+                            selected = !showSettings && page == p.ordinal, onClick = { onPage(p.ordinal) },
                             icon = { Icon(p.icon, null) },
                             label = { Text(stringResource(p.label), fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
                             colors = NavigationBarItemDefaults.colors(
@@ -332,14 +377,11 @@ private fun SettingsCog(onClick: () -> Unit) {
     }
 }
 
-/** Halaman Pengaturan penuh dengan tombol kembali; menutupi navigasi di bawahnya. */
+/** Halaman Pengaturan dengan tombol kembali; tampil di area isi, navigasi (rel/bilah bawah) tetap terlihat. */
 @Composable
 private fun SettingsPage(onBack: () -> Unit) {
     val pal = LocalPalette.current
-    Column(
-        Modifier.fillMaxSize().background(pal.background).clickableNoRipple {}
-            .windowInsetsPadding(WindowInsets.safeDrawing),
-    ) {
+    Column(Modifier.fillMaxSize().background(pal.background)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) {
                 Icon(Icons.Filled.ArrowBack, stringResource(R.string.tc_start_back), tint = pal.onBackground)
