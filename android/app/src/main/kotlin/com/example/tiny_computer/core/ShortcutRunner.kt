@@ -236,8 +236,27 @@ else
 fi
 """.trimStart(),
             )
-        } else if (isWine && Cfg.wineDisplay != "x11") {
-            sb.append("echo \"[tiny] Wine: build Wine terpasang tidak punya winewayland.so; memakai X11 (Vulkan bisa hang tanpa DRI3)\"\n")
+        } else if (isWine) {
+            // Wine memakai X11 pada peluncuran ini. Registri prefix HARUS ikut "x11": bila masih "wayland,x11" (sisa mode DXVK),
+            // Wine tetap memilih winewayland.drv dan OpenGL WineD3D jatuh ke llvmpipe (EGL Wayland tidak bisa memuat Zink).
+            // Dicek tiap peluncuran (satu grep); `wine reg add` hanya dijalankan bila nilainya belum x11.
+            val why = when {
+                WineSystem.waylandCapable() ->
+                    "memakai X11 (Xwayland) + Zink/Turnip untuk OpenGL WineD3D; OpenGL lewat Wayland jatuh ke llvmpipe"
+                Cfg.wineDisplay == "x11" -> "driver tampilan X11 dipilih pengguna"
+                else -> "build Wine terpasang tidak punya winewayland.so; memakai X11 (Vulkan bisa hang tanpa DRI3)"
+            }
+            sb.append(
+                """
+(
+  if ! grep -qs '^"Graphics"="x11"' "${'$'}{WINEPREFIX:-${'$'}HOME/.wine}/user.reg"; then
+    echo "[tiny] Wine: driver tampilan di registri ditulis ulang ke x11"
+    wine reg add 'HKCU\Software\Wine\Drivers' /v Graphics /d x11 /f
+  fi
+)
+echo "[tiny] Wine: $why"
+""".trimStart(),
+            )
         }
 
         // Mode Direct3D (WineD3D / DXVK) pilihan pengguna: registri prefix disamakan bila belum sesuai.

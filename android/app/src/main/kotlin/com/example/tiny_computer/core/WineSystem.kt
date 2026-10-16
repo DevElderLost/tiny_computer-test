@@ -40,8 +40,21 @@ object WineSystem {
     /** Path winewayland.so untuk skrip shell (dipakai diagnosis [ShortcutRunner]). */
     fun waylandSoShellPath(): String = waylandSo() ?: WAYLAND_SO[0]
 
-    /** Wayland dipilih pengguna DAN didukung Wine terpasang. */
-    fun displayWayland(): Boolean = Cfg.wineDisplay != "x11" && supportsWayland()
+    /** Wayland dipilih pengguna DAN didukung Wine terpasang (belum memperhitungkan jalur grafis; lihat [displayWayland]). */
+    fun waylandCapable(): Boolean = Cfg.wineDisplay != "x11" && supportsWayland()
+
+    /**
+     * Jalur X11 (Xwayland + Zink/Turnip) HARUS dipakai walau Wayland tersedia bila grafis Wine adalah OpenGL (mode WineD3D):
+     * EGL platform Wayland di Mesa tidak bisa memuat Zink tanpa node DRM sungguhan, lalu diam-diam jatuh ke llvmpipe
+     * (OpenGL software, berat; log: wined3d_guess_card ... GL_RENDERER "llvmpipe"). Lewat X11 jalur LIBGL_KOPPER_DRI2
+     * (lihat Launcher.guestSpec) tetap memakai Zink di Turnip.
+     * DXVK (Vulkan) sebaliknya HARUS lewat Wayland: winevulkan lewat Xwayland tanpa DRI3 macet dan layar hitam.
+     * Mode yang dipakai = [d3dModeIsDxvk] (pilihan pengguna, atau isi registri prefix bila belum memilih).
+     */
+    fun x11Preferred(): Boolean = !d3dModeIsDxvk()
+
+    /** Wine memakai winewayland.drv pada peluncuran ini: didukung, dipilih pengguna, dan jalur grafisnya Vulkan (DXVK). */
+    fun displayWayland(): Boolean = waylandCapable() && !x11Preferred()
 
     /** Nilai registri `HKCU\Software\Wine\Drivers\Graphics`: daftar dicoba berurutan, jadi X11 menjadi cadangan. */
     fun displayDriverValue(): String = if (displayWayland()) "wayland,x11" else "x11"
@@ -139,7 +152,10 @@ object WineSystem {
         val dxvk = Cfg.d3dMode == "dxvk"
         Thread({
             if (!Launcher.isStarted || !prefixReady()) return@Thread
-            runCatching { guestRun(app, d3dRegCommands(dxvk), 5 * 60_000L) }
+            // Driver tampilan ikut disamakan: WineD3D -> x11 (OpenGL lewat Zink), DXVK -> wayland,x11 (Vulkan).
+            // Cfg.d3dMode sudah diubah UI sebelum fungsi ini dipanggil, jadi displayDriverValue() sudah mengikuti mode baru.
+            val display = "wine reg add 'HKCU\\Software\\Wine\\Drivers' /v Graphics /d ${displayDriverValue()} /f >/dev/null 2>&1"
+            runCatching { guestRun(app, d3dRegCommands(dxvk) + "; " + display, 5 * 60_000L) }
         }, "tiny-wine-d3d").start()
     }
 
