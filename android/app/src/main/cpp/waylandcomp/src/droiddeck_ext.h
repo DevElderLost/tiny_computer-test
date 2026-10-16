@@ -3,6 +3,8 @@
  *   wl_clipboard.c      wl_data_device_manager + zwlr_data_control_manager_v1 (selection only)
  *   wl_text_input.c     zwp_text_input_manager_v3 (host IME / soft keyboard)
  *   wl_toplevel_icon.c  xdg_toplevel_icon_manager_v1 (accepted, not rendered)
+ *   wl_fractional_scale.c wp_fractional_scale_manager_v1 (always 120/120 = 1.0)
+ *   wl_xdg_output.c     zxdg_output_manager_v1 (logical size = the output's mode)
  *   droiddeck_ext.c        the host→compositor message queue shared by the modules
  * Everything here runs on the compositor (dispatch) thread unless noted.
  */
@@ -49,5 +51,9 @@ void text_input_host_preedit(const char *utf8, size_t len, int cursor_begin, int
 void text_input_host_delete(int before, int after);
 void toplevel_icon_init(struct wl_display *display);
 void single_pixel_init(struct wl_display *display);
+void fractional_scale_init(struct wl_display *display);
+void xdg_output_init(struct wl_display *display);
+/* The output changed size: zxdg_output_v1 objects get the new logical size (before wl_output.done). */
+void xdg_output_resized(void);
 /* A wp_single_pixel_buffer_manager_v1 buffer: 1 and its pixel (B, G, R, A, premultiplied), else 0. */
 int single_pixel_buffer_get(struct wl_resource *buffer, uint8_t bgra[4]);

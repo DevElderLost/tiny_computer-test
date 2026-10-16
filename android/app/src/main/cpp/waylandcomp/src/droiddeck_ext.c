@@ -123,4 +123,6 @@ void droiddeck_ext_init(struct wl_display *display) {
     text_input_init(display);
     toplevel_icon_init(display);
     single_pixel_init(display);
+    fractional_scale_init(display);
+    xdg_output_init(display);
 }

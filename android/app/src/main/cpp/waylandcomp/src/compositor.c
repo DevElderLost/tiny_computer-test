@@ -267,6 +267,9 @@ struct surface {
     struct wl_resource *idle_buffer;
     struct wl_listener idle_buffer_destroy;
     struct wl_resource *xdg_surface, *xdg_toplevel;
+    struct surface *tl_parent;              /* xdg_toplevel.set_parent: the window this one is a dialog of */
+    int min_w, min_h, max_w, max_h;         /* xdg_toplevel.set_min/max_size, 0 = none */
+    int buf_scale, pending_buf_scale;       /* wl_surface.set_buffer_scale; 0 = 1 / no change pending */
     struct wl_resource *viewport;
 
     /* Toplevel placement on the scene. A mapped layer surface reuses x, y and placed for its own
@@ -603,6 +606,9 @@ static struct surface *g_ime_click;         /* last clicked program window: wher
 static int g_input_pipe[2] = {-1, -1};
 struct input_msg { int type; int p1; int p2; int p3; int p4; };
 
+static void drag_begin(struct surface *s, int resizing, uint32_t edges);
+static void drag_cancel_surface(struct surface *s);
+
 /* Pointer constraints (zwp_pointer_constraints_v1) and relative pointers
  * (zwp_relative_pointer_manager_v1); see the "pointer constraints" section. */
 struct surface;
@@ -640,7 +646,10 @@ static struct dmabuf_buffer *get_dmabuf(struct wl_resource *buffer) {
 static void surface_size(const struct surface *s, int *w, int *h) {
     if (s->dst_set) { *w = s->dst[0]; *h = s->dst[1]; }
     else if (s->src_set) { *w = (int)(s->src[2] + 0.5f); *h = (int)(s->src[3] + 0.5f); }
-    else { *w = s->buf_w; *h = s->buf_h; }
+    else {
+        int sc = s->buf_scale > 1 ? s->buf_scale : 1;  /* wl_surface.set_buffer_scale */
+        *w = s->buf_w / sc; *h = s->buf_h / sc;
+    }
 }
 
 /* "Title" (program) for the log; subsurfaces are named after the window they belong to. */
@@ -1123,6 +1132,10 @@ static void surface_commit(struct wl_client *c, struct wl_resource *r) {
         memcpy(s->opaque, s->pending_opaque, sizeof(s->opaque));
         s->pending_opaque_set = 0;
     }
+    if (s->pending_buf_scale) {
+        s->buf_scale = s->pending_buf_scale;
+        s->pending_buf_scale = 0;
+    }
 
     if (s->pending_attach) {
         struct wl_resource *buffer = s->pending_buffer;
@@ -1192,7 +1205,15 @@ static void surface_commit(struct wl_client *c, struct wl_resource *r) {
     schedule_render();
 }
 static void surface_set_buffer_transform(struct wl_client *c, struct wl_resource *r, int32_t t) {}
-static void surface_set_buffer_scale(struct wl_client *c, struct wl_resource *r, int32_t s) {}
+static void surface_set_buffer_scale(struct wl_client *c, struct wl_resource *r, int32_t scale) {
+    struct surface *s = wl_resource_get_user_data(r);
+    if (!s) return;
+    if (scale < 1) {
+        wl_resource_post_error(r, WL_SURFACE_ERROR_INVALID_SCALE, "buffer scale %d is not positive", (int)scale);
+        return;
+    }
+    s->pending_buf_scale = scale;  /* double-buffered: applied on commit */
+}
 static void surface_damage_buffer(struct wl_client *c, struct wl_resource *r,
                                   int32_t x, int32_t y, int32_t w, int32_t h) {}
 static void surface_offset(struct wl_client *c, struct wl_resource *r, int32_t x, int32_t y) {}
@@ -1227,6 +1248,11 @@ static void surface_resource_destroy(struct wl_resource *r) {
     for (int i = 0; i < g_nptrs; i++) if (g_ptrs[i].focus == r) g_ptrs[i].focus = NULL;
     for (int i = 0; i < g_nkbs; i++) if (g_kbs[i].focus == r) g_kbs[i].focus = NULL;
     touch_cancel_surface(s);
+    drag_cancel_surface(s);
+    {
+        struct surface *o;
+        wl_list_for_each(o, &g_surfaces, link) if (o->tl_parent == s) o->tl_parent = NULL;
+    }
     if (g_cursor_surface == s) { g_cursor_surface = NULL; cursor_publish_hidden(); }
     if (g_cursor_shown == s) g_cursor_shown = NULL;
     surface_take_idle(s);
@@ -1470,7 +1496,16 @@ static void bind_viewporter(struct wl_client *c, void *data, uint32_t ver, uint3
 /* ------------------------------------------------------------------ xdg_shell */
 
 static void xdg_toplevel_destroy_req(struct wl_client *c, struct wl_resource *r) { wl_resource_destroy(r); }
-static void xdg_toplevel_noop_parent(struct wl_client *c, struct wl_resource *r, struct wl_resource *p) {}
+/* A dialog belongs to a window: raising the window raises the dialog with it (raise_toplevel). */
+static void xdg_toplevel_set_parent(struct wl_client *c, struct wl_resource *r, struct wl_resource *parent) {
+    struct surface *s = wl_resource_get_user_data(r);
+    struct surface *p = parent ? wl_resource_get_user_data(parent) : NULL;
+    int depth = 0;
+    if (!s) return;
+    for (struct surface *q = p; q; q = q->tl_parent)
+        if (q == s || ++depth > 16) return;  /* no cycles */
+    s->tl_parent = p;
+}
 static void xdg_toplevel_set_title(struct wl_client *c, struct wl_resource *r, const char *title) {
     struct surface *s = wl_resource_get_user_data(r);
     if (!s) return;
@@ -1493,11 +1528,26 @@ static void xdg_toplevel_set_title(struct wl_client *c, struct wl_resource *r, c
 static void xdg_toplevel_set_app_id(struct wl_client *c, struct wl_resource *r, const char *id) {}
 static void xdg_toplevel_show_menu(struct wl_client *c, struct wl_resource *r, struct wl_resource *seat,
                                    uint32_t serial, int32_t x, int32_t y) {}
+/* The client wants to drag the window (Wine does it from its title bar): the compositor takes the
+ * pointer until the button is let go (drag_begin / drag_update / drag_end, pointer section). */
 static void xdg_toplevel_move(struct wl_client *c, struct wl_resource *r, struct wl_resource *seat,
-                              uint32_t serial) {}
+                              uint32_t serial) {
+    struct surface *s = wl_resource_get_user_data(r);
+    if (s) drag_begin(s, 0, 0);
+}
 static void xdg_toplevel_resize(struct wl_client *c, struct wl_resource *r, struct wl_resource *seat,
-                                uint32_t serial, uint32_t edges) {}
-static void xdg_toplevel_set_i32(struct wl_client *c, struct wl_resource *r, int32_t w, int32_t h) {}
+                                uint32_t serial, uint32_t edges) {
+    struct surface *s = wl_resource_get_user_data(r);
+    if (s && edges) drag_begin(s, 1, edges);
+}
+static void xdg_toplevel_set_max_size(struct wl_client *c, struct wl_resource *r, int32_t w, int32_t h) {
+    struct surface *s = wl_resource_get_user_data(r);
+    if (s) { s->max_w = w > 0 ? w : 0; s->max_h = h > 0 ? h : 0; }
+}
+static void xdg_toplevel_set_min_size(struct wl_client *c, struct wl_resource *r, int32_t w, int32_t h) {
+    struct surface *s = wl_resource_get_user_data(r);
+    if (s) { s->min_w = w > 0 ? w : 0; s->min_h = h > 0 ? h : 0; }
+}
 static void xdg_toplevel_noop(struct wl_client *c, struct wl_resource *r) {}
 /* The output's size; active, and fullscreen when asked. gamescope waits for the fullscreen
  * state before it drops its libdecor frame, and never draws until it arrives; it was told the
@@ -1517,6 +1567,21 @@ static void send_toplevel_configure(struct surface *s) {
     wl_array_release(&states);
     xdg_surface_send_configure(s->xdg_surface, wl_display_next_serial(g_display));
 }
+/* A configure for an interactive resize: this size, activated, and resizing while the button is down
+ * (Wine only follows a configure's size for a window the compositor is resizing). */
+static void send_toplevel_configure_sized(struct surface *s, int w, int h, int resizing) {
+    struct wl_array states;
+    wl_array_init(&states);
+    uint32_t *st = wl_array_add(&states, sizeof(uint32_t));
+    *st = XDG_TOPLEVEL_STATE_ACTIVATED;
+    if (resizing) {
+        st = wl_array_add(&states, sizeof(uint32_t));
+        *st = XDG_TOPLEVEL_STATE_RESIZING;
+    }
+    xdg_toplevel_send_configure(s->xdg_toplevel, w, h, &states);
+    wl_array_release(&states);
+    xdg_surface_send_configure(s->xdg_surface, wl_display_next_serial(g_display));
+}
 static void xdg_toplevel_set_fullscreen(struct wl_client *c, struct wl_resource *r,
                                         struct wl_resource *output) {
     struct surface *s = wl_resource_get_user_data(r);
@@ -1532,14 +1597,14 @@ static void xdg_toplevel_unset_fullscreen(struct wl_client *c, struct wl_resourc
 }
 static const struct xdg_toplevel_interface xdg_toplevel_impl = {
     .destroy = xdg_toplevel_destroy_req,
-    .set_parent = xdg_toplevel_noop_parent,
+    .set_parent = xdg_toplevel_set_parent,
     .set_title = xdg_toplevel_set_title,
     .set_app_id = xdg_toplevel_set_app_id,
     .show_window_menu = xdg_toplevel_show_menu,
     .move = xdg_toplevel_move,
     .resize = xdg_toplevel_resize,
-    .set_max_size = xdg_toplevel_set_i32,
-    .set_min_size = xdg_toplevel_set_i32,
+    .set_max_size = xdg_toplevel_set_max_size,
+    .set_min_size = xdg_toplevel_set_min_size,
     .set_maximized = xdg_toplevel_noop,
     .unset_maximized = xdg_toplevel_noop,
     .set_fullscreen = xdg_toplevel_set_fullscreen,
@@ -1551,6 +1616,8 @@ static void xdg_toplevel_resource_destroy(struct wl_resource *r) {
     if (!s) return;
     s->xdg_toplevel = NULL;
     s->toplevel_committed = 0;
+    s->tl_parent = NULL;
+    drag_cancel_surface(s);
     unmap_toplevel(s);
     s->placed = 0;
     s->hwnd = 0;
@@ -2731,6 +2798,23 @@ static struct surface *toplevel_at(double x, double y) {
     return NULL;
 }
 
+/* Raise a window to the top of the stack, then the dialogs that belong to it (set_parent) above it.
+ * Without a Wine desktop nothing else reorders the windows: the one in front stayed in front when
+ * the window behind it was clicked. */
+static void raise_toplevel(struct surface *s, int depth) {
+    struct surface *kids[16], *o;
+    int n = 0;
+    if (!s || !s->mapped || depth > 8) return;
+    if (g_toplevels.prev != &s->toplevel_link) {
+        wl_list_remove(&s->toplevel_link);
+        wl_list_insert(g_toplevels.prev, &s->toplevel_link);
+        schedule_render();
+    }
+    wl_list_for_each(o, &g_toplevels, toplevel_link)
+        if (o != s && o->tl_parent == s && n < 16) kids[n++] = o;
+    for (int i = 0; i < n; i++) raise_toplevel(kids[i], depth + 1);
+}
+
 /* What the pointer or a finger is over without a Wine desktop: top and overlay layer surfaces, then
  * the windows, then the bottom and background layers. */
 static struct surface *surface_at(double x, double y) {
@@ -3153,6 +3237,119 @@ static int send_relative_motion(struct wl_client *client, double dx, double dy) 
     return sent;
 }
 
+/* ------------------------------------------------------------------ window drag (move / resize)
+ * xdg_toplevel.move and .resize: Wine draws its own title bar and borders, and asks the compositor
+ * to run the drag. The compositor takes the pointer (the client is sent a leave), moves or
+ * resizes until the button is let go, then gives the pointer back with the release. Only without
+ * a Wine desktop: with one, the desktop surface places the windows itself. */
+static struct {
+    struct surface *s;
+    int resizing;
+    uint32_t edges;                  /* XDG_TOPLEVEL_RESIZE_EDGE_* bits: 1 top, 2 bottom, 4 left, 8 right */
+    double px, py;                   /* the pointer when the drag began */
+    int x, y, w, h;                  /* the window then */
+    int cw, ch;                      /* the last size sent while resizing */
+} g_drag;
+
+static void pointer_unfocus(void) {
+    for (int i = 0; i < g_nptrs; i++) {
+        if (!g_ptrs[i].focus) continue;
+        wl_pointer_send_leave(g_ptrs[i].ptr, wl_display_next_serial(g_display), g_ptrs[i].focus);
+        if (wl_resource_get_version(g_ptrs[i].ptr) >= WL_POINTER_FRAME_SINCE_VERSION)
+            wl_pointer_send_frame(g_ptrs[i].ptr);
+        g_ptrs[i].focus = NULL;
+    }
+}
+
+static void drag_begin(struct surface *s, int resizing, uint32_t edges) {
+    /* Only for the window the button went down on, and not under a lock or confine. */
+    if (g_desktop || g_active_constraint || g_drag.s || !g_grab || g_grab != s || !s->mapped ||
+        s->role != ROLE_TOPLEVEL || s->fullscreen)
+        return;
+    surface_size(s, &g_drag.w, &g_drag.h);
+    g_drag.s = s;
+    g_drag.resizing = resizing;
+    g_drag.edges = edges;
+    g_drag.px = g_ptr_x;
+    g_drag.py = g_ptr_y;
+    g_drag.x = s->placed ? s->x : 0;
+    g_drag.y = s->placed ? s->y : 0;
+    g_drag.cw = g_drag.w;
+    g_drag.ch = g_drag.h;
+    s->x = g_drag.x;
+    s->y = g_drag.y;
+    s->placed = 1;
+    raise_toplevel(s, 0);
+    pointer_unfocus();
+}
+
+static void drag_update(void) {
+    struct surface *s = g_drag.s;
+    int W, H;
+    double dx = g_ptr_x - g_drag.px, dy = g_ptr_y - g_drag.py;
+    scene_size(&W, &H);
+    if (!g_drag.resizing) {
+        const int keep = 48;               /* the title bar stays reachable */
+        int nx = g_drag.x + (int)dx, ny = g_drag.y + (int)dy;
+        if (nx > W - keep) nx = W - keep;
+        if (nx < keep - g_drag.w) nx = keep - g_drag.w;
+        if (ny > H - keep) ny = H - keep;
+        if (ny < 0) ny = 0;
+        if (nx != s->x || ny != s->y) {
+            s->x = nx;
+            s->y = ny;
+            schedule_render();
+        }
+        return;
+    }
+    int nw = g_drag.w, nh = g_drag.h;
+    if (g_drag.edges & 8) nw += (int)dx;
+    if (g_drag.edges & 4) nw -= (int)dx;
+    if (g_drag.edges & 2) nh += (int)dy;
+    if (g_drag.edges & 1) nh -= (int)dy;
+    int minw = s->min_w > 64 ? s->min_w : 64, minh = s->min_h > 32 ? s->min_h : 32;
+    if (nw < minw) nw = minw;
+    if (nh < minh) nh = minh;
+    if (s->max_w > 0 && nw > s->max_w) nw = s->max_w;
+    if (s->max_h > 0 && nh > s->max_h) nh = s->max_h;
+    /* The edge opposite the one dragged stays where it was. */
+    s->x = g_drag.x + ((g_drag.edges & 4) ? g_drag.w - nw : 0);
+    s->y = g_drag.y + ((g_drag.edges & 1) ? g_drag.h - nh : 0);
+    if (nw != g_drag.cw || nh != g_drag.ch) {
+        g_drag.cw = nw;
+        g_drag.ch = nh;
+        if (s->xdg_toplevel && s->xdg_surface) send_toplevel_configure_sized(s, nw, nh, 1);
+    }
+    schedule_render();
+}
+
+/* The button was let go: the final size (no longer resizing), then the pointer goes back to the
+ * window with the release the client never saw. */
+static void drag_end(uint32_t button) {
+    struct surface *s = g_drag.s;
+    g_drag.s = NULL;
+    g_grab = NULL;
+    if (!s) return;
+    if (g_drag.resizing && s->xdg_toplevel && s->xdg_surface)
+        send_toplevel_configure_sized(s, g_drag.cw, g_drag.ch, 0);
+    struct wl_client *client = wl_resource_get_client(s->resource);
+    struct seat_pointer *sp;
+    if (!pointer_for(client)) return;
+    int tx = s->placed ? s->x : 0, ty = s->placed ? s->y : 0;
+    pointer_focus(s->resource, wl_fixed_from_double(g_ptr_x - tx), wl_fixed_from_double(g_ptr_y - ty));
+    uint32_t t = now_ms();
+    for_each_pointer_of(client, sp) {
+        wl_pointer_send_button(sp->ptr, wl_display_next_serial(g_display), t, button ? button : BTN_LEFT,
+                               WL_POINTER_BUTTON_STATE_RELEASED);
+        if (wl_resource_get_version(sp->ptr) >= WL_POINTER_FRAME_SINCE_VERSION)
+            wl_pointer_send_frame(sp->ptr);
+    }
+}
+
+static void drag_cancel_surface(struct surface *s) {
+    if (g_drag.s == s) g_drag.s = NULL;
+}
+
 /* ------------------------------------------------------------------ pointer events */
 
 /* One pointer event: a motion, then an optional button change (button 0 = none). Absolute
@@ -3190,9 +3387,17 @@ static void pointer_input(double x, double y, int relative, uint32_t button, int
             target = k->surface;
         } else if (g_desktop) {
             target = g_desktop;
+        } else if (g_drag.s) {
+            /* The compositor runs a window move / resize: the client sees nothing until it ends. */
+            if (button && !pressed) drag_end(button);
+            else if (!button) drag_update();
+            wl_display_flush_clients(g_display);
+            return;
         } else {
             target = g_grab ? g_grab : surface_at(x, y);
             if (button && pressed) {
+                /* A press brings the window under it to the front, with its dialogs. */
+                if (target && target->role == ROLE_TOPLEVEL) raise_toplevel(target, 0);
                 g_grab = target;
                 /* a layer surface that asked for no keyboard (a panel, a notification) must not take the keys */
                 if (!target || target->role != ROLE_LAYER ||
@@ -3362,6 +3567,7 @@ static void touch_down(int id, double x, double y) {
     if (id < 0 || id >= MAX_TOUCH_POINTS) return;
     struct surface *target = touch_target_at(x, y);
     if (!target) return;
+    if (!g_desktop && target->role == ROLE_TOPLEVEL) raise_toplevel(target, 0);
     struct wl_client *client = wl_resource_get_client(target->resource);
     /* A down on an id that is still held means that sequence's up was lost: end it first. The
      * fingers still down are counted only after that - counted before, a lost up left any_active
@@ -3593,6 +3799,7 @@ static void key_event(uint32_t evdev, int pressed) {
 static void output_resized(void) {
     struct surface *s;
     struct wl_resource *r;
+    xdg_output_resized();  /* zxdg_output_v1: the new logical size, committed by wl_output.done below */
     wl_resource_for_each(r, &g_outputs) {
         output_send_mode(r);
         if (wl_resource_get_version(r) >= 2) wl_output_send_done(r);

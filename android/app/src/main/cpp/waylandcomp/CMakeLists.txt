@@ -18,6 +18,8 @@ add_library(droiddeckwayland SHARED
         src/wl_text_input.c
         src/wl_toplevel_icon.c
         src/wl_single_pixel.c
+        src/wl_fractional_scale.c
+        src/wl_xdg_output.c
         src/wl_color_mgmt.c
         src/hdr_compose.c
         src/blend_pass.c
@@ -35,6 +37,8 @@ add_library(droiddeckwayland SHARED
         generated/xdg-toplevel-icon-v1-protocol.c
         generated/single-pixel-buffer-v1-protocol.c
         generated/banner-ahb-v1-protocol.c
+        generated/fractional-scale-v1-protocol.c
+        generated/xdg-output-unstable-v1-protocol.c
         src/framegen_bridge.c
         src/framegen_jni.c
 )
