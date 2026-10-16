@@ -292,10 +292,17 @@ static AHardwareBuffer *blank_buffer(void) {
                  AHARDWAREBUFFER_USAGE_CPU_WRITE_RARELY};
     if (AHardwareBuffer_allocate(&d, &g_blank) != 0 || !g_blank) { g_blank = NULL; return NULL; }
     void *p = NULL;
-    if (AHardwareBuffer_lock(g_blank, AHARDWAREBUFFER_USAGE_CPU_WRITE_RARELY, -1, NULL, &p) == 0 && p) {
-        AHardwareBuffer_Desc got; AHardwareBuffer_describe(g_blank, &got);
-        memset(p, 0, (size_t)got.stride * 4 * 16);
-        AHardwareBuffer_unlock(g_blank, NULL);
+    int locked = AHardwareBuffer_lock(g_blank, AHARDWAREBUFFER_USAGE_CPU_WRITE_RARELY, -1, NULL, &p);
+    if (locked != 0 || !p) {
+        if (locked == 0) AHardwareBuffer_unlock(g_blank, NULL);
+        AHardwareBuffer_release(g_blank); g_blank = NULL;
+        return NULL;   /* never hand out a buffer that was not really cleared to black */
+    }
+    AHardwareBuffer_Desc got; AHardwareBuffer_describe(g_blank, &got);
+    memset(p, 0, (size_t)got.stride * 4 * got.height);
+    if (AHardwareBuffer_unlock(g_blank, NULL) != 0) {
+        AHardwareBuffer_release(g_blank); g_blank = NULL;
+        return NULL;
     }
     return g_blank;
 }

@@ -34,6 +34,7 @@ import com.droiddeck.launcher.input.RumbleReceiver
 import com.droiddeck.launcher.input.PadBridge
 import com.droiddeck.launcher.session.SessionState
 import com.droiddeck.launcher.wayland.CompositorHost
+import com.droiddeck.launcher.wayland.HdrSupport
 import com.droiddeck.launcher.wayland.WaylandCompositor
 import com.example.tiny_computer.core.Cfg
 import com.example.tiny_computer.core.Launcher
@@ -330,7 +331,28 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
         WaylandCompositor.nativeSetScaleMode(SCALE_FIT, ALIGN_CENTER)
         WaylandCompositor.nativeSetUpscaler(Cfg.upscaler)
         if (!CompositorHost.isStarted) {
-            WaylandCompositor.nativeSetHdrRequest(WaylandCompositor.HDR_MODE_OFF, "tiny", false, false)
+            // Gerbang HDR compositor memakai laporan Display ini; HDR hanya menyala bila diminta (Pengaturan)
+            // DAN panel mendukung HDR10. HDR memakai display layer, jadi zero-copy ikut dinyalakan.
+            val probe = HdrSupport.probe(this)
+            WaylandCompositor.nativeSetHdrDisplay(
+                probe.displayId, probe.name, probe.formats, probe.hdr10,
+                probe.maxLuminance, probe.maxAverageLuminance, probe.minLuminance,
+                probe.ratioAvailable, probe.ratio, Build.VERSION.SDK_INT,
+            )
+            val hdrOn = Cfg.hdrOutput && probe.reason == null
+            if (hdrOn) {
+                runCatching { android.system.Os.setenv("DROIDDECK_WAYLAND_HDR", "1", true) }
+                WaylandCompositor.nativeSetZeroCopy(true)
+            } else {
+                runCatching { android.system.Os.unsetenv("DROIDDECK_WAYLAND_HDR") }
+            }
+            WaylandCompositor.nativeSetHdrRequest(
+                if (hdrOn) WaylandCompositor.HDR_MODE_ON else WaylandCompositor.HDR_MODE_OFF,
+                "tiny settings" + (if (Cfg.hdrOutput && !hdrOn) " (refused: ${probe.reason})" else ""),
+                hdrOn, hdrOn,
+            )
+            Log.i(TAG, "hdr: " + (if (hdrOn) "on" else if (Cfg.hdrOutput) "wanted but ${probe.reason}" else "off") +
+                " - display ${probe.formats.ifEmpty { "SDR" }}")
         }
         // log sesi compositor (Download/Wayland-logs/wayland-*.log) ikut saklar Pengaturan > Log; dibaca compositor
         // sekali saat dinyalakan, jadi perubahan saklar berlaku mulai peluncuran aplikasi berikutnya
@@ -348,6 +370,8 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
         val prev = lastOutput
         if (prev != null && prev != (outW to outH)) WaylandCompositor.nativeResizeOutput(outW, outH)
         lastOutput = outW to outH
+        // efek layar (HDR bloom, CAS, debanding, grading, ketajaman) dari menu sesi > Effect; setter native aman dipanggil kapan saja
+        ScreenFx.apply()
         SessionState.running = true
         surfaceReady = true
         // soket wayland-0 sudah ada: nyalakan desktop (Xwayland + sesi X11 Debian) atau aplikasi Shortcut

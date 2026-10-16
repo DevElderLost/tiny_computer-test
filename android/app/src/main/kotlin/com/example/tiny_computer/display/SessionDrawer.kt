@@ -33,6 +33,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Keyboard
 import androidx.compose.material.icons.outlined.Mouse
@@ -46,6 +47,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -166,6 +168,7 @@ fun SessionDrawer(
                     when (page) {
                         DrawerPage.POINTER -> PointerPage(state)
                         DrawerPage.INPUT -> InputPage(state, onPadOverlayChange)
+                        DrawerPage.EFFECT -> EffectPage()
                         DrawerPage.SESSION -> SessionPage(
                             onBack = { state.menuOpen = false; onBackToTerminal() },
                         )
@@ -201,6 +204,7 @@ private const val CLOSE_DRAG_PX = 48f
 private enum class DrawerPage(val title: Int, val icon: ImageVector) {
     POINTER(R.string.tc_drawer_pointer, Icons.Outlined.Mouse),
     INPUT(R.string.tc_drawer_input, Icons.Outlined.Keyboard),
+    EFFECT(R.string.tc_drawer_effect, Icons.Outlined.AutoAwesome),
     SESSION(R.string.tc_drawer_session, Icons.Outlined.Settings),
 }
 
@@ -327,6 +331,57 @@ private fun SessionPage(onBack: () -> Unit) {
     DeckGroup(stringResource(R.string.tc_drawer_session)) {
         Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             DrawerActionButton(stringResource(R.string.tc_display_back), Icons.Outlined.Terminal, pal.onBackground, onBack)
+        }
+    }
+}
+
+private val UPSCALER_NAMES = listOf("None", "Linear", "Nearest", "SGSR", "FSR", "FSR Fit", "Sharpen", "NIS", "SGSR HQ")
+
+/**
+ * Efek layar compositor yang bisa diubah selama sesi berjalan (berlaku di frame berikutnya, disimpan di [Cfg]).
+ * HDR10 sungguhan tidak ada di sini: diputuskan saat compositor dinyalakan, jadi ada di Pengaturan > Display.
+ */
+@Composable
+private fun EffectPage() {
+    var rev by remember { mutableStateOf(0) }
+    DeckGroup(stringResource(R.string.tc_fx_title)) {
+        key(rev) {
+            var up by remember { mutableStateOf(Cfg.upscaler) }
+            DeckChoiceRow(stringResource(R.string.tc_fx_upscaler), null, UPSCALER_NAMES.mapIndexed { i, n -> i to n }, up) {
+                up = it; Cfg.upscaler = it; ScreenFx.applyUpscalerIfRunning()
+            }
+            var sharp by remember { mutableStateOf(Cfg.upscaleSharpness) }
+            DeckSliderRow(stringResource(R.string.tc_fx_sharp), null, sharp, 0..100, 1, { "$it%" }) { sharp = it; Cfg.upscaleSharpness = it; ScreenFx.applyIfRunning() }
+            var hdrFx by remember { mutableStateOf(Cfg.hdrEffect) }
+            DrawerToggleRow(stringResource(R.string.tc_fx_hdr_effect), hdrFx) { hdrFx = it; Cfg.hdrEffect = it; ScreenFx.applyIfRunning() }
+            var white by remember { mutableStateOf(Cfg.hdrSdrWhite) }
+            DeckSliderRow(stringResource(R.string.tc_fx_hdr_white), null, white, 80..400, 5, { "$it nit" }) { white = it; Cfg.hdrSdrWhite = it; ScreenFx.applyIfRunning() }
+            var cas by remember { mutableStateOf(Cfg.casOn) }
+            DrawerToggleRow(stringResource(R.string.tc_fx_cas), cas) { cas = it; Cfg.casOn = it; ScreenFx.applyIfRunning() }
+            if (cas) {
+                var casLv by remember { mutableStateOf(Cfg.casLevel) }
+                DeckSliderRow(stringResource(R.string.tc_fx_cas_level), null, casLv, 0..100, 1, { "$it%" }) { casLv = it; Cfg.casLevel = it; ScreenFx.applyIfRunning() }
+            }
+            var deband by remember { mutableStateOf(Cfg.debandOn) }
+            DrawerToggleRow(stringResource(R.string.tc_fx_deband), deband) { deband = it; Cfg.debandOn = it; ScreenFx.applyIfRunning() }
+            if (deband) {
+                var debandLv by remember { mutableStateOf(Cfg.debandLevel) }
+                DeckSliderRow(stringResource(R.string.tc_fx_deband_level), null, debandLv, 0..200, 5, { "$it" }) { debandLv = it; Cfg.debandLevel = it; ScreenFx.applyIfRunning() }
+            }
+            var br by remember { mutableStateOf(Cfg.fxBrightness) }
+            DeckSliderRow(stringResource(R.string.tc_fx_brightness), null, br, -100..100, 1, { "$it" }) { br = it; Cfg.fxBrightness = it; ScreenFx.applyIfRunning() }
+            var ct by remember { mutableStateOf(Cfg.fxContrast) }
+            DeckSliderRow(stringResource(R.string.tc_fx_contrast), null, ct, -100..100, 1, { "$it" }) { ct = it; Cfg.fxContrast = it; ScreenFx.applyIfRunning() }
+            var gm by remember { mutableStateOf(Cfg.fxGamma) }
+            DeckSliderRow(stringResource(R.string.tc_fx_gamma), null, gm, 50..300, 5, { "%.2f".format(it / 100f) }) { gm = it; Cfg.fxGamma = it; ScreenFx.applyIfRunning() }
+            var sat by remember { mutableStateOf(Cfg.fxSaturation) }
+            DeckSliderRow(stringResource(R.string.tc_fx_saturation), null, sat, 0..200, 1, { "$it%" }) { sat = it; Cfg.fxSaturation = it; ScreenFx.applyIfRunning() }
+            var fxaa by remember { mutableStateOf(Cfg.fxFxaa) }
+            DrawerToggleRow(stringResource(R.string.tc_fx_fxaa), fxaa) { fxaa = it; Cfg.fxFxaa = it; ScreenFx.applyIfRunning() }
+        }
+        val pal = LocalPalette.current
+        Column(Modifier.fillMaxWidth().padding(10.dp)) {
+            DrawerActionButton(stringResource(R.string.tc_fx_reset), Icons.Outlined.Settings, pal.onBackground, { ScreenFx.reset(); rev++ })
         }
     }
 }

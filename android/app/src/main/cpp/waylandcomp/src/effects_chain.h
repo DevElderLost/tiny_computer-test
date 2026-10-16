@@ -54,6 +54,8 @@ VkImage vkp_effects_run(VkCommandBuffer cmd, VkImage scene, int scene_w, int sce
 
 /* Compositor thread: drop every Vulkan object (device teardown / device lost). */
 void vkp_effects_destroy(void);
+/* Drops the chain's view/descriptor set on `img` when it holds one; call before destroying that image. */
+void vkp_effects_forget_image(VkImage img);
 
 /* Compositor thread, before vkp_effects_run(): the format of the scene image it will be handed and the
  * format its own targets use. R8G8B8A8 / R8G8B8A8 for every SDR frame (the default); A2B10G10R10 /

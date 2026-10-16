@@ -205,6 +205,55 @@ object Cfg {
         get() = TinyPrefs.getInt("upscaler", 1)
         set(v) = TinyPrefs.setInt("upscaler", v)
 
+    // ---- Efek layar compositor dan HDR (lihat display/ScreenFx) ----
+    /** HDR10 sungguhan: gerbang HDR compositor + DXVK_HDR=1 untuk Wine. Berlaku saat compositor dinyalakan. */
+    var hdrOutput: Boolean
+        get() = TinyPrefs.getBool("hdrOutput", false)
+        set(v) = TinyPrefs.setBool("hdrOutput", v)
+    /** Tingkat putih SDR (nit) saat compositor menyusun gambar HDR; 203 = BT.2408. */
+    var hdrSdrWhite: Int
+        get() = TinyPrefs.getInt("hdrSdrWhite", 203)
+        set(v) = TinyPrefs.setInt("hdrSdrWhite", v)
+    /** Efek "HDR" laci DroidDeck: filter bloom/kontras pada keluaran SDR (bukan HDR sungguhan). */
+    var hdrEffect: Boolean
+        get() = TinyPrefs.getBool("hdrEffect", false)
+        set(v) = TinyPrefs.setBool("hdrEffect", v)
+    /** Ketajaman upscaler 0..100; kunci tidak ada = bawaan compositor. */
+    var upscaleSharpness: Int
+        get() = TinyPrefs.getInt("upscaleSharpness", 50)
+        set(v) = TinyPrefs.setInt("upscaleSharpness", v)
+    var casOn: Boolean
+        get() = TinyPrefs.getBool("casOn", false)
+        set(v) = TinyPrefs.setBool("casOn", v)
+    var casLevel: Int
+        get() = TinyPrefs.getInt("casLevel", 50)
+        set(v) = TinyPrefs.setInt("casLevel", v)
+    var debandOn: Boolean
+        get() = TinyPrefs.getBool("debandOn", false)
+        set(v) = TinyPrefs.setBool("debandOn", v)
+    var debandLevel: Int
+        get() = TinyPrefs.getInt("debandLevel", 100)
+        set(v) = TinyPrefs.setInt("debandLevel", v)
+    /** -100..100 (0 = netral). */
+    var fxBrightness: Int
+        get() = TinyPrefs.getInt("fxBrightness", 0)
+        set(v) = TinyPrefs.setInt("fxBrightness", v)
+    /** -100..100 (0 = netral). */
+    var fxContrast: Int
+        get() = TinyPrefs.getInt("fxContrast", 0)
+        set(v) = TinyPrefs.setInt("fxContrast", v)
+    /** Gamma x100: 50..300 (100 = netral). */
+    var fxGamma: Int
+        get() = TinyPrefs.getInt("fxGamma", 100)
+        set(v) = TinyPrefs.setInt("fxGamma", v)
+    /** Saturasi persen 0..200 (100 = netral). */
+    var fxSaturation: Int
+        get() = TinyPrefs.getInt("fxSaturation", 100)
+        set(v) = TinyPrefs.setInt("fxSaturation", v)
+    var fxFxaa: Boolean
+        get() = TinyPrefs.getBool("fxFxaa", false)
+        set(v) = TinyPrefs.setBool("fxFxaa", v)
+
     /** Id palet: graphite (bawaan), paper, blue, electric. Sama dengan pilihan tema DroidDeck. */
     var theme: String
         get() = TinyPrefs.getString("theme", "graphite")

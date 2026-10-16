@@ -65,6 +65,8 @@ static uint32_t g_ring_n, g_ring_w, g_ring_h;
 static VkFormat g_ring_fmt;
 
 static uint64_t g_source_frames;
+/* Frames the game window really committed (compositor.c); 0 until the first one. */
+extern uint64_t droiddeck_game_frames(void);
 static uint32_t g_planned;          /* generations planned for the current source frame */
 static int g_was_armed, g_generating_logged;
 static uint32_t g_built_w, g_built_h;
@@ -393,7 +395,9 @@ int vkp_framegen_run(VkCommandBuffer cmd, VkImage scene, VkImageView scene_view,
         return 0;
     }
 
-    uint32_t n_gen = fge_plan(g_ring_n, ++g_source_frames, g_presented_rate);
+    ++g_source_frames;
+    const uint64_t game_frames = droiddeck_game_frames();
+    uint32_t n_gen = fge_plan(g_ring_n, game_frames ? game_frames : g_source_frames, g_presented_rate);
     if (n_gen > g_ring_n) n_gen = g_ring_n;
     g_planned = n_gen;
 

@@ -81,6 +81,8 @@ fun SettingsScreen() {
             ) { fps = it; Cfg.fpsLimit = it }
             var up by remember { mutableStateOf(Cfg.upscaler) }
             DeckChoiceRow(stringResource(R.string.tc_disp_upscaler), null, UPSCALERS.mapIndexed { i, n -> i to n }, up) { up = it; Cfg.upscaler = it }
+            // HDR10 diputuskan saat compositor dinyalakan, jadi hanya bisa diubah di sini (efek lain ada di menu sesi > Effect)
+            DeckSwitchRow(stringResource(R.string.tc_fx_hdr_output), stringResource(R.string.tc_fx_hdr_output_hint), Cfg.hdrOutput) { Cfg.hdrOutput = it }
             DeckTextRow(stringResource(R.string.tc_disp_driver), Cfg.androidDriver) { Cfg.androidDriver = it.trim() }
             DeckSwitchRow(stringResource(R.string.tc_ui_hidpi_support), stringResource(R.string.tc_ui_apply_on_next_launch), Cfg.isHidpiEnabled) { Cfg.isHidpiEnabled = it }
             DeckTextRow(stringResource(R.string.tc_ui_hidpi_env_var), Cfg.defaultHidpiOpt) { Cfg.defaultHidpiOpt = it }

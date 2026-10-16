@@ -439,4 +439,22 @@
     <string name="tc_trackpad_mouse">Mouse cursor</string>
     <string name="tc_ctrl_trackpad_speed">Trackpad cursor speed</string>
     <string name="tc_drawer_edit_layout">Edit controller layout</string>
+    <string name="tc_drawer_effect">Effects</string>
+    <string name="tc_fx_title">Screen effects</string>
+    <string name="tc_fx_hdr_output">HDR10 output</string>
+    <string name="tc_fx_hdr_output_hint">Offers HDR to games (DXVK_HDR=1 for Wine apps). Needs an HDR10 display; applies when the session starts.</string>
+    <string name="tc_fx_hdr_white">SDR white level in HDR (nits)</string>
+    <string name="tc_fx_hdr_effect">HDR effect (SDR filter)</string>
+    <string name="tc_fx_upscaler">Upscaler</string>
+    <string name="tc_fx_sharp">Upscaler sharpness</string>
+    <string name="tc_fx_cas">CAS sharpen</string>
+    <string name="tc_fx_cas_level">CAS level</string>
+    <string name="tc_fx_deband">Debanding</string>
+    <string name="tc_fx_deband_level">Debanding strength</string>
+    <string name="tc_fx_brightness">Brightness</string>
+    <string name="tc_fx_contrast">Contrast</string>
+    <string name="tc_fx_gamma">Gamma</string>
+    <string name="tc_fx_saturation">Saturation</string>
+    <string name="tc_fx_fxaa">FXAA</string>
+    <string name="tc_fx_reset">Reset effects</string>
 </resources>

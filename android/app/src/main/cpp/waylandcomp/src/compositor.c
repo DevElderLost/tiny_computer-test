@@ -526,6 +526,7 @@ static int g_nkbs;
  * every capital arrived lowercase. */
 static uint32_t g_mods_depressed, g_mods_locked;
 static uint32_t g_mod_keys_held; /* one bit per modifier key below, so a repeat press is harmless */
+static uint8_t g_keys_down[0x300 / 8]; /* evdev keys currently down: a second press without a release is dropped */
 static struct seat_touch g_touches[MAX_PTRS];
 static int g_ntouches;
 
@@ -822,14 +823,20 @@ static struct surface *g_hud_surface;
 static int64_t g_hud_last_ns;
 /* That window committed a frame the screen has not drawn yet. */
 static int g_hud_fresh;
+static int64_t g_hud_alive_ns;   /* last commit of the HUD window, repeats included */
+static uint64_t g_game_frames;   /* distinct buffers the HUD window has committed */
 extern void droiddeck_on_game_surface(const char *window, const char *gpu); /* window NULL = gone */
 extern void droiddeck_on_game_frame(void);
 /* The program behind that window: its Linux pid (the Wayland client's credentials) and executable name
  * ("" when /proc gave none) - the app arms its CPU affinity on it (X11 does that from window events). */
 extern void droiddeck_on_game_program(int pid, const char *program);
 
+uint64_t droiddeck_game_frames(void) { return g_game_frames; }
+
 static void take_dmabuf(struct surface *s, struct dmabuf_buffer *b, struct wl_resource *buffer) {
-    if (s->dmabuf != buffer || s->dmabuf_buf != b) {
+    /* The same wl_buffer committed again is not a new frame: it must not count as one. */
+    const int repeat = s->dmabuf == buffer && s->dmabuf_buf == b;
+    if (!repeat) {
         drop_dmabuf(s, 1);
         s->dmabuf = buffer;
         s->dmabuf_buf = b;
@@ -864,7 +871,7 @@ static void take_dmabuf(struct surface *s, struct dmabuf_buffer *b, struct wl_re
     s->buf_h = b->height;
     s->buf_alpha = (b->format & 0xff) == 'A';
     s->has_content = b->img != NULL;
-    g_stat_dmabuf++;
+    if (!repeat) g_stat_dmabuf++;
     const int announced_now = !s->announced_vulkan;
     if (!s->announced_vulkan) {
         char name[160];
@@ -895,7 +902,7 @@ static void take_dmabuf(struct surface *s, struct dmabuf_buffer *b, struct wl_re
      * full-screen gamescope over the desktop still does), and a window gone quiet for a second
      * gives way to whatever draws next. */
     if (s != g_hud_surface && (b->img || ahb_swapchain_has_ahb(b)) &&
-        (!g_hud_surface || now_ns() - g_hud_last_ns > 1000000000LL ||
+        (!g_hud_surface || now_ns() - g_hud_alive_ns > 1000000000LL ||
          (announced_now && (int64_t)b->width * b->height >= (int64_t)g_hud_surface->buf_w * g_hud_surface->buf_h))) {
         char name[160];
         describe(s, name, sizeof(name));
@@ -924,7 +931,10 @@ static void take_dmabuf(struct surface *s, struct dmabuf_buffer *b, struct wl_re
      * Asking whether the compositor could import it, as this used to, is a question about the
      * copy path and not about whether a frame happened: a game whose buffers go straight to
      * the display layer draws on screen while the counter sat at 0.0 fps and 1000.0 ms. */
-    if (s == g_hud_surface) { g_hud_last_ns = now_ns(); g_hud_fresh = 1; droiddeck_on_game_frame(); }
+    if (s == g_hud_surface) {
+        g_hud_alive_ns = now_ns();
+        if (!repeat) { g_hud_last_ns = g_hud_alive_ns; g_hud_fresh = 1; g_game_frames++; droiddeck_on_game_frame(); }
+    }
 }
 
 /* ---- hooks for ahb_swapchain.c (zero-copy layers) */
@@ -986,6 +996,17 @@ static uint32_t nominal_refresh_ns(void) {
     int mhz = g_output_refresh_mhz;
     if (mhz <= 0) mhz = 60000;
     return (uint32_t)(1000000000000LL / (int64_t)mhz);
+}
+
+static int64_t g_tick_vsync_ns;   /* frame time of the vsync tick that started the current scene */
+
+/* The presentation time reported to clients: the vsync tick's own time when this scene was drawn within
+ * one refresh of it (steady pacing for games that read presentation-time), else the render time. */
+static int64_t presented_ns(int64_t render_ns) {
+    if (!g_tick_vsync_ns || render_ns - g_last_vsync_ns > (int64_t)nominal_refresh_ns() ||
+        render_ns < g_tick_vsync_ns)
+        return render_ns;
+    return g_tick_vsync_ns;
 }
 
 static void feedback_present_all(struct wl_list *list, int64_t t) {
@@ -2604,7 +2625,7 @@ static void render_scene(void) {
     free(hs.is_hdr);
     if (hdr_copy && rendered && droiddeck_color_hdr_open()) hdr_count_copied(&dl, hdr_copy);
     if (rendered) {
-        int64_t t = now_ns();
+        int64_t t = presented_ns(t_scene);
         g_stat_frames++;
         /* A surface outside the scene (role-less, not placed yet, a hidden helper window such
          * as wined3d's device window) was not shown, so its feedback is discarded rather than
@@ -2669,7 +2690,7 @@ static void on_vsync(int64_t frame_time_ns) {
         if (d > 3000000LL && d < 40000000LL) g_refresh_ns = (g_refresh_ns * 7 + d) / 8;
     }
     g_last_vsync_ns = now;
-    (void)frame_time_ns;
+    g_tick_vsync_ns = frame_time_ns;
     /* The app's surface may have been replaced or taken away since the last frame: apply that now
      * (the app never waits for us), and redraw the scene onto a new one. */
     if (vkp_apply_window_request()) g_dirty = 1;
@@ -2942,6 +2963,7 @@ struct constraint {
     struct region region, pending_region;   /* confine area, surface-local; unset = whole surface */
     int pending_region_set;
     int hint_set, pending_hint_set;         /* lock: cursor position hint, surface-local */
+    int gave_keys;                          /* the lock gave its window the keyboard (nobody had it) */
     double hint_x, hint_y, pending_hint_x, pending_hint_y;
 };
 static struct wl_list g_constraints;
@@ -3029,6 +3051,14 @@ static void constraint_end(struct constraint *k, int tell_client, const char *wh
         g_ptr_y = oy + k->hint_y;
     }
     g_raw_valid = 0;
+    if (k->gave_keys) {
+        k->gave_keys = 0;
+        for (int i = 0; i < g_nkbs; i++) {
+            if (!k->surface || g_kbs[i].focus != k->surface->resource) continue;
+            wl_keyboard_send_leave(g_kbs[i].kb, wl_display_next_serial(g_display), g_kbs[i].focus);
+            g_kbs[i].focus = NULL;
+        }
+    }
     if (tell_client) constraint_send_state(k, 0);
     constraint_describe(k, name, sizeof(name));
     droiddeck_log("pointer", "%s: %s (%s), pointer at %d,%d", k->is_lock ? "unlocked" : "unconfined",
@@ -3048,6 +3078,14 @@ static void constraint_activate(struct constraint *k) {
     /* Pointer focus follows the constraint: the program gets the events itself. */
     constraint_origin(k, &ox, &oy);
     pointer_focus(k->surface->resource, wl_fixed_from_double(g_ptr_x - ox), wl_fixed_from_double(g_ptr_y - oy));
+    /* A locked pointer with no keyboard focus anywhere (a game started from the shell): the locked window
+     * takes the keys, and gives them back when the lock ends. */
+    int focused = 0;
+    for (int i = 0; i < g_nkbs; i++) if (g_kbs[i].focus) focused = 1;
+    if (k->is_lock && !focused && keyboard_for(wl_resource_get_client(k->surface->resource))) {
+        keyboard_focus(k->surface->resource);
+        k->gave_keys = 1;
+    }
     constraint_send_state(k, 1);
     constraint_describe(k, name, sizeof(name));
     if (k->is_lock)
@@ -3495,7 +3533,25 @@ static void pointer_delta(double dx, double dy) {
 
 /* A button change at the current pointer position. */
 static void pointer_button(uint32_t button, int pressed) {
-    pointer_input(0, 0, 1, button, pressed);
+    /* A press, or the end of a window drag the compositor itself runs, takes the normal path. */
+    if (pressed || g_drag.s) {
+        pointer_input(0, 0, 1, button, pressed);
+        return;
+    }
+    /* Releases also clean up interrupted gestures: deliver them to the existing pointer focus without
+     * motion or hit-testing (native touch has its own coordinates, replaying g_ptr_x/y could warp the
+     * game's cursor). */
+    uint32_t t = now_ms();
+    for (int i = 0; i < g_nptrs; i++) {
+        struct seat_pointer *sp = &g_ptrs[i];
+        if (!sp->focus) continue;
+        wl_pointer_send_button(sp->ptr, wl_display_next_serial(g_display), t, button,
+                               WL_POINTER_BUTTON_STATE_RELEASED);
+        if (wl_resource_get_version(sp->ptr) >= WL_POINTER_FRAME_SINCE_VERSION)
+            wl_pointer_send_frame(sp->ptr);
+    }
+    g_grab = NULL;
+    wl_display_flush_clients(g_display);
 }
 
 /* The pointer's scene position for the app's cursor overlay, in 1/16 pixel: out[0]=x, out[1]=y.
@@ -3804,6 +3860,11 @@ static int update_modifiers(uint32_t evdev, int pressed) {
 }
 
 static void key_event(uint32_t evdev, int pressed) {
+    if (evdev < 0x300) {
+        uint8_t bit = (uint8_t)(1u << (evdev & 7));
+        if (pressed && (g_keys_down[evdev >> 3] & bit)) return;
+        if (pressed) g_keys_down[evdev >> 3] |= bit; else g_keys_down[evdev >> 3] &= (uint8_t)~bit;
+    }
     /* Tracked even with nothing to deliver to, so a Shift released unseen is not left held. */
     int mods_changed = update_modifiers(evdev, pressed);
     /* Keys go to the program window the user last clicked (else the topmost non-shell window),

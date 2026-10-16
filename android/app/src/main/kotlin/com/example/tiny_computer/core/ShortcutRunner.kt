@@ -215,6 +215,9 @@ fi
             if (isWine && WineSystem.displayWayland())
                 sb.append("if [ -S /tmp/wayland-0 ]; then unset MESA_VK_WSI_DEBUG; fi\n")
         }
+        // HDR10 (Pengaturan > Display): DXGI Wine/DXVK melaporkan layar HDR. Gerbang HDR compositor
+        // tetap memutuskan sendiri; env Shortcut buatan pengguna di bawah bisa menimpanya.
+        if (Cfg.hdrOutput && isWine) sb.append("export DXVK_HDR=1\n")
         // HiDPI khusus aplikasi ini
         when (s.hidpi) {
             ShortcutPrefs.ON -> for ((k, v) in pairs(Cfg.defaultHidpiOpt)) sb.append("export $k=${q(v)}\n")

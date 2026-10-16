@@ -286,4 +286,22 @@
     <string name="tc_trackpad_mouse">滑鼠游標</string>
     <string name="tc_ctrl_trackpad_speed">觸控板游標速度</string>
     <string name="tc_drawer_edit_layout">編輯控制器配置</string>
+    <string name="tc_drawer_effect">特效</string>
+    <string name="tc_fx_title">螢幕特效</string>
+    <string name="tc_fx_hdr_output">HDR10 輸出</string>
+    <string name="tc_fx_hdr_output_hint">向遊戲提供 HDR(Wine 應用使用 DXVK_HDR=1)。需要 HDR10 顯示器,下次啟動工作階段時生效。</string>
+    <string name="tc_fx_hdr_white">HDR 中的 SDR 白電平(尼特)</string>
+    <string name="tc_fx_hdr_effect">HDR 特效(SDR 濾鏡)</string>
+    <string name="tc_fx_upscaler">放大器</string>
+    <string name="tc_fx_sharp">放大器銳度</string>
+    <string name="tc_fx_cas">CAS 銳化</string>
+    <string name="tc_fx_cas_level">CAS 強度</string>
+    <string name="tc_fx_deband">去色帶</string>
+    <string name="tc_fx_deband_level">去色帶強度</string>
+    <string name="tc_fx_brightness">亮度</string>
+    <string name="tc_fx_contrast">對比度</string>
+    <string name="tc_fx_gamma">伽瑪</string>
+    <string name="tc_fx_saturation">飽和度</string>
+    <string name="tc_fx_fxaa">FXAA</string>
+    <string name="tc_fx_reset">重設特效</string>
 </resources>
