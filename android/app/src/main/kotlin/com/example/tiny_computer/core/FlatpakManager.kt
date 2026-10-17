@@ -8,6 +8,7 @@ import androidx.compose.runtime.setValue
 import com.example.tiny_computer.R
 import org.json.JSONObject
 import java.io.File
+import java.nio.file.Files
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
@@ -116,7 +117,11 @@ object FlatpakManager {
         stageFiles(ctx)?.let { return it }
         File(hostDir(), "setup.done").delete()
         File(hostDir(), "setup.failed").delete()
-        val command = "clear; bash $SETUP"
+        // saklar Pengaturan > Log: keluaran skrip pasang ikut ditulis ke Download/Wayland-logs (launch-*-flatpak-setup.log)
+        // lewat tee, seperti keluaran aplikasi Shortcut; /storage dimount apa adanya ke guest.
+        val log = LaunchLog.begin("flatpak-setup")
+        LaunchLog.write(log, "flatpak", "pasang Flatpak + Flathub (Debian trixie) di terminal kontainer")
+        val command = if (log == null) "clear; bash $SETUP" else "clear; bash $SETUP 2>&1 | tee -a '${log.file.absolutePath}'"
         setupWatching = true
         if (Startup.phase == Startup.Phase.DONE && Launcher.isStarted) {
             Launcher.runInTerminal(ctx, command)
@@ -169,24 +174,54 @@ object FlatpakManager {
         if (!Startup.installed) return ctx.getString(R.string.tc_fh_need_system)
         if (!ready()) return ctx.getString(R.string.tc_fh_not_ready)
         stageFiles(ctx)?.let { return it }
+        ensureMonitorResolv()
         val latch = CountDownLatch(1)
         Startup.prepareForApp(ctx) { latch.countDown() }
         if (!latch.await(120, TimeUnit.SECONDS)) return ctx.getString(R.string.tc_fh_prepare_timeout)
         return null
     }
 
+    /**
+     * Runtime KDE (6.10 dst.) membawa `etc/resolv.conf` berupa symlink ke `/run/host/monitor/resolv.conf`. Saat
+     * deploy, Flatpak hanya menghapus tautan itu bila GIO melihatnya ada, dan GIO mengikuti symlink: bila sasarannya
+     * tidak ada, tautan tertinggal dan pembuatan tautan baru gagal ("File exists"), sehingga pemasangan aplikasi
+     * yang butuh runtime KDE batal. Pembantu Python mencoba membuat sasarannya sebagai pengguna `tiny`, tetapi
+     * `/run` di rootfs bisa tidak dapat ditulis dari guest. Di sini berkasnya dibuat dari sisi Android, tempat
+     * rootfs sepenuhnya milik aplikasi, sebelum tiap perintah toko.
+     */
+    private fun ensureMonitorResolv() {
+        runCatching {
+            val root = TinyEnv.containerDir()
+            val target = File(root, "run/host/monitor/resolv.conf")
+            if (target.isFile) return
+            target.parentFile?.mkdirs()
+            Files.deleteIfExists(target.toPath()) // symlink putus dari percobaan sebelumnya
+            val src = DesktopApps.resolve(root, File(root, "etc/resolv.conf"))?.takeIf { it.isFile }
+            target.writeText(src?.readText()?.takeIf { it.isNotBlank() } ?: "nameserver 8.8.8.8\nnameserver 1.1.1.1\n")
+            target.setReadable(true, false)
+        }.onFailure { Log.w(TAG, "menyiapkan /run/host/monitor/resolv.conf gagal", it) }
+    }
+
     private fun runGuest(ctx: Context, verb: String, args: List<String>, onLine: (String) -> Unit): Int {
         val argv = listOf("/usr/bin/python3", HELPER, verb) + args
         val log = runCatching { File(hostDir(), "flatpak-$verb.log").printWriter() }.getOrNull()
         log?.println("== ${java.util.Date()} ${argv.joinToString(" ")}")
+        // saklar Pengaturan > Log: satu berkas per perintah di Download/Wayland-logs (launch-*-flatpak-<perintah>.log);
+        // baris progres dilewati karena dikirim tiap 0,5 detik
+        val session = LaunchLog.begin("flatpak-$verb")
+        LaunchLog.write(session, "flatpak", argv.joinToString(" "))
+        var code = -1
         try {
             val env = sessionEnv(ctx) + " XDG_RUNTIME_DIR=/tmp XDG_DATA_HOME=/home/tiny/.local/share PYTHONUNBUFFERED=1"
-            return Launcher.runGuest(ctx, argv, env) { line ->
+            code = Launcher.runGuest(ctx, argv, env) { line ->
                 log?.println(line)
                 log?.flush()
+                if (session != null && !line.startsWith("{\"e\": \"progress\"")) LaunchLog.write(session, "flatpak", line)
                 onLine(line)
             }
+            return code
         } finally {
+            LaunchLog.write(session, "exit", "$verb keluar dengan kode $code")
             log?.close()
         }
     }
