@@ -395,6 +395,7 @@ static struct wl_list g_pending_releases;
 static int g_release_timer_fd = -1;
 static struct wl_event_source *g_release_source;
 static int g_scene_w, g_scene_h;            /* size of the last drawn scene */
+static int g_scene_pub_w, g_scene_pub_h;    /* the same, for droiddeck_scene_size (read from the UI thread); 0 = nothing drawn yet */
 static int g_desktop_w, g_desktop_h;        /* last size the desktop had content at */
 static unsigned g_stat_frames, g_stat_dmabuf, g_stat_shm; /* since the last 10 s summary */
 
@@ -2697,6 +2698,10 @@ static void render_scene(void) {
         else droiddeck_log("desktop", "no desktop: showing %dx%d (largest window)", w, h);
         g_scene_w = w;
         g_scene_h = h;
+        /* The app (touch mapping, cursor overlay) reads this from its own thread: without a desktop the
+         * scene follows the largest window, so a dialog taller than the main window changes it. */
+        __atomic_store_n(&g_scene_pub_w, w, __ATOMIC_RELAXED);
+        __atomic_store_n(&g_scene_pub_h, h, __ATOMIC_RELAXED);
     }
     layers_add(&dl, ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND, ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM);
     if (g_desktop && !g_hide_shell) add_tree(&dl, g_desktop, 0, 0, 0);
@@ -3807,6 +3812,20 @@ static void pointer_button(uint32_t button, int pressed) {
     }
     g_grab = NULL;
     wl_display_flush_clients(g_display);
+}
+
+/* The size of the scene the compositor last drew (what the screen shows, letterboxed): out = [w, h].
+ * Without a Wine desktop it follows the largest window, so it is NOT always the session size the app
+ * asked for - a Qt dialog taller than its main window grows it. The app's touch mapping and cursor
+ * overlay must use this size, or a tap lands where the cursor is not (the dialog's OK button could not
+ * be hit). Returns the ints written, 0 when out is too small or nothing was drawn yet. */
+int droiddeck_scene_size(int *out, int cap) {
+    int w = __atomic_load_n(&g_scene_pub_w, __ATOMIC_RELAXED);
+    int h = __atomic_load_n(&g_scene_pub_h, __ATOMIC_RELAXED);
+    if (!out || cap < 2 || w <= 0 || h <= 0) return 0;
+    out[0] = w;
+    out[1] = h;
+    return 2;
 }
 
 /* The pointer's scene position for the app's cursor overlay, in 1/16 pixel: out[0]=x, out[1]=y.

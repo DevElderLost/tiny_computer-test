@@ -28,6 +28,7 @@ extern void droiddeck_wayland_send_touch(int action, int pointer_id, int x, int 
 extern int  droiddeck_cursor_snapshot(int *out, int cap);
 extern int  droiddeck_cursor_serial(void);
 extern int  droiddeck_cursor_position(int *out, int cap);
+extern int  droiddeck_scene_size(int *out, int cap);
 extern void droiddeck_wayland_send_key(int evdev, int state);
 extern void droiddeck_wayland_send_scene_input(int type, int a, int b);
 extern void droiddeck_wayland_vsync(int64_t frame_time_ns);
@@ -315,6 +316,18 @@ Java_com_droiddeck_launcher_wayland_WaylandCompositor_nativeCursorPosition(
     jint *buf = (*env)->GetIntArrayElements(env, out, NULL);
     if (!buf) return 0;
     int n = droiddeck_cursor_position((int *)buf, 2);
+    (*env)->ReleaseIntArrayElements(env, out, buf, 0);
+    return n;
+}
+
+/* The size of the scene last drawn: out = [w, h]. Returns the ints written, 0 if nothing was drawn yet. */
+JNIEXPORT jint JNICALL
+Java_com_droiddeck_launcher_wayland_WaylandCompositor_nativeSceneSize(
+        JNIEnv *env, jclass clazz, jintArray out) {
+    if (!out || (*env)->GetArrayLength(env, out) < 2) return 0;
+    jint *buf = (*env)->GetIntArrayElements(env, out, NULL);
+    if (!buf) return 0;
+    int n = droiddeck_scene_size((int *)buf, 2);
     (*env)->ReleaseIntArrayElements(env, out, buf, 0);
     return n;
 }

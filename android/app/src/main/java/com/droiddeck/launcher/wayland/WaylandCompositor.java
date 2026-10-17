@@ -229,6 +229,14 @@ public final class WaylandCompositor {
      */
     public static native int nativeCursorPosition(int[] out);
 
+    /**
+     * The size of the scene the compositor last drew: out = [w, h]. Without a desktop it follows the largest
+     * window (a dialog taller than the main window makes it taller), so touch mapping and the cursor overlay
+     * must use it rather than the session size. Returns the ints written, 0 if nothing was drawn yet or
+     * {@code out} is shorter than 2.
+     */
+    public static native int nativeSceneSize(int[] out);
+
     /** Enough for the header plus a 256x256 cursor, the largest the compositor snapshots. */
     public static final int CURSOR_BUF_INTS = 6 + 256 * 256;
 

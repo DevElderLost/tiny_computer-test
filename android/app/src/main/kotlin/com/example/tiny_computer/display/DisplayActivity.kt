@@ -201,7 +201,7 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
             setBackgroundColor(0xFF000000.toInt())
             addView(surfaceView, FrameLayout.LayoutParams(-1, -1))
             // kursor rootfs: di atas compositor, di bawah menu; tidak menerima sentuhan
-            addView(CursorView(this@DisplayActivity, ui) { outW to outH }, FrameLayout.LayoutParams(-1, -1))
+            addView(CursorView(this@DisplayActivity, ui) { currentScene() }, FrameLayout.LayoutParams(-1, -1))
             addView(overlay, FrameLayout.LayoutParams(-1, -1))
         })
     }
@@ -395,17 +395,44 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
 
     // ------------------------------------------------------------------ Masukan
 
-    /** Posisi layar -> koordinat scene (piksel output), dengan letterbox FIT di tengah. */
+    private val sceneBuf = IntArray(2)
+
+    /**
+     * Ukuran scene yang SEDANG digambar compositor. Tanpa desktop Wine scene mengikuti window terbesar,
+     * jadi bisa lebih besar dari ukuran sesi ([outW]/[outH]) begitu dialog yang lebih tinggi dari window
+     * utama terbuka (Configure Azahar 960x736 di atas window 960x544). Pemetaan sentuhan dan kursor harus
+     * memakai ukuran ini; dengan [outW]/[outH] ketukan mendarat di y yang salah dan tombol dialog tidak
+     * pernah kena. Belum ada yang tergambar = ukuran sesi.
+     */
+    private fun currentScene(): Pair<Int, Int> {
+        val w: Int
+        val h: Int
+        if (WaylandCompositor.nativeSceneSize(sceneBuf) >= 2 && sceneBuf[0] > 0 && sceneBuf[1] > 0) {
+            w = sceneBuf[0]
+            h = sceneBuf[1]
+        } else {
+            w = outW
+            h = outH
+        }
+        // overlay Compose (kecepatan trackpad controller) ikut ukuran yang sama
+        if (ui.sceneW != w) ui.sceneW = w
+        if (ui.sceneH != h) ui.sceneH = h
+        return w to h
+    }
+
+    /** Posisi layar -> koordinat scene (piksel scene yang digambar), dengan letterbox FIT di tengah. */
     private fun sceneX(vx: Float): Int {
-        val s = min(surfaceView.width.toFloat() / outW, surfaceView.height.toFloat() / outH)
-        val off = (surfaceView.width - outW * s) / 2f
-        return ((vx - off) / s).toInt().coerceIn(0, outW - 1)
+        val (sw, sh) = currentScene()
+        val s = min(surfaceView.width.toFloat() / sw, surfaceView.height.toFloat() / sh)
+        val off = (surfaceView.width - sw * s) / 2f
+        return ((vx - off) / s).toInt().coerceIn(0, sw - 1)
     }
 
     private fun sceneY(vy: Float): Int {
-        val s = min(surfaceView.width.toFloat() / outW, surfaceView.height.toFloat() / outH)
-        val off = (surfaceView.height - outH * s) / 2f
-        return ((vy - off) / s).toInt().coerceIn(0, outH - 1)
+        val (sw, sh) = currentScene()
+        val s = min(surfaceView.width.toFloat() / sw, surfaceView.height.toFloat() / sh)
+        val off = (surfaceView.height - sh * s) / 2f
+        return ((vy - off) / s).toInt().coerceIn(0, sh - 1)
     }
 
     private fun move(x: Float, y: Float) =
@@ -456,11 +483,12 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
             lastTouchpad = touchpad
         }
         if (touchpad) {
-            val s = min(surfaceView.width.toFloat() / outW, surfaceView.height.toFloat() / outH)
+            val (sw, sh) = currentScene()
+            val s = min(surfaceView.width.toFloat() / sw, surfaceView.height.toFloat() / sh)
             touchpadInput.speed = ui.touchpadSpeed
             touchpadInput.scrollSpeed = ui.touchpadScroll
             touchpadInput.naturalScroll = ui.touchpadNatural
-            return touchpadInput.onTouch(e, s, outW, outH)
+            return touchpadInput.onTouch(e, s, sw, sh)
         }
         // sentuh langsung: kursor mengikuti jari
         when (e.actionMasked) {
