@@ -294,6 +294,7 @@ struct surface {
     int mapped;                             /* in g_toplevels */
     struct wl_list toplevel_link;
     int x, y, placed;
+    int auto_pos;                           /* no desktop: x, y were chosen by layout_toplevels (centered), not by a drag */
     uint32_t hwnd;
 
     /* wlr-layer-shell (see the "wlr-layer-shell" section). */
@@ -706,6 +707,8 @@ static void apply_zorder(void) {
     }
 }
 
+static void layout_toplevels(void);
+
 static void map_toplevel(struct surface *s) {
     int w, h;
     if (s->mapped) return;
@@ -718,6 +721,13 @@ static void map_toplevel(struct surface *s) {
                    s->placed ? "" : " (no desktop position yet)");
     }
     wl_list_insert(g_toplevels.prev, &s->toplevel_link); /* new windows start on top */
+    layout_toplevels();
+    if (s->auto_pos) {
+        char name[160];
+        describe(s, name, sizeof(name));
+        droiddeck_log("window", "placed %s at %d,%d (%s)", name, s->x, s->y,
+                   s->tl_parent && s->tl_parent->mapped ? "centered on its parent window" : "centered on the screen");
+    }
     /* Without a Wine desktop the clients are whole programs (the Linux desktop, a gamescope a
      * program on it started over it): a window that opens on top takes the keys too, as it would
      * on any desktop, rather than the one clicked last that is now underneath it. */
@@ -1624,8 +1634,12 @@ static void send_toplevel_configure(struct surface *s) {
         st = wl_array_add(&states, sizeof(uint32_t));
         *st = XDG_TOPLEVEL_STATE_FULLSCREEN;
     }
-    xdg_toplevel_send_configure(s->xdg_toplevel, g_output_w > 0 ? g_output_w : 0,
-                                g_output_h > 0 ? g_output_h : 0, &states);
+    /* Without a Wine desktop a dialog (xdg_toplevel.set_parent: Qt's Configure window, a GTK message box) is
+     * told 0x0, "pick your own size": forced to the output's size it covered the window it belongs to
+     * completely and could not be told apart from it. */
+    const int own_size = !g_desktop && s->tl_parent && !s->fullscreen;
+    xdg_toplevel_send_configure(s->xdg_toplevel, !own_size && g_output_w > 0 ? g_output_w : 0,
+                                !own_size && g_output_h > 0 ? g_output_h : 0, &states);
     wl_array_release(&states);
     xdg_surface_send_configure(s->xdg_surface, wl_display_next_serial(g_display));
 }
@@ -1682,6 +1696,7 @@ static void xdg_toplevel_resource_destroy(struct wl_resource *r) {
     drag_cancel_surface(s);
     unmap_toplevel(s);
     s->placed = 0;
+    s->auto_pos = 0;
     s->hwnd = 0;
     schedule_render();
 }
@@ -2127,6 +2142,45 @@ static void scene_size(int *w, int *h) {
         if ((long long)sw * sh > best) { best = (long long)sw * sh; *w = sw; *h = sh; }
     }
     if (*w <= 0 || *h <= 0) { *w = INPUT_SPACE_W; *h = INPUT_SPACE_H; }
+}
+
+/* Without a Wine desktop nothing positions the windows: every toplevel used to sit at 0,0, so a window
+ * opened over another (Azahar's Configure dialog over its main window) hid it completely. Now each is
+ * centered on the scene, and a dialog on the window it belongs to (set_parent), kept inside the scene.
+ * Windows the user dragged (auto_pos cleared), Wine windows (hwnd) and popups (placed from their
+ * positioner by popup_sync) are left alone; popups are re-synced because their parent may have moved. */
+static void layout_toplevels(void) {
+    struct surface *s;
+    int W, H;
+    if (g_desktop) return;
+    scene_size(&W, &H);
+    for (int pass = 0; pass < 2; pass++) { /* a dialog listed before its parent is settled on the second pass */
+        wl_list_for_each(s, &g_toplevels, toplevel_link) {
+            int w, h, x, y;
+            if (s->xdg_popup || s->hwnd || s->fullscreen) continue;
+            if (s->placed && !s->auto_pos) continue;
+            surface_size(s, &w, &h);
+            x = (W - w) / 2;
+            y = (H - h) / 2;
+            if (s->tl_parent && s->tl_parent != s && s->tl_parent->mapped) {
+                const struct surface *p = s->tl_parent;
+                int pw, ph;
+                surface_size(p, &pw, &ph);
+                x = (p->placed ? p->x : 0) + (pw - w) / 2;
+                y = (p->placed ? p->y : 0) + (ph - h) / 2;
+            }
+            if (x + w > W) x = W - w;
+            if (y + h > H) y = H - h;
+            if (x < 0) x = 0;
+            if (y < 0) y = 0;
+            s->x = x;
+            s->y = y;
+            s->placed = 1;
+            s->auto_pos = 1;
+        }
+    }
+    wl_list_for_each(s, &g_toplevels, toplevel_link)
+        if (s->xdg_popup) popup_sync(s);
 }
 
 /* ------------------------------------------------------------------ wlr-layer-shell
@@ -2637,6 +2691,7 @@ static void render_scene(void) {
     g_hdr_unimported = NULL; /* found again while the scene is built (HDR gate open only) */
     wl_list_for_each(s, &g_surfaces, link) s->drawn = 0;
     scene_size(&w, &h);
+    layout_toplevels();
     if (w != g_scene_w || h != g_scene_h) {
         if (g_desktop) droiddeck_log("desktop", "size %dx%d", w, h);
         else droiddeck_log("desktop", "no desktop: showing %dx%d (largest window)", w, h);
@@ -3539,6 +3594,7 @@ static void drag_begin(struct surface *s, int resizing, uint32_t edges) {
     s->x = g_drag.x;
     s->y = g_drag.y;
     s->placed = 1;
+    s->auto_pos = 0; /* the user is placing it now: layout_toplevels leaves it where the drag puts it */
     raise_toplevel(s, 0);
     pointer_unfocus();
 }
@@ -3667,6 +3723,14 @@ static void pointer_input(double x, double y, int relative, uint32_t button, int
                 return;
             }
             if (button && pressed) {
+                if (!g_desktop && target) {
+                    char name[160];
+                    int tw, th;
+                    describe(target, name, sizeof(name));
+                    surface_size(target, &tw, &th);
+                    droiddeck_log("input", "press at scene %d,%d went to %s (%dx%d at %d,%d)", (int)x, (int)y, name, tw, th,
+                               target->placed ? target->x : 0, target->placed ? target->y : 0);
+                }
                 /* A press brings the window under it to the front, with its dialogs. */
                 if (target && target->role == ROLE_TOPLEVEL) raise_toplevel(target, 0);
                 g_grab = target;
