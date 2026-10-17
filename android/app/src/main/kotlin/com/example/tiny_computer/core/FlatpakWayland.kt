@@ -19,7 +19,8 @@ import java.io.File
  * Karena itu opsi ditambahkan langsung ke baris `flatpak run` (bukan ke lingkungan guest):
  *  - soket: `--nosocket=x11 --socket=wayland --socket=fallback-x11` (X11 hanya bila Wayland tidak ada);
  *  - toolkit: daftar cadangan `wayland` lalu `x11` (Qt `wayland;xcb`, GTK `wayland,x11`, SDL `wayland,x11`);
- *  - GPU: variabel Turnip/Zink + folder `tiny/extra` (ICD bawaan) bila Turnip aktif untuk aplikasi ini.
+ *  - GPU: variabel Turnip/Zink + folder `tiny/extra` (ICD bawaan) bila Turnip aktif untuk aplikasi ini;
+ *  - dialog berkas: tanpa portal di kontainer, Qt/GTK dipaksa memakai dialog sendiri (QT_QPA_PLATFORMTHEME=generic).
  *
  * Per aplikasi dapat dimatikan dengan env Shortcut `TINY_FLATPAK_DISPLAY=x11` (paksa X11, perilaku lama untuk
  * aplikasi yang tidak punya Wayland: Java, Tk, Wine) atau `TINY_FLATPAK_DISPLAY=off` (tidak mengubah apa pun).
@@ -87,6 +88,9 @@ object FlatpakWayland {
             }
             Mode.OFF -> return null
         }
+        // Tanpa xdg-desktop-portal di kontainer, dialog berkas bawaan Flatpak (Qt tema "flatpak", GTK) tidak pernah
+        // muncul: "org.freedesktop.portal.Desktop was not provided by any .service files". Pakai dialog Qt/GTK sendiri.
+        opts += listOf("--env=QT_QPA_PLATFORMTHEME=generic", "--env=GTK_USE_PORTAL=0")
         var gpu = "llvmpipe (Turnip tidak aktif untuk aplikasi ini)"
         if (turnipOn) {
             for ((k, v) in pairs(Launcher.turnipOpt(ctx))) opts += "--env=$k=$v"

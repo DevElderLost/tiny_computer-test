@@ -314,6 +314,13 @@ struct surface {
     int fullscreen;                         /* xdg_toplevel.set_fullscreen: no client decorations */
     int toplevel_committed;                 /* the toplevel's initial commit was answered */
 
+    /* xdg_popup (menus, combo lists, tooltips): drawn as a window on top of popup_parent, placed by its positioner. */
+    struct wl_resource *xdg_popup;
+    struct surface *popup_parent;
+    int popup_grab;                         /* xdg_popup.grab: a click outside the popup chain dismisses it */
+    int pop_rel_x, pop_rel_y;               /* position inside popup_parent's window geometry */
+    int wg_x, wg_y;                         /* xdg_surface.set_window_geometry origin */
+
     char *title;                            /* xdg_toplevel title, for the session log */
     int announced_vulkan;                   /* logged its first dmabuf frame */
     uint32_t hdr_fmt_logged;                /* HDR session: the buffer format last named in the log */
@@ -620,6 +627,7 @@ static struct active_touch g_touch_points[MAX_TOUCH_POINTS];
 static void touch_cancel_surface(struct surface *surface);
 static struct surface *g_grab;              /* no-desktop fallback: surface holding the button */
 static struct surface *g_key_target;        /* no-desktop fallback: last clicked surface */
+static int g_swallow_release;               /* a press only dismissed a popup: its release goes nowhere */
 static struct surface *g_ime_click;         /* last clicked program window: where text input goes */
 static int g_input_pipe[2] = {-1, -1};
 struct input_msg { int type; int p1; int p2; int p3; int p4; };
@@ -713,7 +721,7 @@ static void map_toplevel(struct surface *s) {
     /* Without a Wine desktop the clients are whole programs (the Linux desktop, a gamescope a
      * program on it started over it): a window that opens on top takes the keys too, as it would
      * on any desktop, rather than the one clicked last that is now underneath it. */
-    if (!g_desktop) g_key_target = s;
+    if (!g_desktop && !s->xdg_popup) g_key_target = s;  /* a menu keeps the keys with its window */
     apply_zorder();
 }
 
@@ -1080,6 +1088,7 @@ static void surface_set_input(struct wl_client *c, struct wl_resource *r,
                               struct wl_resource *region) {}
 
 static void send_toplevel_configure(struct surface *s);
+static void popup_sync(struct surface *s);
 
 /* The pointer image from a cursor surface's buffer: wl_shm is copied, a dma-buf (labwc on a GPU
  * renderer) is read back once the client's render into it is done - its implicit fence, as the
@@ -1242,7 +1251,11 @@ static void surface_commit(struct wl_client *c, struct wl_resource *r) {
     constraints_surface_commit(s);
     droiddeck_color_commit(s->resource); /* wp_color_management_surface_v1 state (returns at once when HDR is off) */
 
-    if (s->role == ROLE_TOPLEVEL && s->xdg_toplevel) {
+    if (s->role == ROLE_TOPLEVEL && s->xdg_popup) {
+        popup_sync(s);
+        if (s->has_content) map_toplevel(s);
+        else unmap_toplevel(s);
+    } else if (s->role == ROLE_TOPLEVEL && s->xdg_toplevel) {
         if (s->has_content) map_toplevel(s);
         else unmap_toplevel(s);
     }
@@ -1296,7 +1309,10 @@ static void surface_resource_destroy(struct wl_resource *r) {
     drag_cancel_surface(s);
     {
         struct surface *o;
-        wl_list_for_each(o, &g_surfaces, link) if (o->tl_parent == s) o->tl_parent = NULL;
+        wl_list_for_each(o, &g_surfaces, link) {
+            if (o->tl_parent == s) o->tl_parent = NULL;
+            if (o->popup_parent == s) o->popup_parent = NULL;
+        }
     }
     if (g_cursor_surface == s) { g_cursor_surface = NULL; cursor_publish_hidden(); }
     if (g_cursor_shown == s) g_cursor_shown = NULL;
@@ -1330,6 +1346,7 @@ static void surface_resource_destroy(struct wl_resource *r) {
     if (s->subsurface) wl_resource_set_user_data(s->subsurface, NULL);
     if (s->xdg_surface) wl_resource_set_user_data(s->xdg_surface, NULL);
     if (s->xdg_toplevel) wl_resource_set_user_data(s->xdg_toplevel, NULL);
+    if (s->xdg_popup) wl_resource_set_user_data(s->xdg_popup, NULL);
     wl_list_remove(&s->link);
     free(s->title);
     free(s);
@@ -1680,25 +1697,166 @@ static void xdg_surface_get_toplevel(struct wl_client *c, struct wl_resource *r,
     s->xdg_toplevel = tl;
     send_toplevel_configure(s);
 }
-/* A popup is dismissed as soon as it is made (see the positioner below). */
+/* ---- xdg_popup: menus, combo lists and tooltips are drawn as windows over their parent.
+ * A positioner (anchor rectangle, anchor, gravity, offset, size) says where; the popup is
+ * mapped as a toplevel-like window (so drawing, hit-testing and input need no special case) at
+ * parent origin + parent window geometry + that position, flipped or slid to stay on the scene.
+ * A popup with a grab is dismissed (popup_done) by a press outside its chain: popups_dismiss(). */
+struct positioner {
+    int w, h, ar_x, ar_y, ar_w, ar_h, off_x, off_y;
+    uint32_t anchor, gravity, adjust;
+};
+static void scene_size(int *w, int *h);
+
+/* Scene position of [par]'s window geometry origin (a popup's x/y already include everything above it). */
+static void popup_origin(const struct surface *par, int *ox, int *oy) {
+    *ox = par ? (par->placed ? par->x : 0) + par->wg_x : 0;
+    *oy = par ? (par->placed ? par->y : 0) + par->wg_y : 0;
+}
+
+/* Scene position of the popup from its stored relative position (its own window geometry origin is removed). */
+static void popup_sync(struct surface *s) {
+    int ox, oy;
+    popup_origin(s->popup_parent, &ox, &oy);
+    s->x = ox + s->pop_rel_x - s->wg_x;
+    s->y = oy + s->pop_rel_y - s->wg_y;
+    s->placed = 1;
+}
+
+/* xdg-shell positioner geometry; stores the result as pop_rel_x/y. */
+static void popup_place(struct surface *s, const struct positioner *p) {
+    int ox, oy, sw = 0, sh = 0;
+    popup_origin(s->popup_parent, &ox, &oy);
+    int ax = p->ar_x, ay = p->ar_y;
+    switch (p->anchor) {
+        case 3: case 5: case 6: break;                 /* left */
+        case 4: case 7: case 8: ax += p->ar_w; break;  /* right */
+        default: ax += p->ar_w / 2;
+    }
+    switch (p->anchor) {
+        case 1: case 5: case 7: break;                 /* top */
+        case 2: case 6: case 8: ay += p->ar_h; break;  /* bottom */
+        default: ay += p->ar_h / 2;
+    }
+    int x, y;
+    switch (p->gravity) {
+        case 3: case 5: case 6: x = ax - p->w; break;  /* grows left */
+        case 4: case 7: case 8: x = ax; break;         /* grows right */
+        default: x = ax - p->w / 2;
+    }
+    switch (p->gravity) {
+        case 1: case 5: case 7: y = ay - p->h; break;  /* grows up */
+        case 2: case 6: case 8: y = ay; break;         /* grows down */
+        default: y = ay - p->h / 2;
+    }
+    x += p->off_x; y += p->off_y;
+    scene_size(&sw, &sh);
+    if (sw > 0 && sh > 0) {
+        int right = p->gravity == 4 || p->gravity == 7 || p->gravity == 8;
+        int left = p->gravity == 3 || p->gravity == 5 || p->gravity == 6;
+        int down = p->gravity == 2 || p->gravity == 6 || p->gravity == 8;
+        int up = p->gravity == 1 || p->gravity == 5 || p->gravity == 7;
+        if (ox + x + p->w > sw && (p->adjust & 4) && right) {          /* flip_x */
+            int nx = p->ar_x - p->w - p->off_x;
+            if (ox + nx >= 0) x = nx;
+        } else if (ox + x < 0 && (p->adjust & 4) && left) {
+            int nx = p->ar_x + p->ar_w - p->off_x;
+            if (ox + nx + p->w <= sw) x = nx;
+        }
+        if (oy + y + p->h > sh && (p->adjust & 8) && down) {           /* flip_y */
+            int ny = p->ar_y - p->h - p->off_y;
+            if (oy + ny >= 0) y = ny;
+        } else if (oy + y < 0 && (p->adjust & 8) && up) {
+            int ny = p->ar_y + p->ar_h - p->off_y;
+            if (oy + ny + p->h <= sh) y = ny;
+        }
+        /* slide: whatever still sticks out is pushed back in (a popup larger than the scene keeps its top-left) */
+        if (ox + x + p->w > sw) x = sw - p->w - ox;
+        if (oy + y + p->h > sh) y = sh - p->h - oy;
+        if (ox + x < 0) x = -ox;
+        if (oy + y < 0) y = -oy;
+    }
+    s->pop_rel_x = x;
+    s->pop_rel_y = y;
+}
+
 static void popup_destroy(struct wl_client *c, struct wl_resource *r) { wl_resource_destroy(r); }
-static void popup_grab(struct wl_client *c, struct wl_resource *r, struct wl_resource *seat, uint32_t serial) {}
+static void popup_grab(struct wl_client *c, struct wl_resource *r, struct wl_resource *seat, uint32_t serial) {
+    struct surface *s = wl_resource_get_user_data(r);
+    if (s) s->popup_grab = 1;
+}
 static void popup_reposition(struct wl_client *c, struct wl_resource *r, struct wl_resource *positioner,
-                             uint32_t token) {}
+                             uint32_t token) {}  /* xdg_wm_base is advertised at version 1: no repositioning */
 static const struct xdg_popup_interface popup_impl = {
     .destroy = popup_destroy,
     .grab = popup_grab,
     .reposition = popup_reposition,
 };
+static void popup_resource_destroy(struct wl_resource *r) {
+    struct surface *s = wl_resource_get_user_data(r);
+    if (!s) return;
+    s->xdg_popup = NULL;
+    s->popup_grab = 0;
+    unmap_toplevel(s);
+    s->placed = 0;
+    s->role = ROLE_NONE;  /* an xdg_surface may be given a new role after its popup is destroyed */
+    if (g_key_target == s) g_key_target = s->popup_parent;
+    s->popup_parent = NULL;
+    schedule_render();
+}
 static void xdg_surface_get_popup(struct wl_client *c, struct wl_resource *r, uint32_t id,
                                   struct wl_resource *parent, struct wl_resource *positioner) {
+    struct surface *s = wl_resource_get_user_data(r);
+    struct surface *par = parent ? wl_resource_get_user_data(parent) : NULL;
+    struct positioner *pos = positioner ? wl_resource_get_user_data(positioner) : NULL;
     struct wl_resource *p = wl_resource_create(c, &xdg_popup_interface, wl_resource_get_version(r), id);
     if (!p) { wl_client_post_no_memory(c); return; }
-    wl_resource_set_implementation(p, &popup_impl, NULL, NULL);
-    xdg_popup_send_popup_done(p);
+    if (!s || !par || !pos || s->role != ROLE_NONE || pos->w <= 0 || pos->h <= 0) {
+        /* nothing to place it on (or already something else): refuse it, as before popups were drawn */
+        wl_resource_set_implementation(p, &popup_impl, NULL, NULL);
+        xdg_popup_send_popup_done(p);
+        return;
+    }
+    s->role = ROLE_TOPLEVEL;
+    s->xdg_popup = p;
+    s->popup_parent = par;
+    s->popup_grab = 0;
+    wl_resource_set_implementation(p, &popup_impl, s, popup_resource_destroy);
+    popup_place(s, pos);
+    popup_sync(s);
+    xdg_popup_send_configure(p, s->pop_rel_x, s->pop_rel_y, pos->w, pos->h);
+    xdg_surface_send_configure(r, wl_display_next_serial(g_display));
+}
+
+/* Is [t] a popup of [root] (or of a popup of it), or [root] itself? */
+static int popup_in_chain(const struct surface *t, const struct surface *root) {
+    for (int depth = 0; t && depth < 16; depth++, t = t->popup_parent)
+        if (t == root) return 1;
+    return 0;
+}
+
+/* A press landed on [target] (NULL = nothing): dismiss every grabbing popup whose chain does not contain it.
+ * Returns 1 if any popup was dismissed (the press is then swallowed, as menus do on every desktop). */
+static int popups_dismiss(const struct surface *target) {
+    struct surface *s, *tmp;
+    int dismissed = 0;
+    wl_list_for_each_safe(s, tmp, &g_toplevels, toplevel_link) {
+        if (!s->xdg_popup || !s->popup_grab) continue;
+        if (popup_in_chain(target, s)) continue;  /* a press on the popup, or on one opened from it, keeps it */
+        xdg_popup_send_popup_done(s->xdg_popup);
+        dismissed = 1;
+    }
+    if (dismissed) wl_display_flush_clients(g_display);
+    return dismissed;
 }
 static void xdg_surface_set_geometry(struct wl_client *c, struct wl_resource *r,
-                                     int32_t x, int32_t y, int32_t w, int32_t h) {}
+                                     int32_t x, int32_t y, int32_t w, int32_t h) {
+    struct surface *s = wl_resource_get_user_data(r);
+    if (!s) return;
+    s->wg_x = x;
+    s->wg_y = y;
+    if (s->xdg_popup) { popup_sync(s); schedule_render(); }
+}
 static void xdg_surface_ack_configure(struct wl_client *c, struct wl_resource *r, uint32_t serial) {}
 static const struct xdg_surface_interface xdg_surface_impl = {
     .destroy = xdg_surface_destroy_req,
@@ -1714,19 +1872,35 @@ static void xdg_surface_resource_destroy(struct wl_resource *r) {
 
 static void xdg_wm_base_destroy(struct wl_client *c, struct wl_resource *r) { wl_resource_destroy(r); }
 
-/* Popups are not drawn here, but their requests must still land somewhere: a resource without an
- * implementation makes libwayland abort on the first request to it - the whole compositor, and the
- * app with it. A positioner takes every request and keeps nothing; a popup is dismissed at once
- * (popup_done), which is what a client does with a popup it cannot show. Seen with a gamescope
- * started from the Linux desktop beside labwc. */
+/* A positioner keeps what the client set (size, anchor rectangle, anchor, gravity, offset, constraint
+ * adjustment); xdg_surface.get_popup reads it (popup_place). Every request must still land somewhere:
+ * a resource without an implementation makes libwayland abort on the first request to it. */
 static void positioner_destroy(struct wl_client *c, struct wl_resource *r) { wl_resource_destroy(r); }
-static void positioner_set_size(struct wl_client *c, struct wl_resource *r, int32_t w, int32_t h) {}
+static void positioner_set_size(struct wl_client *c, struct wl_resource *r, int32_t w, int32_t h) {
+    struct positioner *p = wl_resource_get_user_data(r);
+    if (p) { p->w = w; p->h = h; }
+}
 static void positioner_set_anchor_rect(struct wl_client *c, struct wl_resource *r, int32_t x, int32_t y,
-                                       int32_t w, int32_t h) {}
-static void positioner_set_anchor(struct wl_client *c, struct wl_resource *r, uint32_t a) {}
-static void positioner_set_gravity(struct wl_client *c, struct wl_resource *r, uint32_t g) {}
-static void positioner_set_constraint_adjustment(struct wl_client *c, struct wl_resource *r, uint32_t a) {}
-static void positioner_set_offset(struct wl_client *c, struct wl_resource *r, int32_t x, int32_t y) {}
+                                       int32_t w, int32_t h) {
+    struct positioner *p = wl_resource_get_user_data(r);
+    if (p) { p->ar_x = x; p->ar_y = y; p->ar_w = w; p->ar_h = h; }
+}
+static void positioner_set_anchor(struct wl_client *c, struct wl_resource *r, uint32_t a) {
+    struct positioner *p = wl_resource_get_user_data(r);
+    if (p) p->anchor = a;
+}
+static void positioner_set_gravity(struct wl_client *c, struct wl_resource *r, uint32_t g) {
+    struct positioner *p = wl_resource_get_user_data(r);
+    if (p) p->gravity = g;
+}
+static void positioner_set_constraint_adjustment(struct wl_client *c, struct wl_resource *r, uint32_t a) {
+    struct positioner *p = wl_resource_get_user_data(r);
+    if (p) p->adjust = a;
+}
+static void positioner_set_offset(struct wl_client *c, struct wl_resource *r, int32_t x, int32_t y) {
+    struct positioner *p = wl_resource_get_user_data(r);
+    if (p) { p->off_x = x; p->off_y = y; }
+}
 static void positioner_set_reactive(struct wl_client *c, struct wl_resource *r) {}
 static void positioner_set_parent_size(struct wl_client *c, struct wl_resource *r, int32_t w, int32_t h) {}
 static void positioner_set_parent_configure(struct wl_client *c, struct wl_resource *r, uint32_t serial) {}
@@ -1742,11 +1916,14 @@ static const struct xdg_positioner_interface positioner_impl = {
     .set_parent_size = positioner_set_parent_size,
     .set_parent_configure = positioner_set_parent_configure,
 };
+static void positioner_resource_destroy(struct wl_resource *r) { free(wl_resource_get_user_data(r)); }
 
 static void xdg_wm_base_create_positioner(struct wl_client *c, struct wl_resource *r, uint32_t id) {
     struct wl_resource *p = wl_resource_create(c, &xdg_positioner_interface, wl_resource_get_version(r), id);
     if (!p) { wl_client_post_no_memory(c); return; }
-    wl_resource_set_implementation(p, &positioner_impl, NULL, NULL);
+    struct positioner *pos = calloc(1, sizeof(*pos));
+    if (!pos) { wl_resource_destroy(p); wl_client_post_no_memory(c); return; }
+    wl_resource_set_implementation(p, &positioner_impl, pos, positioner_resource_destroy);
 }
 static void xdg_wm_base_get_xdg_surface(struct wl_client *c, struct wl_resource *r, uint32_t id,
                                         struct wl_resource *surf) {
@@ -3478,12 +3655,25 @@ static void pointer_input(double x, double y, int relative, uint32_t button, int
             return;
         } else {
             target = g_grab ? g_grab : surface_at(x, y);
+            if (button && !pressed && g_swallow_release) {
+                /* the release of a press that only dismissed a popup */
+                g_swallow_release = 0;
+                g_grab = NULL;
+                return;
+            }
+            if (button && pressed) g_swallow_release = 0;
+            if (button && pressed && popups_dismiss(target)) {
+                g_swallow_release = 1;
+                return;
+            }
             if (button && pressed) {
                 /* A press brings the window under it to the front, with its dialogs. */
                 if (target && target->role == ROLE_TOPLEVEL) raise_toplevel(target, 0);
                 g_grab = target;
                 /* a layer surface that asked for no keyboard (a panel, a notification) must not take the keys */
-                if (!target || target->role != ROLE_LAYER ||
+                if (target && target->xdg_popup) {
+                    /* a click in a menu leaves the keys with the window it belongs to */
+                } else if (!target || target->role != ROLE_LAYER ||
                     target->layer_cur.kbd != ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE)
                     g_key_target = target;
             }
@@ -3538,6 +3728,7 @@ static void pointer_button(uint32_t button, int pressed) {
         pointer_input(0, 0, 1, button, pressed);
         return;
     }
+    if (g_swallow_release) { g_swallow_release = 0; g_grab = NULL; return; }
     /* Releases also clean up interrupted gestures: deliver them to the existing pointer focus without
      * motion or hit-testing (native touch has its own coordinates, replaying g_ptr_x/y could warp the
      * game's cursor). */
