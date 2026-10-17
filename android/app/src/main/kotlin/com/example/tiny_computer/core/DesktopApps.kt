@@ -228,20 +228,79 @@ object DesktopApps {
         for (theme in themes) {
             val png = appDirs(theme).filter { it.first != SCALABLE }
                 .map { (size, dir) -> size to File(dir, "$name.png") }
-                .filter { it.second.exists() }
+                .filter { present(it.second) }
                 .minWithOrNull(compareBy<Pair<Int, File>>({ kotlin.math.abs(it.first - WANTED_ICON_PX) }, { -it.first }))
             png?.second?.let { f -> resolve(root, f)?.takeIf { it.isFile }?.let { return it } }
         }
         for ((_, dir) in dirs) {
             val svg = File(dir, "$name.svg")
-            if (svg.exists()) resolve(root, svg)?.takeIf { it.isFile }?.let { return it }
+            if (present(svg)) resolve(root, svg)?.takeIf { it.isFile }?.let { return it }
         }
         for (ext in listOf("png", "svg")) {
             val f = File(root, "usr/share/pixmaps/$name.$ext")
-            if (f.exists()) resolve(root, f)?.takeIf { it.isFile }?.let { return it }
+            if (present(f)) resolve(root, f)?.takeIf { it.isFile }?.let { return it }
+        }
+        return flatpakIcon(root, name)
+    }
+
+    /** Ada sebagai berkas atau symlink (`File.exists()` mengikuti symlink dan salah bila targetnya path absolut guest). */
+    private fun present(f: File): Boolean = Files.exists(f.toPath(), LinkOption.NOFOLLOW_LINKS)
+
+    private const val FLATPAK_USER = "home/tiny/.local/share/flatpak"
+
+    /** PNG ukuran terdekat 96 px, lalu SVG, di satu tema ikon (`hicolor`) yang sudah berupa path nyata. */
+    private fun fromTheme(root: File, theme: File, name: String): File? {
+        if (!theme.isDirectory) return null
+        val dirs = appDirs(theme)
+        dirs.filter { it.first != SCALABLE }
+            .map { (size, dir) -> size to File(dir, "$name.png") }
+            .filter { present(it.second) }
+            .minWithOrNull(compareBy<Pair<Int, File>>({ kotlin.math.abs(it.first - WANTED_ICON_PX) }, { -it.first }))
+            ?.second?.let { f -> resolve(root, f)?.takeIf { it.isFile }?.let { return it } }
+        for ((_, dir) in dirs) {
+            val svg = File(dir, "$name.svg")
+            if (present(svg)) resolve(root, svg)?.takeIf { it.isFile }?.let { return it }
         }
         return null
     }
+
+    /** `<ukuran>/<nama>.png` langsung di [dir] (tata letak appstream / app-info, tanpa `apps/`). */
+    private fun fromFlatDir(root: File, dir: File, name: String): File? {
+        if (!dir.isDirectory) return null
+        return dir.listFiles().orEmpty()
+            .mapNotNull { d -> SIZE_DIR.matchEntire(d.name)?.let { it.groupValues[1].toInt() to File(d, "$name.png") } }
+            .filter { present(it.second) }
+            .minWithOrNull(compareBy<Pair<Int, File>>({ kotlin.math.abs(it.first - WANTED_ICON_PX) }, { -it.first }))
+            ?.second?.let { f -> resolve(root, f)?.takeIf { it.isFile } }
+    }
+
+    /**
+     * Ikon aplikasi Flatpak yang dipasang pengguna (id aplikasi = nama ikon). Symlink di `exports/share/icons` bisa
+     * tidak terbaca dari sisi Android, jadi ikon dicari langsung di folder aplikasinya (`app/<id>/<arch>/<cabang>/active`),
+     * lalu di katalog appstream Flathub.
+     */
+    private fun flatpakIcon(root: File, name: String): File? {
+        if (name.isEmpty() || '/' in name || name.startsWith(".")) return null
+        for (arch in File(root, "$FLATPAK_USER/app/$name").listFiles().orEmpty()) {
+            for (branch in arch.listFiles().orEmpty()) {
+                val active = resolve(root, File(branch, "active")) ?: continue
+                fromTheme(root, File(active, "export/share/icons/hicolor"), name)?.let { return it }
+                fromTheme(root, File(active, "files/share/icons/hicolor"), name)?.let { return it }
+                fromFlatDir(root, File(active, "files/share/app-info/icons/flatpak"), name)?.let { return it }
+            }
+        }
+        for (remote in File(root, "$FLATPAK_USER/appstream").listFiles().orEmpty()) {
+            for (arch in remote.listFiles().orEmpty()) {
+                val active = resolve(root, File(arch, "active")) ?: continue
+                fromFlatDir(root, File(active, "icons"), name)?.let { return it }
+            }
+        }
+        return null
+    }
+
+    /** Bitmap dari berkas ikon PNG atau SVG, sisi terpanjang ~[px]; null bila gagal dibaca. */
+    fun decodeFile(file: File, px: Int): Bitmap? =
+        runCatching { if (isSvg(file)) renderSvg(file, px) else decodeScaled(file, px) }.getOrNull()
 
     private val bitmaps = object : LruCache<String, Bitmap>(64) {}
 

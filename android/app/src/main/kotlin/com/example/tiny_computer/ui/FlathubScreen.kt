@@ -58,6 +58,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.tiny_computer.R
+import com.example.tiny_computer.core.DesktopApps
 import com.example.tiny_computer.core.FlatpakManager
 import com.example.tiny_computer.core.FlathubApi
 import com.example.tiny_computer.core.FlathubStore
@@ -409,7 +410,7 @@ private fun rememberBitmap(model: Any?): ImageBitmap? {
 
 private fun decode(model: Any): ImageBitmap? = runCatching {
     when (model) {
-        is File -> BitmapFactory.decodeFile(model.path)
+        is File -> DesktopApps.decodeFile(model, 256)
         is String -> {
             val c = URL(model).openConnection() as HttpURLConnection
             try {

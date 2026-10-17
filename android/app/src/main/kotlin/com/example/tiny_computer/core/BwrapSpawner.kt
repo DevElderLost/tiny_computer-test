@@ -140,7 +140,30 @@ object BwrapSpawner {
         Bind("/storage/self/primary", "/media/sd"),
         Bind(File(TinyEnv.containerDir(), "tmp").path, "/dev/shm"),
         Bind(File(TinyEnv.dataPath, "tiny").path, "/home/tiny/.local/share/tiny"),
-    )
+    ) + homeMounts()
+
+    /**
+     * Mount folder rumah milik sesi (perintah boot): Download, Documents, Pictures, Music, Videos, DCIM, Public
+     * menunjuk ke penyimpanan Android. Mount itu hanya ada di proot sesi; tanpa entri ini `--filesystem=home` (atau
+     * `host`) di Flatpak hanya melihat folder kosong di rootfs, sehingga dialog berkas cuma menampilkan `Desktop`.
+     * Nama folder mengikuti bahasa (boot Mandarin: 下载, 文档, ...; selain itu: Downloads, Documents, ...).
+     */
+    private fun homeMounts(): List<Bind> {
+        val out = ArrayList<Bind>()
+        val data = TinyEnv.dataPath
+        val container = TinyEnv.containerDir().path
+        for (tok in TinyEnv.defaultBoot.split(Regex("\\s+"))) {
+            if (!tok.startsWith("--mount=")) continue
+            val spec = tok.removePrefix("--mount=")
+            if (':' !in spec) continue
+            val guest = spec.substringAfterLast(':')
+            if (!guest.startsWith("/home/tiny/") || guest == "/home/tiny/.local/share/tiny") continue
+            val host = spec.substringBeforeLast(':').replace("\$DATA_DIR", data).replace("\$CONTAINER_DIR", container)
+            if (host.contains('$') || !File(host).exists()) continue
+            out.add(Bind(host, guest))
+        }
+        return out
+    }
 
     internal fun plan(context: Context, request: JSONObject, dir: File): Plan {
         val rootfs = TinyEnv.containerDir().path

@@ -91,6 +91,9 @@ object FlatpakWayland {
         // Tanpa xdg-desktop-portal di kontainer, dialog berkas bawaan Flatpak (Qt tema "flatpak", GTK) tidak pernah
         // muncul: "org.freedesktop.portal.Desktop was not provided by any .service files". Pakai dialog Qt/GTK sendiri.
         opts += listOf("--env=QT_QPA_PLATFORMTHEME=generic", "--env=GTK_USE_PORTAL=0")
+        // Tanpa portal, dialog berkas membaca sistem berkas sandbox apa adanya: beri akses folder rumah (Downloads,
+        // Documents, ... dari mount sesi diteruskan oleh BwrapSpawner.homeMounts). Aplikasi yang sudah `host` tetap sama.
+        opts += "--filesystem=home"
         var gpu = "llvmpipe (Turnip tidak aktif untuk aplikasi ini)"
         if (turnipOn) {
             for ((k, v) in pairs(Launcher.turnipOpt(ctx))) opts += "--env=$k=$v"

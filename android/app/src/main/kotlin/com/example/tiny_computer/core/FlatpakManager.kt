@@ -161,10 +161,13 @@ object FlatpakManager {
 
     private fun icon(export: File, id: String): File? {
         val hicolor = File(export, "icons/hicolor")
-        return hicolor.listFiles()
+        hicolor.listFiles()
             ?.mapNotNull { size -> size.name.substringBefore('x').toIntOrNull()?.let { it to File(size, "apps/$id.png") } }
             ?.filter { it.second.isFile }
-            ?.maxByOrNull { it.first }?.second
+            ?.maxByOrNull { it.first }?.second?.let { return it }
+        // Audacity dan lainnya hanya membawa SVG (scalable) atau ikon di app-info/appstream
+        File(hicolor, "scalable/apps/$id.svg").takeIf { it.isFile }?.let { return it }
+        return DesktopApps.iconFile(TinyEnv.containerDir(), id)
     }
 
     // ------------------------------------------------------------------ perintah toko (tanpa terminal)
