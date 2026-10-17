@@ -99,6 +99,7 @@ object Launcher {
 
     /** Indeks segmen progres (0-based) untuk [appPhase]; tidak pernah mundur selama satu fase. */
     var appStage by mutableIntStateOf(0)
+        private set
 
     /**
      * Aplikasi Shortcut sudah selesai sendiri dan sesi akan ditutup beberapa detik lagi (menunggu pemeriksaan
@@ -110,7 +111,6 @@ object Launcher {
     private fun stopStage(to: Int) {
         if (appPhase == AppPhase.STOPPING) advanceStage(to)
     }
-        private set
 
     private fun advanceStage(to: Int) {
         if (to > appStage) appStage = to
