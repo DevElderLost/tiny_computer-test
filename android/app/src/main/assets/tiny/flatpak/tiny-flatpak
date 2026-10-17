@@ -53,7 +53,7 @@ def app_ref(inst, app_id):
 def transaction(inst):
     t = Flatpak.Transaction.new_for_installation(inst, None)
     t.set_no_interaction(True)
-    state = {"i": 0, "n": 0, "error": None}
+    state = {"i": 0, "n": 0, "error": None, "first_warning": None}
 
     def on_ready(tr):
         state["n"] = len(tr.get_operations())
@@ -82,6 +82,8 @@ def transaction(inst):
             ref_id = ref_id[0] if ref_id else ""
             non_fatal = related or ref_id.endswith((".Locale", ".Debug")) or ".GL." in ref_id or "codecs" in ref_id
         emit(e="warning" if non_fatal else "error", message="%s: %s" % (op.get_ref(), err.message))
+        if state["first_warning"] is None and "previous error" not in err.message:
+            state["first_warning"] = err.message
         if not non_fatal:
             state["error"] = err.message
         return non_fatal
@@ -102,7 +104,11 @@ def run(t, state, report_done=True):
         if state["error"] is None and not err.matches(Flatpak.error_quark(), Flatpak.Error.ABORTED):
             state["error"] = err.message
     if state["error"]:
-        emit(e="error", message=state["error"])
+        # "Skipping X due to previous error" menyembunyikan sebabnya: tampilkan galat pertama yang sebenarnya
+        message = state["error"]
+        if "previous error" in message and state.get("first_warning"):
+            message = state["first_warning"]
+        emit(e="error", message=message)
         return 1
     if report_done:
         emit(e="done")

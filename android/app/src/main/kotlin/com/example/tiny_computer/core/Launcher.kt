@@ -718,14 +718,14 @@ ${WsiWayland.probeForDesktop(sessionEnv)}
      * menghapus aplikasi. [env] = tambahan `KEY=VALUE` (dipisah spasi) untuk `env -i`. [onLine] menerima tiap baris
      * keluaran (stdout + stderr). Mengembalikan kode keluar. Memblokir: panggil dari thread latar.
      *
-     * `--link2symlink` dibuang di sini: ostree membuat hardlink dari repo ke folder deploy dan DroidDeck juga
-     * menjalankan perintah toko tanpa opsi itu.
+     * `--link2symlink` TETAP dipakai (seperti perintah boot): tanpa itu ostree gagal dengan "linkat: Permission
+     * denied" karena Android menolak hardlink dari aplikasi ini (terlihat di log pemasangan).
      */
     fun runGuest(ctx: Context, argv: List<String>, env: String, onLine: (String) -> Unit): Int {
         val tail = Regex("""/bin/bash(\s+-l)?\s*$""")
         val custom = Containers.boot(TinyEnv.currentContainer, TinyEnv.defaultBoot).trim()
         val base = if (tail.containsMatchIn(custom)) custom else TinyEnv.defaultBoot.trim()
-        val prefix = tail.replace(base, "").trimEnd().replace(" --link2symlink", "")
+        val prefix = tail.replace(base, "").trimEnd()
         val script = guestEnvScript(GuestSpec("", env)) + "\nexec " + prefix + " " + argv.joinToString(" ") { shq(it) } + "\n"
         val p = ProcessBuilder("/system/bin/sh", "-c", script)
             .redirectErrorStream(true)
