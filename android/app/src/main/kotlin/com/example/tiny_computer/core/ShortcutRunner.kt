@@ -334,6 +334,12 @@ echo "[tiny] Wine: $why"
 
         var cmd = effectiveCommand(app, s)
         if (s.args.isNotBlank()) cmd += " " + s.args.trim()
+        // Aplikasi Flathub (`flatpak run ...`): Wayland dulu, X11/Xwayland hanya cadangan, plus Turnip bila aktif.
+        // `flatpak run` membersihkan lingkungan, jadi ini harus berupa opsi di baris perintah (lihat FlatpakWayland).
+        FlatpakWayland.rewrite(ctx, cmd, FlatpakWayland.mode(effectiveEnv(app, s)), turnipOn)?.let { r ->
+            cmd = r.command
+            sb.append("echo ${q(r.note)}\n")
+        }
         if (app.terminal) cmd = "x-terminal-emulator -e sh -c ${q("exec $cmd")}"
         // Wine: jalankan di dalam virtual desktop seukuran layar X sesi. Xwayland rootful menawarkan mode XRandR
         // "emulasi" sampai 5120x2880 (mode pilihannya malah yang terbesar), dan Wine versi baru mengabaikan

@@ -29,8 +29,9 @@ import java.util.concurrent.atomic.AtomicInteger
  * dijalankan sebagai proot tersendiri ([Launcher.sandboxScript]) di samping proot sesi. Keluaran, pid (untuk
  * `--info-fd`), dan status keluar mengalir kembali lewat soket; shim `tiny-bwrap` yang berhenti mematikan sandbox.
  *
- * Tidak ada pemasangan driver GPU Turnip atau pustaka controller (`LD_PRELOAD`) ke dalam sandbox: aplikasi Flathub
- * menggambar lewat perangkat lunak (llvmpipe) dan belum melihat controller virtual.
+ * Variabel Turnip/Zink dan pilihan Wayland/X11 tidak berasal dari sini: `flatpak run` membersihkan lingkungan, jadi
+ * [FlatpakWayland] menaruhnya sebagai opsi `--env`/`--socket` di baris perintah `flatpak run`. Pustaka controller
+ * (`LD_PRELOAD`) belum dipasang ke sandbox, jadi aplikasi Flathub belum melihat controller virtual.
  */
 object BwrapSpawner {
     private const val TAG = "TinyBwrap"
@@ -234,6 +235,7 @@ object BwrapSpawner {
         env.putIfAbsent("ZYPAK_ZYGOTE_STRATEGY_SPAWN", "0")
         env.putIfAbsent("QTWEBENGINE_DISABLE_SANDBOX", "1")
         if (env.containsKey("DISPLAY")) env["XDG_SESSION_TYPE"] = "x11"
+        else if (env.containsKey("WAYLAND_DISPLAY")) env["XDG_SESSION_TYPE"] = "wayland"
         for (name in listOf("MOZ_DISABLE_CONTENT_SANDBOX", "MOZ_DISABLE_GMP_SANDBOX", "MOZ_DISABLE_RDD_SANDBOX",
                             "MOZ_DISABLE_SOCKET_PROCESS_SANDBOX", "MOZ_DISABLE_UTILITY_SANDBOX", "MOZ_SHM_NO_SEALS")) {
             env.putIfAbsent(name, "1")
