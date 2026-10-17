@@ -54,6 +54,42 @@ object FlatpakWayland {
             if (i > 0) t.substring(0, i) to t.substring(i + 1) else null
         }
 
+    /** `~/.asoundrc` di rootfs: tempat ALSA di dalam sandbox Flatpak membaca konfigurasi pengguna. */
+    internal fun asoundrcFile() = File(TinyEnv.containerDir(), "home/tiny/.asoundrc")
+
+    /**
+     * Audio langsung (plugin ALSA `tinyaudio` -> soket -> AAudio) untuk sandbox Flatpak. Sandbox punya `/etc` dan
+     * `/tmp` sendiri, jadi `/etc/asound.conf` milik guest tidak terlihat dan ALSA bawaan runtime hanya punya
+     * perangkat "null" (aplikasi yang tidak sampai ke PulseAudio diam). Di sini: tulis `~/.asoundrc` (isinya sama
+     * dengan asound.conf guest; dibaca libasound runtime lewat `$HOME`), lalu [BwrapSpawner] mem-bind berkas itu dan
+     * soket `/tmp/.tinyaudio` ke sandbox di semua tingkat preflight. Mengembalikan keterangan untuk log, dan
+     * menambah opsi `flatpak run` ke [opts]. `~/.asoundrc` buatan pengguna tidak pernah ditimpa.
+     */
+    private fun directAudio(opts: MutableList<String>): String {
+        val f = asoundrcFile()
+        val on = Launcher.directAudioActive()
+        val mine = runCatching { f.isFile && f.readText().startsWith(Launcher.ASOUND_MARK) }.getOrDefault(false)
+        if (!on) {
+            if (mine) runCatching { f.delete() }
+            return "audio: PulseAudio (direct audio mati)"
+        }
+        if (f.exists() && !mine) return "audio: ~/.asoundrc milik pengguna sudah ada; direct audio tidak dipasang ke sandbox"
+        val ok = runCatching {
+            f.parentFile?.mkdirs()
+            val want = Launcher.asoundConf()
+            if (!f.isFile || f.readText() != want) f.writeText(want)
+            f.setReadable(true, false)
+        }.isSuccess
+        if (!ok) return "audio: gagal menulis ~/.asoundrc"
+        // plugin ada di folder extra: harus terlihat oleh sandbox (juga bila Turnip/controller tidak aktif)
+        opts += "--filesystem=$GUEST_TINY/extra:ro"
+        if (Cfg.directAudioPreferAlsa) {
+            // SDL dan OpenAL memilih PulseAudio lebih dulu; tanpa server pulse di sandbox mereka diam. Paksa ALSA.
+            opts += listOf("--env=SDL_AUDIODRIVER=alsa", "--env=ALSOFT_DRIVERS=alsa")
+        }
+        return "audio: ALSA langsung (tinyaudio)" + if (Cfg.directAudioPreferAlsa) ", SDL/OpenAL dipaksa ALSA" else ""
+    }
+
     /**
      * Menulis ulang [cmd] bila itu `flatpak run ...`; null bila bukan flatpak atau [mode] OFF.
      * [turnipOn] = Turnip aktif untuk aplikasi ini (lihat ShortcutRunner).
@@ -119,10 +155,12 @@ object FlatpakWayland {
                 pad = "controller virtual aktif"
             }
         }
+        val audio = directAudio(opts)
+        opts.distinct().let { opts.clear(); opts.addAll(it) }
         val command = prog + " run " + opts.joinToString(" ") { q(it) } + rest
         val note = "[tiny] Flatpak display=${mode.name.lowercase()}" +
             (if (mode == Mode.WAYLAND) " (Wayland dulu, X11 hanya cadangan)" else " (paksa X11/Xwayland)") +
-            "; GPU: $gpu; $pad"
+            "; GPU: $gpu; $pad; $audio"
         return Result(command, note)
     }
 }

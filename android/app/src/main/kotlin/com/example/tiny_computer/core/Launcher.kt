@@ -193,6 +193,119 @@ object Launcher {
         }
     }
 
+    // ------------------------------------------------------------------ penutupan halus aplikasi
+
+    /** Waktu tunggu setelah jendela X11 diminta menutup, lalu setelah SIGTERM, sebelum SIGKILL. */
+    private const val CLOSE_X11_WAIT_MS = 3500L
+    private const val CLOSE_TERM_WAIT_MS = 2000L
+
+    /** Menunggu semua [targets] hilang; true bila semuanya sudah hilang sebelum [timeoutMs]. */
+    private fun waitGoneUntil(targets: Collection<Int>, timeoutMs: Long): Boolean {
+        val end = SystemClock.elapsedRealtime() + timeoutMs
+        while (true) {
+            val procs = scanProcs()
+            if (targets.none { procs[it]?.zombie == false }) return true
+            if (SystemClock.elapsedRealtime() >= end) return false
+            Thread.sleep(50)
+        }
+    }
+
+    /**
+     * Proses aplikasi yang boleh diminta menutup diri: keturunan sandbox Flatpak (BUKAN proot-nya) bila ada, kalau
+     * tidak keturunan proot aplikasi Shortcut. Proot, shim `tiny-bwrap`, dan `flatpak run` sengaja tidak disentuh:
+     * begitu shim berhenti, [BwrapSpawner] mematikan sandbox, dan aplikasinya dibunuh sebelum sempat menyimpan.
+     */
+    private fun gracefulTargets(appRoots: List<Int>): List<Int> {
+        val procs = scanProcs()
+        val sandboxes = BwrapSpawner.sandboxPids().filter { procs[it]?.zombie == false }
+        val roots = if (sandboxes.isNotEmpty()) sandboxes else appRoots
+        val out = LinkedHashSet<Int>()
+        for (r in roots) {
+            if (procs[r] == null) continue
+            for (p in treeOf(r, procs)) {
+                val i = procs[p] ?: continue
+                if (p == r || i.zombie || i.comm.startsWith("proot")) continue
+                out += p
+            }
+        }
+        return out.toList()
+    }
+
+    /**
+     * Menjalankan `tiny-close-windows.py` di proot sekali pakai: mengirim WM_DELETE_WINDOW ke jendela X11 sesi.
+     * Mengembalikan jumlah jendela yang diminta menutup (0 bila python3/libX11 tidak ada atau tidak ada jendela).
+     */
+    private fun closeX11Windows(): Int {
+        val ctx = TinyEnv.app
+        val count = java.util.concurrent.atomic.AtomicInteger(0)
+        runCatching {
+            val script = File(TinyEnv.dataPath, "tiny/shortcuts/tiny-close-windows.py")
+            script.parentFile?.mkdirs()
+            val text = ctx.assets.open("tiny/tiny-close-windows.py").bufferedReader().use { it.readText() }
+            if (!script.isFile || script.readText() != text) script.writeText(text)
+            script.setReadable(true, false)
+            val t = Thread({
+                runCatching {
+                    runGuest(ctx, listOf("/usr/bin/python3", "/home/tiny/.local/share/tiny/shortcuts/tiny-close-windows.py"), "DISPLAY=:4") { line ->
+                        if (line.startsWith("CLOSED=")) count.set(line.substringAfter('=').trim().toIntOrNull() ?: 0)
+                    }
+                }
+            }, "tiny-close-x11").apply { isDaemon = true; start() }
+            t.join(5000)
+        }.onFailure { Log.w("Launcher", "closeX11Windows: ${it.message}") }
+        return count.get()
+    }
+
+    /**
+     * Meminta compositor mengirim `xdg_toplevel.close` ke semua jendela program Wayland-native (Qt `wayland`, GTK,
+     * SDL, Flatpak di jalur Wayland). Jendela Xwayland sengaja dilewati (lihat compositor.c). Mengembalikan jumlah
+     * jendela yang dijangkau; 0 bila compositor tidak berjalan.
+     */
+    private fun closeWaylandWindows(): Int = runCatching {
+        com.droiddeck.launcher.wayland.WaylandCompositor.nativeCloseToplevels()
+        Thread.sleep(250) // thread compositor menjawab lewat pipa; jumlahnya tersedia sebentar kemudian
+        com.droiddeck.launcher.wayland.WaylandCompositor.nativeCloseCount()
+    }.getOrDefault(0)
+
+    /**
+     * Meminta aplikasi sesi Shortcut menutup dirinya sendiri SEBELUM proses dibunuh. Dulu sesi langsung di-SIGKILL
+     * sehingga aplikasi yang menulis konfigurasi saat keluar (Azahar/Dolphin qt-config.ini, ppsspp.ini, ...) tidak
+     * pernah sempat menyimpannya dan pengaturan kembali ke awal pada peluncuran berikutnya. Urutan: tutup jendela X11
+     * (jalur keluar normal Qt/GTK/SDL) -> SIGTERM -> (pemanggil) SIGKILL untuk yang masih tersisa.
+     * Memblokir sampai ~5,5 detik; panggil hanya dari thread latar.
+     */
+    private fun closeGracefully(appRoots: List<Int>, log: LaunchLog.Session?) {
+        // aplikasi sudah keluar sendiri (tinggal proses pendukung seperti dbus): tidak perlu menunggu apa pun
+        val procs = scanProcs()
+        if ((appRoots + BwrapSpawner.sandboxPids()).none { treeBusy(it, procs) }) {
+            LaunchLog.write(log, "stop", "tidak ada aplikasi yang masih berjalan; tidak perlu ditutup halus")
+            return
+        }
+        var targets = gracefulTargets(appRoots)
+        if (targets.isEmpty()) return
+        LaunchLog.write(log, "stop", "meminta ${targets.size} proses aplikasi menutup diri supaya konfigurasi tersimpan")
+        val wl = closeWaylandWindows()
+        if (wl > 0) LaunchLog.write(log, "stop", "$wl jendela Wayland diminta menutup (xdg_toplevel.close)")
+        run {
+            val x11 = if (File(TinyEnv.runtimeDir(), ".X11-unix/X4").exists()) closeX11Windows() else 0
+            if (x11 > 0) LaunchLog.write(log, "stop", "$x11 jendela X11 diminta menutup (WM_DELETE_WINDOW)")
+            val closed = wl + x11
+            if (closed > 0) {
+                // hanya aplikasi utama yang ditunggu; daemon pendukung (dbus, dst.) tidak ikut menutup bersama jendelanya
+                val procsNow = scanProcs()
+                val main = targets.filter { pid -> procsNow[pid]?.let { !isHelper(it.comm) } == true }
+                if (waitGoneUntil(main, CLOSE_X11_WAIT_MS)) {
+                    LaunchLog.write(log, "stop", "aplikasi keluar sendiri setelah jendela ditutup")
+                    return
+                }
+            }
+        }
+        targets = gracefulTargets(appRoots)
+        targets.forEach { runCatching { android.system.Os.kill(it, android.system.OsConstants.SIGTERM) } }
+        val ok = waitGoneUntil(targets, CLOSE_TERM_WAIT_MS)
+        LaunchLog.write(log, "stop", if (ok) "aplikasi keluar sendiri setelah SIGTERM" else "sebagian proses masih jalan; dimatikan paksa (SIGKILL)")
+    }
+
     // proses pendukung yang sering menetap setelah aplikasinya keluar; tidak dihitung sebagai "aplikasi masih jalan"
     private val HELPER_PREFIXES = listOf(
         "dbus", "at-spi", "dconf", "gvfs", "fcitx", "ibus", "pulseaudio", "pipewire", "wireplumber",
@@ -254,9 +367,9 @@ object Launcher {
         Cfg.directAudio && TinyAudio.available &&
             File(TinyEnv.dataPath, "tiny/extra/libasound_module_pcm_tinyaudio.so").isFile
 
-    private const val ASOUND_MARK = "# tiny-direct-audio"
+    internal const val ASOUND_MARK = "# tiny-direct-audio"
 
-    private fun asoundConf(): String = """
+    internal fun asoundConf(): String = """
 $ASOUND_MARK (dibuat otomatis oleh Tiny Computer; matikan "Direct audio" di Pengaturan untuk kembali ke PulseAudio)
 pcm_type.tinyaudio {
     lib "/home/tiny/.local/share/tiny/extra/libasound_module_pcm_tinyaudio.so"
@@ -830,7 +943,7 @@ ${WsiWayland.probeForDesktop(sessionEnv)}
         Thread({
             synchronized(spawnLock) {
                 val killed = ArrayList<Int>()
-                killed += stopAppSession()
+                killed += stopAppSession(graceful = true)
                 killed += killDesktopProcesses()
                 killed += killContainerShell()
                 if (appPhase == AppPhase.STOPPING) advanceStage(1)
@@ -910,7 +1023,7 @@ ${WsiWayland.probeForDesktop(sessionEnv)}
         appPhase = AppPhase.STOPPING
         Thread({
             synchronized(spawnLock) {
-                val killed = stopAppSession()
+                val killed = stopAppSession(graceful = true)
                 if (appPhase == AppPhase.STOPPING) advanceStage(1)
                 waitGone(killed, 3000)
             }
@@ -944,7 +1057,7 @@ ${WsiWayland.probeForDesktop(sessionEnv)}
         if (!guiStarted && !appSessionStarted) {
             // seluruh pohon proses sesi lama (Xwayland, aplikasi, anak-anaknya) dimatikan dan DITUNGGU
             // sampai hilang sebelum Xwayland baru dibuat
-            gone += stopAppSession()
+            gone += stopAppSession(graceful = true)
             waitGone(gone, 2000)
             advanceStage(1)
             val size = displaySize(ctx, appId)
@@ -1020,9 +1133,10 @@ ${WsiWayland.probeForDesktop(sessionEnv)}
      * yatim yang terus berjalan/crash dan menimpa sesi berikutnya. Tidak menunggu; kembaliannya daftar PID
      * yang dikirimi sinyal untuk [waitGone].
      */
-    fun stopAppSession(): List<Int> {
+    fun stopAppSession(graceful: Boolean = false): List<Int> {
         mainHandler.removeCallbacks(idleCheck)
-        LaunchLog.write(appSessionLog, "session", "sesi aplikasi dihentikan")
+        val log = appSessionLog
+        LaunchLog.write(log, "session", "sesi aplikasi dihentikan" + if (graceful) " (ditutup halus dulu)" else "")
         appSessionLog = null
         lastFailedApp = null
         val guests = ArrayList<Process>()
@@ -1030,14 +1144,19 @@ ${WsiWayland.probeForDesktop(sessionEnv)}
             guests += appProcs
             appProcs.clear()
         }
+        val appRoots = guests.mapNotNull { pids[it] }.filter { it > 0 }
         appSession?.let { guests += it }
         appSession = null
+        // Xwayland + window manager (proot sesi) tetap hidup selama fase ini: aplikasi butuh X untuk menutup jendelanya.
+        if (graceful) runCatching { closeGracefully(appRoots, log) }.onFailure { Log.w("Launcher", "closeGracefully", it) }
         val killed = ArrayList<Int>()
         for (g in guests) {
             val pid = pids.remove(g) ?: 0
             if (pid > 0) killed += killTree(pid)
             g.destroyForcibly()
         }
+        // sandbox Flatpak hidup di luar pohon proot sesi; yang masih tersisa setelah masa tunggu dimatikan di sini
+        if (graceful) BwrapSpawner.sandboxPids().forEach { killed += killTree(it) }
         return killed
     }
 

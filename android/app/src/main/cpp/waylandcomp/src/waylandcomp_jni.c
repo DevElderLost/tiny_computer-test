@@ -32,6 +32,8 @@ extern void droiddeck_wayland_send_key(int evdev, int state);
 extern void droiddeck_wayland_send_scene_input(int type, int a, int b);
 extern void droiddeck_wayland_vsync(int64_t frame_time_ns);
 extern void droiddeck_wayland_output_resized(void);
+extern void droiddeck_wayland_close_toplevels(void);
+extern int droiddeck_wayland_close_count(void);
 extern volatile int g_fps_limit;
 extern volatile int g_hide_shell;
 extern volatile int g_zero_copy;
@@ -424,6 +426,19 @@ Java_com_droiddeck_launcher_wayland_WaylandCompositor_nativeResizeOutput(JNIEnv 
     g_output_w = w;
     g_output_h = h;
     droiddeck_wayland_output_resized();
+}
+
+/* Graceful close of every program window (xdg_toplevel.close); see compositor.c close_all_toplevels. */
+JNIEXPORT void JNICALL
+Java_com_droiddeck_launcher_wayland_WaylandCompositor_nativeCloseToplevels(JNIEnv *env, jclass clazz) {
+    (void)env; (void)clazz;
+    droiddeck_wayland_close_toplevels();
+}
+
+JNIEXPORT jint JNICALL
+Java_com_droiddeck_launcher_wayland_WaylandCompositor_nativeCloseCount(JNIEnv *env, jclass clazz) {
+    (void)env; (void)clazz;
+    return droiddeck_wayland_close_count();
 }
 
 /* Fullscreen mode + screen alignment (Container.FULLSCREEN_* / ALIGN_* values): how the scene is

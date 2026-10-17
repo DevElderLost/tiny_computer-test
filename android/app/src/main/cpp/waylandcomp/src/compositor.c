@@ -4109,6 +4109,27 @@ static void output_resized(void) {
     wl_display_flush_clients(g_display);
 }
 
+/* Ask every program window to close itself (xdg_toplevel.close), like pressing the X in a title bar.
+ * Qt/GTK/SDL programs then run their normal quit path and write their settings. Xwayland's own toplevel
+ * is skipped: closing the rootful X server would end every X11 program before it could save anything
+ * (those are closed from the guest side with WM_DELETE_WINDOW). Popups, the desktop and layer surfaces
+ * are not toplevels and are left alone. */
+static volatile int g_close_count;
+static void close_all_toplevels(void) {
+    struct surface *s;
+    int n = 0;
+    wl_list_for_each(s, &g_surfaces, link) {
+        if (!s->xdg_toplevel || s->role != ROLE_TOPLEVEL) continue;
+        const char *prog = client_name(wl_resource_get_client(s->resource));
+        if (prog && strstr(prog, "Xwayland")) continue;
+        xdg_toplevel_send_close(s->xdg_toplevel);
+        n++;
+    }
+    g_close_count = n;
+    droiddeck_log("display", "close requested for %d toplevel window(s)", n);
+    wl_display_flush_clients(g_display);
+}
+
 /* wl event-loop callback: drain queued input events written by the Android UI thread. */
 static int on_input_readable(int fd, uint32_t mask, void *data) {
     struct input_msg m;
@@ -4123,6 +4144,7 @@ static int on_input_readable(int fd, uint32_t mask, void *data) {
         case 6: pointer_delta(m.p1 / 256.0, m.p2 / 256.0); break; /* relative motion, 1/256 px */
         case 7: deliver_touch(&m); break;
         case 8: output_resized(); break;
+        case 10: close_all_toplevels(); break;                   /* graceful close of program windows */
         default: deliver_pointer(&m); break;
         }
     }
@@ -4160,6 +4182,18 @@ void droiddeck_wayland_output_resized(void) {
     ssize_t n = write(g_input_pipe[1], &m, sizeof(m));
     (void)n;
 }
+
+/* Called from JNI (any thread): queue a close request for every program window; the compositor thread
+ * sends it. droiddeck_wayland_close_count() is how many windows the last request reached. */
+void droiddeck_wayland_close_toplevels(void) {
+    if (g_input_pipe[1] < 0) { g_close_count = 0; return; }
+    g_close_count = 0;
+    struct input_msg m = { 10, 0, 0, 0, 0 };
+    ssize_t n = write(g_input_pipe[1], &m, sizeof(m));
+    (void)n;
+}
+
+int droiddeck_wayland_close_count(void) { return g_close_count; }
 
 /* Called from JNI on every screen refresh (Choreographer). */
 void droiddeck_wayland_vsync(int64_t frame_time_ns) {

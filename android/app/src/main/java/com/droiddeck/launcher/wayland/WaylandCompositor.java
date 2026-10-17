@@ -239,6 +239,12 @@ public final class WaylandCompositor {
      *  once per tick, so games run unthrottled and the screen shows their latest frame. */
     public static native void nativeVsync(long frameTimeNanos);
 
+    /** Ask every program window to close itself (xdg_toplevel.close) so it can save its settings. Any thread. */
+    public static native void nativeCloseToplevels();
+
+    /** How many windows the last {@link #nativeCloseToplevels()} reached (the compositor thread answers a moment later). */
+    public static native int nativeCloseCount();
+
     /** The compositor thread's Linux tid, or 0 before it has started. */
     public static native int nativeCompositorTid();
 

@@ -39,6 +39,14 @@ object BwrapSpawner {
     private val seq = AtomicInteger()
     @Volatile private var server: LocalServerSocket? = null
 
+    /**
+     * PID proot tiap sandbox yang sedang berjalan (id sandbox -> pid). Sandbox dijalankan dari proses aplikasi ini,
+     * BUKAN dari pohon proot sesi, jadi pemindai pohon sesi tidak menemukannya. [Launcher] memakainya untuk
+     * menutup aplikasi Flatpak dengan halus (konfigurasi sempat tersimpan) sebelum sandbox dimatikan paksa.
+     */
+    private val running = java.util.concurrent.ConcurrentHashMap<Int, Int>()
+    fun sandboxPids(): List<Int> = running.values.toList()
+
     @Synchronized
     fun start(context: Context) {
         if (server != null) return
@@ -86,6 +94,7 @@ object BwrapSpawner {
                     frame(out, 'X', "1".toByteArray())
                 }
             } finally {
+                running.remove(id)
                 dir.deleteRecursively()
             }
         }
@@ -253,6 +262,18 @@ object BwrapSpawner {
         // host `/data/user/0/...`. Bind flatpak apa pun di /data atau di bawahnya (mis. --filesystem=host) dibuang.
         binds.removeAll { under(it.guest, "/data") }
         addBind(Bind("/data", "/data"))
+        // Audio langsung: soket server AAudio (container/tmp/.tinyaudio) dan ~/.asoundrc dimasukkan ke sandbox. Soket
+        // /tmp milik sandbox adalah folder sementara, jadi tanpa bind ini plugin tinyaudio tidak menemukan servernya;
+        // dan ~/.asoundrc harus ikut walau tingkat preflight membuang bind /home/tiny.
+        if (Launcher.directAudioActive()) {
+            val sock = TinyAudio.hostSocket()
+            if (File(sock).exists()) {
+                addBind(Bind(sock, TinyAudio.GUEST_SOCKET))
+                notes.add("audio langsung: ${TinyAudio.GUEST_SOCKET}")
+            } else notes.add("audio langsung: soket $sock belum ada")
+            val rc = FlatpakWayland.asoundrcFile()
+            if (rc.isFile && rc.readText().startsWith(Launcher.ASOUND_MARK)) addBind(Bind(rc.path, "/home/tiny/.asoundrc"))
+        }
         // Controller virtual (libfakeinput): /dev/input dan sysfs palsu yang sama dengan proot sesi. Tanpa ini aplikasi
         // Flatpak (mis. Azahar > Controls) tidak melihat pad apa pun dan pemetaan tombol tidak pernah menerima masukan.
         val pad = padBinds()
@@ -313,7 +334,10 @@ object BwrapSpawner {
 
     /** Bind minimum agar aplikasi Flatpak bisa berjalan (dipakai tingkat terakhir). */
     private val ESSENTIAL = listOf("/usr", "/app", "/etc", "/run", "/dev", "/proc", "/sys", "/tmp", "/var",
-        "/lib", "/lib32", "/lib64", "/bin", "/sbin", "/data", "/home/tiny/.var")
+        "/lib", "/lib32", "/lib64", "/bin", "/sbin", "/data", "/home/tiny/.var",
+        // folder extra (plugin ALSA tinyaudio, ICD Turnip, libfakeinput) dan ~/.asoundrc: tanpa ini tingkat 3-4
+        // membuang bind-nya dan pustaka/konfigurasi di path guest itu hilang dari sandbox
+        "/home/tiny/.local/share/tiny", "/home/tiny/.asoundrc")
 
     /**
      * `/usr/bin/env` di runtime Flatpak adalah rantai symlink `.proot.l2s.*` (hasil `--link2symlink` saat checkout
@@ -472,7 +496,10 @@ object BwrapSpawner {
                 first.append(b.toChar())
             }
             val pid = first.toString().removePrefix("TINYPID=").trim().toIntOrNull()
-            if (pid != null) synchronized(out) { frame(out, 'P', pid.toString().toByteArray()) }
+            if (pid != null) {
+                running[id] = pid
+                synchronized(out) { frame(out, 'P', pid.toString().toByteArray()) }
+            }
             while (true) {
                 val n = try { stream.read(buffer) } catch (e: IOException) { -1 }
                 if (n < 0) break
@@ -485,6 +512,7 @@ object BwrapSpawner {
             }
         }
         val status = process.waitFor()
+        running.remove(id)
         Log.i(TAG, "sandbox $id keluar $status")
         runCatching { synchronized(out) { frame(out, 'X', status.toString().toByteArray()) } }
     }
