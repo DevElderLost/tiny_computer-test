@@ -117,11 +117,24 @@ object BwrapSpawner {
         return out
     }
 
-    /** Mount milik sesi kontainer (lihat perintah boot) yang perlu diterjemahkan saat flatpak menunjuk path guest. */
+    /**
+     * Mount milik sesi kontainer (lihat perintah boot) yang perlu diterjemahkan saat flatpak menunjuk path guest.
+     *
+     * `/data`, `/system`, `/apex`, `/storage` adalah mount identitas milik Android. Aplikasi dengan
+     * `--filesystem=host` (mis. Azahar: `host:ro`) membuat flatpak men-bind setiap isi `/` guest ke path yang sama,
+     * termasuk `/data`. Tanpa entri ini `/data` diterjemahkan ke `<rootfs>/data` (folder kosong) dan menimpa
+     * `/data` Android di sandbox, sehingga symlink `.l2s.*` (target path host `/data/user/0/...`) menggantung dan
+     * proot gagal dengan "'/usr/bin/env' not found".
+     */
     private fun sessionBinds(): List<Bind> = listOf(
         Bind("/proc", "/proc"),
         Bind("/dev", "/dev"),
         Bind("/sys", "/sys"),
+        Bind("/data", "/data"),
+        Bind("/system", "/system"),
+        Bind("/apex", "/apex"),
+        Bind("/storage", "/storage"),
+        Bind("/storage/self/primary", "/media/sd"),
         Bind(File(TinyEnv.containerDir(), "tmp").path, "/dev/shm"),
         Bind(File(TinyEnv.dataPath, "tiny").path, "/home/tiny/.local/share/tiny"),
     )
