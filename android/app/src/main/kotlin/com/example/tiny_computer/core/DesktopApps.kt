@@ -46,8 +46,9 @@ object DesktopApps {
         "usr/local/share/applications",
         "usr/share/applications",
         "var/lib/flatpak/exports/share/applications",
+        "home/tiny/.local/share/flatpak/exports/share/applications",
     )
-    private val ICON_ROOTS = listOf("home/tiny/.local/share/icons", "usr/local/share/icons", "usr/share/icons")
+    private val ICON_ROOTS = listOf("home/tiny/.local/share/icons", "home/tiny/.local/share/flatpak/exports/share/icons", "usr/local/share/icons", "usr/share/icons")
     private val BIN_DIRS = listOf("usr/local/bin", "usr/bin", "bin", "usr/local/games", "usr/games", "usr/sbin", "sbin", "home/tiny/.local/bin")
     private const val WANTED_ICON_PX = 96
 

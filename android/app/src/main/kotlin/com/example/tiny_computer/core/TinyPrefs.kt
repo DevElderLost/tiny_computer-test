@@ -207,6 +207,10 @@ object Cfg {
 
     // ---- Efek layar compositor dan HDR (lihat display/ScreenFx) ----
     /** HDR10 sungguhan: gerbang HDR compositor + DXVK_HDR=1 untuk Wine. Berlaku saat compositor dinyalakan. */
+    /** Tab Flathub Store (Flatpak + Flathub di kontainer Debian trixie) tampil bila true. */
+    var flathubStore: Boolean
+        get() = TinyPrefs.getBool("flathubStore", false)
+        set(v) = TinyPrefs.setBool("flathubStore", v)
     var hdrOutput: Boolean
         get() = TinyPrefs.getBool("hdrOutput", false)
         set(v) = TinyPrefs.setBool("hdrOutput", v)

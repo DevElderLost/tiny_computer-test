@@ -1,0 +1,61 @@
+#!/bin/bash
+# Memasang Flatpak dan remote Flathub di kontainer Debian 13 (trixie) milik Tiny Computer.
+# Dijalankan di TERMINAL kontainer sebagai pengguna `tiny` (sudo tanpa kata sandi, seperti pemasangan paket lain).
+# Penanda selesai: ~/.local/share/tiny/flatpak/setup.done ; penanda gagal: setup.failed (isinya alasan).
+set -u
+export LANG=C.UTF-8
+export DEBIAN_FRONTEND=noninteractive
+DIR="$HOME/.local/share/tiny/flatpak"
+BWRAP="$DIR/tiny-bwrap"
+mkdir -p "$DIR"
+rm -f "$DIR/setup.done" "$DIR/setup.failed"
+
+step() { echo; echo "== [$1/5] $2"; }
+fail() { echo; echo "== GAGAL: $*"; echo "$*" > "$DIR/setup.failed"; exit 1; }
+
+echo "=== Pasang Flatpak + Flathub (Debian trixie) ==="
+
+step 1 "Memeriksa sistem"
+CODENAME=""
+[ -r /etc/os-release ] && CODENAME="$(. /etc/os-release; echo "${VERSION_CODENAME:-}")"
+if [ "$CODENAME" != "trixie" ]; then
+  echo "Peringatan: skrip ini dibuat untuk Debian 13 (trixie); terdeteksi '${CODENAME:-tidak diketahui}'. Dilanjutkan."
+fi
+ARCH="$(dpkg --print-architecture 2>/dev/null)"
+[ "$ARCH" = "arm64" ] || fail "arsitektur $ARCH tidak didukung; Flathub di sini hanya untuk arm64 (aarch64)"
+[ -f "$BWRAP" ] || fail "tiny-bwrap tidak ada di $DIR (buka ulang aplikasi lalu coba lagi)"
+chmod +x "$DIR/tiny-bwrap" "$DIR/tiny-flatpak" 2>/dev/null
+
+step 2 "Memperbarui daftar paket"
+sudo apt-get update || fail "apt update gagal; periksa koneksi internet"
+
+# --no-install-recommends: tanpa portal/polkit/systemd. bubblewrap ikut terpasang sebagai dependensi flatpak,
+# tetapi tidak dipakai: Android tidak punya user namespace, jadi flatpak diarahkan ke tiny-bwrap lewat FLATPAK_BWRAP.
+step 3 "Memasang paket Flatpak"
+sudo apt-get install -y --no-install-recommends \
+  flatpak python3 python3-gi gir1.2-flatpak-1.0 xdg-dbus-proxy ca-certificates \
+  || fail "apt install flatpak gagal"
+
+step 4 "Memeriksa Flatpak"
+command -v flatpak >/dev/null 2>&1 || fail "perintah flatpak tidak ada setelah pemasangan"
+flatpak --version || fail "flatpak tidak bisa dijalankan"
+python3 -c 'import gi; gi.require_version("Flatpak", "1.0"); from gi.repository import Flatpak' 2>/dev/null \
+  || fail "pembantu toko tidak bisa memuat libflatpak lewat Python (python3-gi / gir1.2-flatpak-1.0)"
+
+step 5 "Menambahkan Flathub"
+export FLATPAK_BWRAP="$BWRAP"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}"
+REPO="$DIR/flathub.flatpakrepo"
+[ -f "$REPO" ] || fail "flathub.flatpakrepo tidak ada di $DIR"
+if flatpak remote-list --user --columns=name 2>/dev/null | grep -qx flathub; then
+  echo "Remote flathub sudah ada."
+else
+  out="$(flatpak remote-add --user --if-not-exists flathub "$REPO" 2>&1)"; rc=$?
+  echo "$out"
+  [ $rc -eq 0 ] || fail "remote Flathub tidak bisa ditambahkan: $(echo "$out" | grep -v '^[[:space:]]*$' | tail -n 1)"
+fi
+
+: > "$DIR/setup.done"
+echo
+echo "== SELESAI: Flatpak $(flatpak --version | awk '{print $2}') + Flathub terpasang."
+echo "Buka tab Flathub untuk memasang aplikasi."

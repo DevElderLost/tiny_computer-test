@@ -92,6 +92,8 @@ fun SettingsScreen() {
 
         HangoverGroup()
 
+        FlathubGroup()
+
         DxvkGroup()
 
         DeckGroup(stringResource(R.string.tc_group_terminal)) {

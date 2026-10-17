@@ -550,6 +550,9 @@ $data/bin/virgl_test_server ${Cfg.defaultVirglCommand}""".trimIndent(),
             extraOpt.append("PULSE_LATENCY_MSEC=40 ")
             if (Cfg.directAudioPreferAlsa) extraOpt.append("SDL_AUDIODRIVER=alsa SDL_AUDIO_DRIVER=alsa AUDIODRIVER=alsa ")
         }
+        // Flathub Store (opsional): flatpak diarahkan ke tiny-bwrap (Android tanpa user namespace) dan menu desktop
+        // ikut membaca ekspor flatpak pengguna, jadi aplikasi Flathub tampil di grid Shortcut dan menu desktop.
+        if (FlatpakManager.enabled) extraOpt.append(FlatpakManager.sessionEnv(ctx)).append(' ')
         // log peluncuran: jalur berkas sesi untuk skrip Shortcut, shim Wine, dan Xsession desktop
         extraOpt.append(LaunchLog.envFor(log))
         return GuestSpec(extraMount, extraOpt.toString())
@@ -704,6 +707,58 @@ ${WsiWayland.probeForDesktop(sessionEnv)}
         var prefix = tail.replace(base, "").trimEnd()
         if (!killOnExit) prefix = prefix.replace(" --kill-on-exit", "")
         return guestEnvScript(spec) + "\nexec " + prefix + " /bin/sh " + guestScript + "\n"
+    }
+
+    /** Kutip satu argumen untuk /system/bin/sh. */
+    private fun shq(s: String) = "'" + s.replace("'", "'\\''") + "'"
+
+    /**
+     * Menjalankan [argv] (path guest) di proot sekali pakai pada rootfs kontainer ini, tanpa terminal dan tanpa
+     * menyalakan layanan sesi (virgl, pad, bridge). Dipakai Flathub Store ([FlatpakManager]) untuk memasang dan
+     * menghapus aplikasi. [env] = tambahan `KEY=VALUE` (dipisah spasi) untuk `env -i`. [onLine] menerima tiap baris
+     * keluaran (stdout + stderr). Mengembalikan kode keluar. Memblokir: panggil dari thread latar.
+     *
+     * `--link2symlink` dibuang di sini: ostree membuat hardlink dari repo ke folder deploy dan DroidDeck juga
+     * menjalankan perintah toko tanpa opsi itu.
+     */
+    fun runGuest(ctx: Context, argv: List<String>, env: String, onLine: (String) -> Unit): Int {
+        val tail = Regex("""/bin/bash(\s+-l)?\s*$""")
+        val custom = Containers.boot(TinyEnv.currentContainer, TinyEnv.defaultBoot).trim()
+        val base = if (tail.containsMatchIn(custom)) custom else TinyEnv.defaultBoot.trim()
+        val prefix = tail.replace(base, "").trimEnd().replace(" --link2symlink", "")
+        val script = guestEnvScript(GuestSpec("", env)) + "\nexec " + prefix + " " + argv.joinToString(" ") { shq(it) } + "\n"
+        val p = ProcessBuilder("/system/bin/sh", "-c", script)
+            .redirectErrorStream(true)
+            .redirectInput(ProcessBuilder.Redirect.from(File("/dev/null")))
+            .start()
+        p.inputStream.bufferedReader().useLines { lines -> lines.forEach(onLine) }
+        return p.waitFor()
+    }
+
+    /**
+     * Skrip host untuk satu sandbox flatpak ([BwrapSpawner]): proot BARU dengan akar [root] (folder kosong buatan
+     * spawner) dan hanya bind dari [binds] (`host:guest`), lalu [argv] dengan lingkungan [env] saja. Opsi proot dan
+     * mount sistem (`/proc`, `/dev`, `/sys` beserta tiruan tmoe) diambil dari perintah boot bawaan; mount folder
+     * rumah, font, dan penyimpanan dibuang supaya tidak bocor ke dalam sandbox.
+     */
+    fun sandboxScript(root: File, cwd: String, binds: List<String>, env: Map<String, String>, argv: List<String>): String {
+        val head = TinyEnv.defaultBoot.trim().substringBefore(" /usr/bin/env -i ")
+        fun keep(mount: String): Boolean {
+            val spec = mount.removePrefix("--mount=")
+            val guest = if (':' in spec) spec.substringAfterLast(':') else spec
+            return guest == "/sys" || guest.startsWith("/proc") || guest.startsWith("/dev")
+        }
+        val options = head.split(Regex("\\s+")).filter { it.isNotEmpty() }.filterNot {
+            it == "\$EXTRA_MOUNT" || it.startsWith("--pwd=") || it.startsWith("--rootfs=") || it == "--link2symlink" ||
+                (it.startsWith("--mount=") && !keep(it))
+        }
+        val cmd = StringBuilder(options.joinToString(" "))
+        cmd.append(" --pwd=").append(shq(cwd)).append(" --rootfs=").append(shq(root.path))
+        binds.forEach { cmd.append(" --mount=").append(shq(it)) }
+        cmd.append(" /usr/bin/env -i")
+        env.forEach { (k, v) -> cmd.append(' ').append(shq("$k=$v")) }
+        argv.forEach { cmd.append(' ').append(shq(it)) }
+        return guestEnvScript(GuestSpec("", "")) + "\necho TINYPID=\$\$\nexec " + cmd + "\n"
     }
 
     /**

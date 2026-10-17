@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.DesktopWindows
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Store
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.CircularProgressIndicator
@@ -79,6 +80,7 @@ import com.example.tiny_computer.R
 import com.example.tiny_computer.core.AppImageInstaller
 import com.example.tiny_computer.core.Cfg
 import com.example.tiny_computer.core.Containers
+import com.example.tiny_computer.core.FlatpakManager
 import com.example.tiny_computer.core.Launcher
 import com.example.tiny_computer.core.NavRequest
 import com.example.tiny_computer.core.Startup
@@ -98,7 +100,11 @@ private enum class Page(val icon: ImageVector, val label: Int) {
     SHORTCUT(Icons.Filled.Apps, R.string.tc_nav_shortcut),
     TERMINAL(Icons.Filled.Terminal, R.string.tc_nav_terminal),
     CONTROLLER(Icons.Filled.SportsEsports, R.string.tc_nav_controller),
+    FLATHUB(Icons.Filled.Store, R.string.tc_nav_flathub),
 }
+
+/** Tab yang tampil: Flathub hanya bila saklarnya di Pengaturan menyala. */
+private fun visiblePages(): List<Page> = Page.values().filter { it != Page.FLATHUB || FlatpakManager.enabled }
 
 /**
  * Kerangka UI Compose: navigasi (Desktop, Shortcut, Terminal, Controller, Pengaturan). Pemasangan sistem dan start
@@ -194,6 +200,28 @@ fun TinyApp() {
         }
         AppImageInstaller.stopWatchingRemove(id)
     }
+    // skrip pasang Flatpak + Flathub di terminal selesai: tutup terminal dan buka tab Flathub. Bila gagal, penanda
+    // gagal muncul dan terminal dibiarkan terbuka agar galatnya terbaca.
+    val flatpakSetup = FlatpakManager.setupWatching
+    LaunchedEffect(flatpakSetup) {
+        if (!flatpakSetup) return@LaunchedEffect
+        val deadline = System.currentTimeMillis() + INSTALL_WAIT_MS
+        while (System.currentTimeMillis() < deadline) {
+            if (withContext(Dispatchers.IO) { FlatpakManager.isSetupDone() }) {
+                delay(INSTALL_DONE_PAUSE_MS)
+                if (page == Page.TERMINAL.ordinal) page = Page.FLATHUB.ordinal
+                if (!Launcher.guiStarted) Launcher.shutdownTerminal()
+                FlatpakManager.stopWatchingSetup()
+                return@LaunchedEffect
+            }
+            if (withContext(Dispatchers.IO) { FlatpakManager.setupFailure() } != null) {
+                FlatpakManager.stopWatchingSetup()
+                return@LaunchedEffect
+            }
+            delay(INSTALL_POLL_MS)
+        }
+        FlatpakManager.stopWatchingSetup()
+    }
     // jangan keluar dari aplikasi di tengah pemasangan
     BackHandler(enabled = phase == Startup.Phase.RUNNING) {}
     // Pengaturan: dibuka dari ikon roda gigi di samping Open desktop, tampil di area isi dengan rel navigasi tetap terlihat
@@ -205,7 +233,7 @@ fun TinyApp() {
             phase == Startup.Phase.DONE, showSettings, { showSettings = false },
         )
         // tombol mengambang kembali ke desktop: hanya saat desktop sudah jalan, dan tidak saat memasang AppImage
-        if (phase == Startup.Phase.DONE && Launcher.guiStarted && AppImageInstaller.watching == null && AppImageInstaller.removing == null) {
+        if (phase == Startup.Phase.DONE && Launcher.guiStarted && AppImageInstaller.watching == null && AppImageInstaller.removing == null && !FlatpakManager.setupWatching) {
             BackToDesktopButton(openDesktop)
         }
         if (phase == Startup.Phase.RUNNING || phase == Startup.Phase.FAILED) StartupOverlay(onClose = { Startup.dismiss() })
@@ -238,11 +266,12 @@ private fun TinyShell(
     val imeOpen = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     val content: @Composable () -> Unit = {
         if (showSettings) SettingsPage()
-        else when (Page.values()[page]) {
+        else when (Page.values()[page].takeIf { it != Page.FLATHUB || FlatpakManager.enabled } ?: Page.HOME) {
             Page.HOME -> HomeScreen(onOpenDesktop, onOpenSettings)
             Page.SHORTCUT -> ShortcutScreen(onLaunchApp, onShowTerminal = { onPage(Page.TERMINAL.ordinal) })
             Page.TERMINAL -> if (started) TerminalScreen() else TerminalGate()
             Page.CONTROLLER -> ControllerScreen()
+            Page.FLATHUB -> FlathubScreen(onLaunchApp)
         }
     }
 
@@ -258,7 +287,7 @@ private fun TinyShell(
             ) {
                 // rata ke atas (gaya rel Material 3); ruang kosong tersisa di bawah, jadi tab baru muncul di bawah item yang ada
                 Spacer(Modifier.height(4.dp))
-                Page.values().forEach { p ->
+                visiblePages().forEach { p ->
                     NavigationRailItem(
                         selected = !showSettings && page == p.ordinal, onClick = { onPage(p.ordinal) },
                         icon = { Icon(p.icon, null) },
@@ -284,7 +313,7 @@ private fun TinyShell(
             containerColor = pal.background,
             bottomBar = {
                 if (!(imeOpen && !showSettings && page == Page.TERMINAL.ordinal)) NavigationBar(containerColor = pal.surface, tonalElevation = 0.dp) {
-                    Page.values().forEach { p ->
+                    visiblePages().forEach { p ->
                         NavigationBarItem(
                             selected = !showSettings && page == p.ordinal, onClick = { onPage(p.ordinal) },
                             icon = { Icon(p.icon, null) },
