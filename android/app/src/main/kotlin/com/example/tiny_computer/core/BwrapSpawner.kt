@@ -239,6 +239,7 @@ object BwrapSpawner {
         // host `/data/user/0/...`. Bind flatpak apa pun di /data atau di bawahnya (mis. --filesystem=host) dibuang.
         binds.removeAll { under(it.guest, "/data") }
         addBind(Bind("/data", "/data"))
+        notes.add("bind di /home: " + binds.filter { under(it.guest, "/home") }.joinToString(" ") { it.guest }.ifEmpty { "(tidak ada)" })
         notes.add("${binds.size} bind; /usr=${binds.firstOrNull { it.guest == "/usr" }?.host ?: "TIDAK ADA"}")
         notes.add(probe(binds, root, "/usr/bin/env"))
         if (binds.any { it.guest == "/proc" }) genericCpuinfo(context)?.let { addBind(Bind(it.path, "/proc/cpuinfo")) }
@@ -286,7 +287,7 @@ object BwrapSpawner {
 
     /** Tingkat percobaan terakhir yang lolos preflight; sandbox berikutnya mulai dari sini (hanya naik). */
     @Volatile private var startTier = 0
-    private const val MAX_TIER = 3
+    private const val MAX_TIER = 4
 
     /** Folder akar guest yang hanya bermakna di host; bind-nya (mis. dari `--filesystem=host`) tidak dibutuhkan aplikasi. */
     private val HOST_EXPORTS = listOf("/system", "/apex", "/storage", "/media", "/mnt", "/opt", "/srv", "/boot", "/root")
@@ -310,14 +311,20 @@ object BwrapSpawner {
     }
 
     /**
-     * Tingkat 0 = rencana apa adanya; 1 = + `/usr/bin/env` langsung; 2 = + buang bind ekspor host; 3 = hanya bind
-     * yang esensial. Makin tinggi makin sedikit yang dibagikan ke aplikasi, tetapi makin kecil peluang proot gagal.
+     * Tingkat 0 = rencana apa adanya; 1 = + `/usr/bin/env` langsung; 2 = + buang bind ekspor host dan bind seluruh
+     * rumah (`/home`, `/home/tiny`); 3 = hanya bind yang esensial + folder rumah sesi (Download, Documents, ...);
+     * 4 = hanya bind yang esensial. Makin tinggi makin sedikit yang dibagikan ke aplikasi, tetapi makin kecil peluang
+     * proot gagal. Log 2026-10-17 (Azahar, 89 bind): tingkat 0-2 gagal dan hanya tingkat esensial lolos, sehingga
+     * `/home/tiny` kosong; bind seluruh rumah di atas folder sesi dibuang dulu, folder Android-nya dipertahankan.
      */
     private fun variant(plan: Plan, tier: Int): Plan {
         if (tier == 0) return plan
         var binds: List<Bind> = plan.binds
-        if (tier >= 2) binds = binds.filterNot { b -> b.guest == "/home" || HOST_EXPORTS.any { under(b.guest, it) } }
-        if (tier >= 3) binds = binds.filter { b -> ESSENTIAL.any { under(b.guest, it) } }
+        if (tier >= 2) binds = binds.filterNot { b -> b.guest == "/home" || b.guest == "/home/tiny" || HOST_EXPORTS.any { under(b.guest, it) } }
+        if (tier >= 3) {
+            val keepHome = if (tier == 3) homeMounts().map { it.guest }.toSet() else emptySet()
+            binds = binds.filter { b -> ESSENTIAL.any { under(b.guest, it) } || b.guest in keepHome }
+        }
         directEnv(binds)?.let { env -> binds = binds.filterNot { it.guest == "/usr/bin/env" } + env }
         return Plan(plan.root, binds, plan.cwd, plan.argv, plan.env, plan.notes)
     }
