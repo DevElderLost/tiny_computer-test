@@ -740,13 +740,18 @@ ${WsiWayland.probeForDesktop(sessionEnv)}
      * spawner) dan hanya bind dari [binds] (`host:guest`), lalu [argv] dengan lingkungan [env] saja. Opsi proot dan
      * mount sistem (`/proc`, `/dev`, `/sys` beserta tiruan tmoe) diambil dari perintah boot bawaan; mount folder
      * rumah, font, dan penyimpanan dibuang supaya tidak bocor ke dalam sandbox.
+     *
+     * `/data` TETAP di-mount: proot sesi memakai `--link2symlink`, jadi hardlink hasil checkout ostree/Flatpak
+     * (seluruh isi runtime dan aplikasi) berupa symlink `.l2s.*` dengan target path HOST absolut
+     * (`/data/user/0/<paket>/files/containers/...`). Tanpa `/data`, semua berkas itu menggantung di dalam sandbox
+     * dan proot gagal dengan "'/usr/bin/env' not found" (lalu "ldconfig failed, exit status 256").
      */
     fun sandboxScript(root: File, cwd: String, binds: List<String>, env: Map<String, String>, argv: List<String>): String {
         val head = TinyEnv.defaultBoot.trim().substringBefore(" /usr/bin/env -i ")
         fun keep(mount: String): Boolean {
             val spec = mount.removePrefix("--mount=")
             val guest = if (':' in spec) spec.substringAfterLast(':') else spec
-            return guest == "/sys" || guest.startsWith("/proc") || guest.startsWith("/dev")
+            return guest == "/sys" || guest == "/data" || guest.startsWith("/proc") || guest.startsWith("/dev")
         }
         val options = head.split(Regex("\\s+")).filter { it.isNotEmpty() }.filterNot {
             it == "\$EXTRA_MOUNT" || it.startsWith("--pwd=") || it.startsWith("--rootfs=") || it == "--link2symlink" ||
