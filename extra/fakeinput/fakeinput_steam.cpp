@@ -2210,6 +2210,20 @@ EXPORT DIR *opendir(const char *name) {
   return dir;
 }
 
+// Qt (QSaveFile -> QSettings: qt-config.ini milik Azahar, dsb.) menyimpan berkas dengan open(O_TMPFILE) lalu
+// linkat("/proc/self/fd/N", tujuan). Di bawah proot --link2symlink, linkat atas berkas tanpa nama itu gagal
+// sehingga commit gagal, berkas konfigurasi tidak pernah terbentuk dan pengaturan hilang begitu aplikasi
+// ditutup. EOPNOTSUPP adalah jawaban resmi "filesystem ini tidak mendukung O_TMPFILE": Qt dan glib lalu
+// memakai berkas sementara bernama + rename(), yang jalan normal. Matikan dengan TINY_ALLOW_TMPFILE=1.
+static bool tmpfile_unsupported(int flags) {
+  if ((flags & O_TMPFILE) != O_TMPFILE) return false;
+  static const bool allow = [] {
+    const char *v = getenv("TINY_ALLOW_TMPFILE");
+    return v && *v && strcmp(v, "0") != 0;
+  }();
+  return !allow;
+}
+
 EXPORT int open(const char *pathname, int flags, ...) {
   va_list va;
   mode_t mode;
@@ -2228,6 +2242,10 @@ EXPORT int open(const char *pathname, int flags, ...) {
 
   static auto my_open = reinterpret_cast<int (*)(const char *, int, ...)>(dlsym(RTLD_NEXT, "open"));
 
+  if (tmpfile_unsupported(flags)) {
+    errno = EOPNOTSUPP;
+    return -1;
+  }
   if (fake_uinput_enabled() && is_uinput_path(pathname)) return open_uinput(flags);
   if (is_deck_hidraw_path(pathname)) return open_deck_hidraw(flags);
   if (is_touch_hidraw_path(pathname)) return open_touch_hidraw(flags);
@@ -2303,6 +2321,10 @@ EXPORT int openat(int dirfd, const char *pathname, int flags, ...) {
 
   static auto my_openat = reinterpret_cast<int (*)(int, const char *, int, ...)>(dlsym(RTLD_NEXT, "openat"));
 
+  if (tmpfile_unsupported(flags)) {
+    errno = EOPNOTSUPP;
+    return -1;
+  }
   if (fake_uinput_enabled() && is_uinput_path(pathname)) return open_uinput(flags);
   if (is_deck_hidraw_path(pathname)) return open_deck_hidraw(flags);
   if (is_touch_hidraw_path(pathname)) return open_touch_hidraw(flags);
