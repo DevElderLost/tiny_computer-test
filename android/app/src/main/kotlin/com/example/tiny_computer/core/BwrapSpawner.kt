@@ -95,6 +95,7 @@ object BwrapSpawner {
                 }
             } finally {
                 running.remove(id)
+                runCatching { rescueThrowawayData(dir) }
                 dir.deleteRecursively()
             }
         }
@@ -226,6 +227,14 @@ object BwrapSpawner {
                 "proc" -> bindsFor(session, rootfs, "/proc", dest).forEach { addBind(it) }
                 "dev" -> bindsFor(session, rootfs, "/dev", dest).forEach { addBind(it) }
                 "dir" -> {
+                    // flatpak menutup ~/.var/app dengan tmpfs agar aplikasi lain tak terlihat, lalu mem-bind ~/.var/app/<id>.
+                    // Rumah sudah dibagikan (--filesystem=home), jadi isolasi itu tidak berarti apa-apa di sini, sedangkan
+                    // folder sementara di induk bind data aplikasi bergantung pada urutan bind bertingkat proot: bila
+                    // meleset, konfigurasi tertulis ke folder sandbox sementara dan hilang begitu aplikasi ditutup.
+                    if (op.optBoolean("empty") && (dest == "/home/tiny/.var" || dest == "/home/tiny/.var/app")) {
+                        notes.add("tmpfs $dest dilewati (data aplikasi tetap di ~/.var/app asli)")
+                        continue
+                    }
                     val perms = op.optInt("perms", 0x1ed)
                     val here = writable(dest)
                     when {
@@ -258,6 +267,19 @@ object BwrapSpawner {
                 }
             }
         }
+        // Data aplikasi Flatpak (~/.var/app/<id>: konfigurasi, simpanan, cache) HARUS berasal dari rootfs yang
+        // persisten. Dipasang terakhir dan tanpa bind sementara di atasnya, apa pun urutan bind dari flatpak.
+        flatpakAppId(request)?.let { appId ->
+            val guestDir = "/home/tiny/.var/app/$appId"
+            val hostDir = File(hostPath(session, rootfs, guestDir))
+            if (hostDir.isDirectory || hostDir.mkdirs()) {
+                binds.removeAll { under(it.guest, guestDir) && under(it.host, dir.path) }
+                addBind(Bind(hostDir.path, guestDir))
+                notes.add("data aplikasi persisten: ${hostDir.path} -> $guestDir")
+            } else notes.add("data aplikasi: GAGAL membuat ${hostDir.path}; konfigurasi tidak akan tersimpan")
+        } ?: notes.add("data aplikasi: id Flatpak tidak ditemukan di permintaan sandbox")
+        notes.add("bind di ~/.var: " + binds.filter { under(it.guest, "/home/tiny/.var") }
+            .joinToString(" ") { "${it.guest}=${it.host}" }.ifEmpty { "(tidak ada)" })
         // `/data` Android harus tetap /data asli: symlink .l2s.* (hardlink proot --link2symlink) menunjuk ke path
         // host `/data/user/0/...`. Bind flatpak apa pun di /data atau di bawahnya (mis. --filesystem=host) dibuang.
         binds.removeAll { under(it.guest, "/data") }
@@ -288,6 +310,44 @@ object BwrapSpawner {
         request.optJSONObject("env")?.let { e -> e.keys().forEach { k -> env[k] = e.getString(k) } }
         browserSandboxes(env)
         return Plan(root, binds, request.optString("cwd", "/").ifEmpty { "/" }, argv, env, notes)
+    }
+
+    private val APP_ID = Regex("[A-Za-z0-9_][A-Za-z0-9_.-]*")
+
+    /** Id aplikasi Flatpak dari `FLATPAK_ID` (--setenv) atau baris `name=` di `/.flatpak-info`; null bila tak ada. */
+    private fun flatpakAppId(request: JSONObject): String? {
+        request.optJSONObject("env")?.optString("FLATPAK_ID")?.takeIf { APP_ID.matches(it) }?.let { return it }
+        val ops = request.optJSONArray("ops") ?: return null
+        for (i in 0 until ops.length()) {
+            val op = ops.optJSONObject(i) ?: continue
+            if (op.optString("t") != "file" || op.optString("dest") != "/.flatpak-info") continue
+            val text = runCatching { String(Base64.decode(op.getString("data"), Base64.DEFAULT), Charsets.UTF_8) }.getOrNull() ?: continue
+            text.lineSequence().firstOrNull { it.startsWith("name=") }?.substringAfter('=')?.trim()
+                ?.takeIf { APP_ID.matches(it) }?.let { return it }
+        }
+        return null
+    }
+
+    /**
+     * Setelah sandbox ditutup: berkas yang ditulis aplikasi ke `~/.var/app/<id>` DI DALAM folder sandbox sementara
+     * (bukan rootfs) akan terhapus bersama folder itu. Itu persis gejala "pengaturan kembali ke awal". Selamatkan
+     * ke rootfs (berkas lebih baru menang) dan catat peringatan di log Shortcut supaya penyebabnya terlihat.
+     */
+    private fun rescueThrowawayData(dir: File) {
+        val apps = File(dir, "root/home/tiny/.var/app").listFiles()?.filter { it.isDirectory } ?: return
+        for (app in apps) {
+            val files = app.walkTopDown().filter { it.isFile }.toList()
+            if (files.isEmpty()) continue
+            val target = File(TinyEnv.containerDir(), "home/tiny/.var/app/${app.name}")
+            var saved = 0
+            for (f in files) {
+                val dst = File(target, f.relativeTo(app).path)
+                if (dst.exists() && dst.lastModified() >= f.lastModified()) continue
+                runCatching { dst.parentFile?.mkdirs(); f.copyTo(dst, overwrite = true); saved++ }
+            }
+            Launcher.logApp("flatpak", "PERINGATAN: ${app.name} menulis ${files.size} berkas ke folder sandbox sementara, " +
+                "bukan ke ~/.var/app asli; $saved berkas diselamatkan ke ${target.path}")
+        }
     }
 
     /**

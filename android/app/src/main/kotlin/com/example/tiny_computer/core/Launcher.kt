@@ -65,6 +65,9 @@ object Launcher {
     @Volatile private var containerLog: LaunchLog.Session? = null
     @Volatile private var appSessionLog: LaunchLog.Session? = null
 
+    /** Menulis ke log sesi Shortcut yang sedang berjalan (atau log kontainer); dipakai [BwrapSpawner]. */
+    internal fun logApp(area: String, msg: String) = LaunchLog.write(appSessionLog ?: containerLog, area, msg)
+
     /** Layanan sisi Android (getifaddrs bridge, virgl) yang dinyalakan sekali per proses aplikasi. */
     private val services = HashMap<String, Process>()
     private val spawnLock = Any()
@@ -96,6 +99,17 @@ object Launcher {
 
     /** Indeks segmen progres (0-based) untuk [appPhase]; tidak pernah mundur selama satu fase. */
     var appStage by mutableIntStateOf(0)
+
+    /**
+     * Aplikasi Shortcut sudah selesai sendiri dan sesi akan ditutup beberapa detik lagi (menunggu pemeriksaan
+     * "sesi kosong"). Layar progres Shutdown tampil sejak saat itu, bukan layar hitam kosong.
+     */
+    var appClosing by mutableStateOf(false)
+
+    /** Tahap layar progres Shutdown (hanya bila sedang [AppPhase.STOPPING]; tahap Start tidak ikut berubah). */
+    private fun stopStage(to: Int) {
+        if (appPhase == AppPhase.STOPPING) advanceStage(to)
+    }
         private set
 
     private fun advanceStage(to: Int) {
@@ -109,7 +123,7 @@ object Launcher {
     private val idleCheck = Runnable {
         if (guiStarted || appPhase == AppPhase.STOPPING) return@Runnable
         val session = appSession ?: return@Runnable
-        if (session.isAlive && appsBusy()) return@Runnable
+        if (session.isAlive && appsBusy()) { appClosing = false; return@Runnable }
         val failed = lastFailedApp
         // matikan dan tunggu sampai benar-benar mati sebelum layar ditutup; bila sementara itu pengguna
         // sudah membuka aplikasi lain (STARTING), layar tidak boleh ikut ditutup
@@ -290,6 +304,7 @@ object Launcher {
             val x11 = if (File(TinyEnv.runtimeDir(), ".X11-unix/X4").exists()) closeX11Windows() else 0
             if (x11 > 0) LaunchLog.write(log, "stop", "$x11 jendela X11 diminta menutup (WM_DELETE_WINDOW)")
             val closed = wl + x11
+            stopStage(1) // permintaan tutup sudah terkirim: sekarang menunggu aplikasi menyimpan pengaturannya
             if (closed > 0) {
                 // hanya aplikasi utama yang ditunggu; daemon pendukung (dbus, dst.) tidak ikut menutup bersama jendelanya
                 val procsNow = scanProcs()
@@ -300,6 +315,7 @@ object Launcher {
                 }
             }
         }
+        stopStage(2)
         targets = gracefulTargets(appRoots)
         targets.forEach { runCatching { android.system.Os.kill(it, android.system.OsConstants.SIGTERM) } }
         val ok = waitGoneUntil(targets, CLOSE_TERM_WAIT_MS)
@@ -898,6 +914,7 @@ ${WsiWayland.probeForDesktop(sessionEnv)}
         val ticket = epoch
         // layar progres langsung tampil, bahkan sebelum thread latar sempat berjalan
         appStage = 0
+        appClosing = false
         appPhase = AppPhase.STARTING
         Thread({
             synchronized(spawnLock) {
@@ -944,9 +961,10 @@ ${WsiWayland.probeForDesktop(sessionEnv)}
             synchronized(spawnLock) {
                 val killed = ArrayList<Int>()
                 killed += stopAppSession(graceful = true)
+                stopStage(2)
                 killed += killDesktopProcesses()
                 killed += killContainerShell()
-                if (appPhase == AppPhase.STOPPING) advanceStage(1)
+                stopStage(3)
                 waitGone(killed, 3000)
                 guiStarted = false
             }
@@ -955,6 +973,7 @@ ${WsiWayland.probeForDesktop(sessionEnv)}
                 // jangan menunggu callback onSessionFinished: status harus sudah benar saat layar desktop ditutup
                 markStopped()
                 Startup.reset()
+                appClosing = false
                 if (appPhase == AppPhase.STOPPING) appPhase = AppPhase.IDLE
                 onDone()
             }
@@ -1024,10 +1043,11 @@ ${WsiWayland.probeForDesktop(sessionEnv)}
         Thread({
             synchronized(spawnLock) {
                 val killed = stopAppSession(graceful = true)
-                if (appPhase == AppPhase.STOPPING) advanceStage(1)
+                stopStage(3)
                 waitGone(killed, 3000)
             }
             mainHandler.post {
+                appClosing = false
                 // aplikasi baru yang sempat diminta selama menunggu (STARTING) tidak boleh ditimpa
                 if (appPhase == AppPhase.STOPPING) appPhase = AppPhase.IDLE
                 onDone()
@@ -1084,8 +1104,11 @@ ${WsiWayland.probeForDesktop(sessionEnv)}
                 while (appSession === session) {
                     Thread.sleep(1000)
                     if (appSession !== session) break
-                    if (guiStarted) { idleTicks = 0; continue }
+                    if (guiStarted) { idleTicks = 0; appClosing = false; continue }
                     idleTicks = if (appsBusy()) 0 else idleTicks + 1
+                    // dua pemeriksaan kosong berturut-turut: layar progres Shutdown sudah tampil selama menunggu pemeriksaan
+                    // ketiga (peluncur single-instance yang hanya berpindah jendela tidak sempat memunculkannya)
+                    appClosing = idleTicks >= 2 && appPhase == AppPhase.RUNNING
                     if (idleTicks >= 3) { scheduleIdleCheck(0); break }
                 }
             }
@@ -1149,6 +1172,7 @@ ${WsiWayland.probeForDesktop(sessionEnv)}
         appSession = null
         // Xwayland + window manager (proot sesi) tetap hidup selama fase ini: aplikasi butuh X untuk menutup jendelanya.
         if (graceful) runCatching { closeGracefully(appRoots, log) }.onFailure { Log.w("Launcher", "closeGracefully", it) }
+        stopStage(2)
         val killed = ArrayList<Int>()
         for (g in guests) {
             val pid = pids.remove(g) ?: 0
