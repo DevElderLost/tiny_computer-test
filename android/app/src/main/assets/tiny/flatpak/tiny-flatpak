@@ -5,6 +5,13 @@ import sys
 
 os.environ.setdefault("FLATPAK_BWRAP", "/home/tiny/.local/share/tiny/flatpak/tiny-bwrap")
 
+# libflatpak Debian (libmalcontent) mengecek parental controls lewat SYSTEM bus di flatpak_dir_deploy(),
+# sebelum berkas "deploy" ditulis. Kontainer tidak punya system bus -> "Could not connect: No such file or
+# directory" dan aplikasi batal ter-deploy. Arahkan ke bus sesi sementara (dbus-run-session): di sana tidak ada
+# org.freedesktop.Accounts, jadi hasilnya ServiceUnknown dan Flatpak melewati pengecekan itu.
+if os.environ.get("DBUS_SESSION_BUS_ADDRESS"):
+    os.environ.setdefault("DBUS_SYSTEM_BUS_ADDRESS", os.environ["DBUS_SESSION_BUS_ADDRESS"])
+
 import gi
 
 gi.require_version("Flatpak", "1.0")
@@ -81,9 +88,6 @@ def transaction(inst):
             ref_id = (op.get_ref() or "").split("/")[1:2]
             ref_id = ref_id[0] if ref_id else ""
             non_fatal = related or ref_id.endswith((".Locale", ".Debug")) or ".GL." in ref_id or "codecs" in ref_id
-        # "Could not connect" = tidak ada D-Bus sesi; muncul setelah aplikasi ter-deploy, jadi bukan alasan membatalkan
-        if "Could not connect" in err.message:
-            non_fatal = True
         emit(e="warning" if non_fatal else "error", message="%s: %s" % (op.get_ref(), err.message))
         if state["first_warning"] is None and "previous error" not in err.message:
             state["first_warning"] = err.message
