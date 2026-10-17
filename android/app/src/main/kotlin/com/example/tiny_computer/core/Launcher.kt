@@ -236,6 +236,12 @@ object Launcher {
     }
     @Volatile private var padCache: PadSetup.Result? = null
 
+    /** Controller virtual sesi (dibuat sekali, dipakai ulang semua proot); dibuat bila belum ada. Untuk sandbox Flatpak. */
+    fun padResult(ctx: Context): PadSetup.Result = padCache ?: PadSetup.prepare(ctx).also { padCache = it }
+
+    /** Hasil yang sudah ada tanpa membuat baru; null bila sesi belum menyiapkan controller. */
+    fun padPeek(): PadSetup.Result? = padCache
+
     /** True setelah perintah boot ditulis ke terminal (kontainer sedang/ sudah berjalan). */
     val isStarted: Boolean get() = started
 

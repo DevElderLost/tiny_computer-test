@@ -148,6 +148,20 @@ object BwrapSpawner {
      * `host`) di Flatpak hanya melihat folder kosong di rootfs, sehingga dialog berkas cuma menampilkan `Desktop`.
      * Nama folder mengikuti bahasa (boot Mandarin: 下载, 文档, ...; selain itu: Downloads, Documents, ...).
      */
+    private fun padBinds(): List<Bind> {
+        if (!File(TinyEnv.dataPath, "tiny/extra/libfakeinput.so").isFile) return emptyList()
+        val pad = Launcher.padPeek() ?: return emptyList()
+        val out = ArrayList<Bind>()
+        for (m in pad.mounts) {
+            val spec = m.removePrefix("--mount=")
+            if (':' !in spec) continue
+            val host = spec.substringBeforeLast(':')
+            val guest = spec.substringAfterLast(':')
+            if (File(host).exists() && guest.startsWith("/")) out.add(Bind(host, guest))
+        }
+        return out
+    }
+
     private fun homeMounts(): List<Bind> {
         val out = ArrayList<Bind>()
         val data = TinyEnv.dataPath
@@ -239,6 +253,11 @@ object BwrapSpawner {
         // host `/data/user/0/...`. Bind flatpak apa pun di /data atau di bawahnya (mis. --filesystem=host) dibuang.
         binds.removeAll { under(it.guest, "/data") }
         addBind(Bind("/data", "/data"))
+        // Controller virtual (libfakeinput): /dev/input dan sysfs palsu yang sama dengan proot sesi. Tanpa ini aplikasi
+        // Flatpak (mis. Azahar > Controls) tidak melihat pad apa pun dan pemetaan tombol tidak pernah menerima masukan.
+        val pad = padBinds()
+        pad.forEach { addBind(it) }
+        if (pad.isNotEmpty()) notes.add("controller: " + pad.joinToString(" ") { it.guest })
         notes.add("bind di /home: " + binds.filter { under(it.guest, "/home") }.joinToString(" ") { it.guest }.ifEmpty { "(tidak ada)" })
         notes.add("${binds.size} bind; /usr=${binds.firstOrNull { it.guest == "/usr" }?.host ?: "TIDAK ADA"}")
         notes.add(probe(binds, root, "/usr/bin/env"))

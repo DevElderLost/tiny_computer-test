@@ -107,10 +107,22 @@ object FlatpakWayland {
             if (File(TinyEnv.dataPath, "tiny/extra").isDirectory) opts += "--filesystem=$GUEST_TINY/extra:ro"
             gpu = "Turnip/Zink (VK_ICD dari Pengaturan)"
         }
+        // Controller virtual: libfakeinput melayani /dev/input (dipasang BwrapSpawner.padBinds); variabelnya harus
+        // lewat `--env` karena `flatpak run` membersihkan lingkungan. Pustakanya ada di folder `tiny/extra`.
+        var pad = "tanpa controller (libfakeinput.so tidak ada)"
+        if (File(TinyEnv.dataPath, "tiny/extra/libfakeinput.so").isFile) {
+            runCatching { Launcher.padResult(ctx) }.getOrNull()?.let { r ->
+                if (!turnipOn) opts += "--filesystem=$GUEST_TINY/extra:ro"
+                opts += "--device=all"
+                for (e in r.env) opts += "--env=$e"
+                opts += "--env=LD_PRELOAD=$GUEST_TINY/extra/libfakeinput.so"
+                pad = "controller virtual aktif"
+            }
+        }
         val command = prog + " run " + opts.joinToString(" ") { q(it) } + rest
         val note = "[tiny] Flatpak display=${mode.name.lowercase()}" +
             (if (mode == Mode.WAYLAND) " (Wayland dulu, X11 hanya cadangan)" else " (paksa X11/Xwayland)") +
-            "; GPU: $gpu"
+            "; GPU: $gpu; $pad"
         return Result(command, note)
     }
 }
