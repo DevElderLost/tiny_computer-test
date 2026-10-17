@@ -13,6 +13,7 @@ import java.io.DataOutputStream
 import java.io.File
 import java.io.IOException
 import java.nio.file.Files
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -74,7 +75,7 @@ object BwrapSpawner {
                 val body = ByteArray(input.readInt()).also { input.readFully(it) }
                 if (kind != 'R'.code) return
                 val request = JSONObject(String(body, Charsets.UTF_8))
-                val plan = plan(context, request, dir)
+                val plan = startable(plan(context, request, dir))
                 plan.notes.forEach { note -> synchronized(out) { frame(out, 'E', "sandbox $id: $note".toByteArray()) } }
                 run(plan, client, out, id)
             } catch (e: Exception) {
@@ -258,6 +259,90 @@ object BwrapSpawner {
         Log.w(TAG, "cpuinfo", e); null
     }
 
+    /** Tingkat percobaan terakhir yang lolos preflight; sandbox berikutnya mulai dari sini (hanya naik). */
+    @Volatile private var startTier = 0
+    private const val MAX_TIER = 3
+
+    /** Folder akar guest yang hanya bermakna di host; bind-nya (mis. dari `--filesystem=host`) tidak dibutuhkan aplikasi. */
+    private val HOST_EXPORTS = listOf("/system", "/apex", "/storage", "/media", "/mnt", "/opt", "/srv", "/boot", "/root")
+
+    /** Bind minimum agar aplikasi Flatpak bisa berjalan (dipakai tingkat terakhir). */
+    private val ESSENTIAL = listOf("/usr", "/app", "/etc", "/run", "/dev", "/proc", "/sys", "/tmp", "/var",
+        "/lib", "/lib32", "/lib64", "/bin", "/sbin", "/data", "/home/tiny/.var")
+
+    /**
+     * `/usr/bin/env` di runtime Flatpak adalah rantai symlink `.proot.l2s.*` (hasil `--link2symlink` saat checkout
+     * ostree). Sandbox dengan banyak bind (80+, mis. `--filesystem=host`) gagal dengan "proot error:
+     * '/usr/bin/env' not found" padahal sandbox kecil (ldconfig, 12 bind) dengan rantai yang sama lolos. Bind berkas
+     * nyata hasil rantai itu langsung ke `/usr/bin/env` supaya proot tidak perlu menelusuri symlink saat memulai.
+     */
+    private fun directEnv(binds: List<Bind>): Bind? {
+        val usr = binds.firstOrNull { it.guest == "/usr" } ?: return null
+        val real = try { File(usr.host, "bin/env").canonicalFile } catch (e: IOException) { return null }
+        if (!real.isFile) return null
+        if (!real.canExecute()) runCatching { real.setExecutable(true, false) }
+        return Bind(real.path, "/usr/bin/env")
+    }
+
+    /**
+     * Tingkat 0 = rencana apa adanya; 1 = + `/usr/bin/env` langsung; 2 = + buang bind ekspor host; 3 = hanya bind
+     * yang esensial. Makin tinggi makin sedikit yang dibagikan ke aplikasi, tetapi makin kecil peluang proot gagal.
+     */
+    private fun variant(plan: Plan, tier: Int): Plan {
+        if (tier == 0) return plan
+        var binds: List<Bind> = plan.binds
+        if (tier >= 2) binds = binds.filterNot { b -> b.guest == "/home" || HOST_EXPORTS.any { under(b.guest, it) } }
+        if (tier >= 3) binds = binds.filter { b -> ESSENTIAL.any { under(b.guest, it) } }
+        directEnv(binds)?.let { env -> binds = binds.filterNot { it.guest == "/usr/bin/env" } + env }
+        return Plan(plan.root, binds, plan.cwd, plan.argv, plan.env, plan.notes)
+    }
+
+    /**
+     * Menjalankan proot yang sama persis dengan bind rencana, tetapi hanya `env -i` (tanpa perintah), untuk
+     * memastikan proot bisa menemukan `/usr/bin/env`. Mengembalikan null bila lolos, selain itu pesan galatnya.
+     */
+    private fun preflight(plan: Plan): String? = try {
+        val script = Launcher.sandboxScript(plan.root, "/", plan.binds.map { it.spec }, emptyMap(), emptyList())
+        val process = ProcessBuilder("/system/bin/sh", "-c", script)
+            .redirectErrorStream(true)
+            .redirectInput(ProcessBuilder.Redirect.from(File("/dev/null")))
+            .start()
+        val text = StringBuilder()
+        val reader = Thread({
+            try { process.inputStream.bufferedReader().forEachLine { if (text.length < 4000) text.appendLine(it) } }
+            catch (e: IOException) { /* proses dimatikan */ }
+        }, "bwrap-preflight").apply { isDaemon = true; start() }
+        if (!process.waitFor(10, TimeUnit.SECONDS)) {
+            process.destroyForcibly()
+            null // menggantung bukan tanda galat pencarian program; jangan hukum rencananya
+        } else {
+            reader.join(500)
+            if (process.exitValue() == 0) null
+            else text.lines().map { it.trim() }.firstOrNull { it.startsWith("proot error") || it.startsWith("proot info") }
+                ?: text.lines().map { it.trim() }.lastOrNull { it.isNotEmpty() && !it.startsWith("TINYPID=") && !it.startsWith("proot warning") }
+                ?: "keluar ${process.exitValue()}"
+        }
+    } catch (e: Exception) {
+        Log.w(TAG, "preflight", e); null
+    }
+
+    /** Rencana pertama (mulai dari [startTier]) yang lolos [preflight]; bila semuanya gagal, rencana awal beserta diagnosisnya. */
+    private fun startable(plan: Plan): Plan {
+        val log = ArrayList<String>()
+        for (tier in startTier..MAX_TIER) {
+            val candidate = variant(plan, tier)
+            val error = preflight(candidate)
+            if (error == null) {
+                startTier = tier
+                if (tier > 0 || log.isNotEmpty()) log.add("preflight: tingkat $tier lolos (${candidate.binds.size} bind)")
+                return Plan(candidate.root, candidate.binds, candidate.cwd, candidate.argv, candidate.env, plan.notes + log)
+            }
+            log.add("preflight tingkat $tier gagal: $error")
+        }
+        log.add("preflight: semua tingkat gagal; memakai rencana awal. bind: " + plan.binds.joinToString(" ") { it.spec }.take(3000))
+        return Plan(plan.root, plan.binds, plan.cwd, plan.argv, plan.env, plan.notes + log)
+    }
+
     /** Telusuri [guest] lewat bind sandbox seperti proot, hop demi hop, untuk log diagnosis. */
     private fun probe(binds: List<Bind>, root: File, guest: String): String {
         val steps = ArrayList<String>()
@@ -265,7 +350,12 @@ object BwrapSpawner {
         for (hop in 0 until 6) {
             val p = File(path).toPath()
             if (!Files.isSymbolicLink(p)) {
-                steps.add("$path ${if (File(path).exists()) "(ada)" else "(TIDAK ADA)"}")
+                val f = File(path)
+                steps.add("$path " + when {
+                    !f.exists() -> "(TIDAK ADA)"
+                    f.isFile && !f.canExecute() -> "(ada, TIDAK bisa dieksekusi)"
+                    else -> "(ada)"
+                })
                 return "$guest => " + steps.joinToString(" => ")
             }
             val target = try { Files.readSymbolicLink(p).toString() } catch (e: Exception) { return "$guest => $path (readlink gagal: ${e.message})" }
