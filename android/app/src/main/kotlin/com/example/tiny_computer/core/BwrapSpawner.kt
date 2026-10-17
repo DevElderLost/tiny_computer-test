@@ -75,6 +75,7 @@ object BwrapSpawner {
                 if (kind != 'R'.code) return
                 val request = JSONObject(String(body, Charsets.UTF_8))
                 val plan = plan(context, request, dir)
+                plan.notes.forEach { note -> synchronized(out) { frame(out, 'E', "sandbox $id: $note".toByteArray()) } }
                 run(plan, client, out, id)
             } catch (e: Exception) {
                 Log.e(TAG, "sandbox $id", e)
@@ -88,7 +89,7 @@ object BwrapSpawner {
         }
     }
 
-    class Plan(val root: File, val binds: List<Bind>, val cwd: String, val argv: List<String>, val env: Map<String, String>)
+    class Plan(val root: File, val binds: List<Bind>, val cwd: String, val argv: List<String>, val env: Map<String, String>, val notes: List<String> = emptyList())
 
     /** Satu bind proot: [host] di Android menjadi [guest] di dalam sandbox. */
     data class Bind(val host: String, val guest: String) {
@@ -156,6 +157,7 @@ object BwrapSpawner {
             if (!under(cover.host, dir.path)) return null
             return inRoot(File(cover.host), dest.substring(cover.guest.length))
         }
+        val notes = ArrayList<String>()
         val ops = request.getJSONArray("ops")
         for (i in 0 until ops.length()) {
             val op = ops.getJSONObject(i)
@@ -165,7 +167,10 @@ object BwrapSpawner {
                     val src = op.getString("src")
                     val all = bindsFor(session, rootfs, src, dest)
                     if (!File(all.first().host).exists()) {
-                        if (!op.optBoolean("try")) Log.w(TAG, "sumber sandbox $src tidak ada; dilewati")
+                        if (!op.optBoolean("try")) {
+                            Log.w(TAG, "sumber sandbox $src tidak ada; dilewati")
+                            notes.add("bind $src -> $dest DILEWATI: ${all.first().host} tidak ada")
+                        }
                         continue
                     }
                     all.forEach { addBind(it) }
@@ -205,12 +210,18 @@ object BwrapSpawner {
                 }
             }
         }
+        // `/data` Android harus tetap /data asli: symlink .l2s.* (hardlink proot --link2symlink) menunjuk ke path
+        // host `/data/user/0/...`. Bind flatpak apa pun di /data atau di bawahnya (mis. --filesystem=host) dibuang.
+        binds.removeAll { under(it.guest, "/data") }
+        addBind(Bind("/data", "/data"))
+        notes.add("${binds.size} bind; /usr=${binds.firstOrNull { it.guest == "/usr" }?.host ?: "TIDAK ADA"}")
+        notes.add(probe(binds, root, "/usr/bin/env"))
         if (binds.any { it.guest == "/proc" }) genericCpuinfo(context)?.let { addBind(Bind(it.path, "/proc/cpuinfo")) }
         val argv = request.getJSONArray("argv").let { a -> (0 until a.length()).map { a.getString(it) } }
         val env = LinkedHashMap<String, String>()
         request.optJSONObject("env")?.let { e -> e.keys().forEach { k -> env[k] = e.getString(k) } }
         browserSandboxes(env)
-        return Plan(root, binds, request.optString("cwd", "/").ifEmpty { "/" }, argv, env)
+        return Plan(root, binds, request.optString("cwd", "/").ifEmpty { "/" }, argv, env, notes)
     }
 
     /**
@@ -245,6 +256,29 @@ object BwrapSpawner {
         out
     } catch (e: Exception) {
         Log.w(TAG, "cpuinfo", e); null
+    }
+
+    /** Telusuri [guest] lewat bind sandbox seperti proot, hop demi hop, untuk log diagnosis. */
+    private fun probe(binds: List<Bind>, root: File, guest: String): String {
+        val steps = ArrayList<String>()
+        var path = hostPath(binds, root.path, guest)
+        for (hop in 0 until 6) {
+            val p = File(path).toPath()
+            if (!Files.isSymbolicLink(p)) {
+                steps.add("$path ${if (File(path).exists()) "(ada)" else "(TIDAK ADA)"}")
+                return "$guest => " + steps.joinToString(" => ")
+            }
+            val target = try { Files.readSymbolicLink(p).toString() } catch (e: Exception) { return "$guest => $path (readlink gagal: ${e.message})" }
+            if (target.startsWith("/")) {
+                val cover = binds.filter { under(target, it.guest) }.maxByOrNull { it.guest.length }
+                steps.add("$path -> $target [" + (if (cover == null) "tanpa bind (opsi proot)" else "bind ${cover.guest}=${cover.host}") + "]")
+                path = if (cover == null) target else hostPath(binds, root.path, target)
+            } else {
+                steps.add("$path -> $target")
+                path = File(File(path).parentFile, target).path
+            }
+        }
+        return "$guest => rantai symlink terlalu panjang: " + steps.joinToString(" => ")
     }
 
     internal fun normalize(path: String): String {
