@@ -36,6 +36,10 @@ sudo apt-get install -y --no-install-recommends \
   flatpak python3 python3-gi gir1.2-flatpak-1.0 xdg-dbus-proxy ca-certificates \
   || fail "apt install flatpak gagal"
 
+# bus sesi sementara untuk perintah toko (dbus-run-session); gagal di sini tidak membatalkan pemasangan
+sudo apt-get install -y --no-install-recommends dbus-daemon dbus-bin \
+  || echo "Peringatan: dbus-daemon/dbus-bin tidak terpasang; pemasangan aplikasi bisa berakhir dengan 'Could not connect'."
+
 step 4 "Memeriksa Flatpak"
 command -v flatpak >/dev/null 2>&1 || fail "perintah flatpak tidak ada setelah pemasangan"
 flatpak --version || fail "flatpak tidak bisa dijalankan"

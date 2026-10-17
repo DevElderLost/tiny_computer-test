@@ -81,6 +81,9 @@ def transaction(inst):
             ref_id = (op.get_ref() or "").split("/")[1:2]
             ref_id = ref_id[0] if ref_id else ""
             non_fatal = related or ref_id.endswith((".Locale", ".Debug")) or ".GL." in ref_id or "codecs" in ref_id
+        # "Could not connect" = tidak ada D-Bus sesi; muncul setelah aplikasi ter-deploy, jadi bukan alasan membatalkan
+        if "Could not connect" in err.message:
+            non_fatal = True
         emit(e="warning" if non_fatal else "error", message="%s: %s" % (op.get_ref(), err.message))
         if state["first_warning"] is None and "previous error" not in err.message:
             state["first_warning"] = err.message
@@ -97,12 +100,17 @@ def transaction(inst):
     return t, state
 
 
-def run(t, state, report_done=True):
+def run(t, state, report_done=True, finished=None):
     try:
         t.run(None)
     except GLib.Error as err:
         if state["error"] is None and not err.matches(Flatpak.error_quark(), Flatpak.Error.ABORTED):
             state["error"] = err.message
+    # Galat "Could not connect" muncul di akhir transaksi bila tidak ada D-Bus sesi, setelah aplikasi sudah ter-deploy:
+    # bila [finished]() menyatakan hasilnya sudah ada, jadikan peringatan saja.
+    if state["error"] and finished is not None and "Could not connect" in state["error"] and finished():
+        emit(e="warning", message="%s (aplikasi sudah terpasang; tanpa D-Bus sesi)" % state["error"])
+        state["error"] = None
     if state["error"]:
         # "Skipping X due to previous error" menyembunyikan sebabnya: tampilkan galat pertama yang sebenarnya
         message = state["error"]
@@ -133,7 +141,7 @@ def install(app_id):
         return 1
     t, state = transaction(inst)
     t.add_install(REMOTE, "app/%s/%s/%s" % (app_id, arch, branch), None)
-    rc = run(t, state, report_done=False)
+    rc = run(t, state, report_done=False, finished=lambda: app_ref(installation(), app_id) is not None)
     if rc == 0 and app_ref(installation(), app_id) is None:
         emit(e="error", message="%s did not install; see flatpak-install.log" % app_id)
         return 1

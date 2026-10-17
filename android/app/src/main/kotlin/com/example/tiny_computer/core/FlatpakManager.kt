@@ -203,7 +203,10 @@ object FlatpakManager {
     }
 
     private fun runGuest(ctx: Context, verb: String, args: List<String>, onLine: (String) -> Unit): Int {
-        val argv = listOf("/usr/bin/python3", HELPER, verb) + args
+        var argv = listOf("/usr/bin/python3", HELPER, verb) + args
+        // Tanpa D-Bus sesi, akhir pemasangan gagal "Could not connect: No such file or directory" (log pemasangan
+        // Azahar): bungkus dengan bus sesi sementara bila dbus-run-session ada di kontainer.
+        if (File(TinyEnv.containerDir(), "usr/bin/dbus-run-session").exists()) argv = listOf("/usr/bin/dbus-run-session", "--") + argv
         val log = runCatching { File(hostDir(), "flatpak-$verb.log").printWriter() }.getOrNull()
         log?.println("== ${java.util.Date()} ${argv.joinToString(" ")}")
         // saklar Pengaturan > Log: satu berkas per perintah di Download/Wayland-logs (launch-*-flatpak-<perintah>.log);
