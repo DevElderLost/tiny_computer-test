@@ -4,16 +4,13 @@ import android.content.Context
 import android.net.Uri
 import android.os.StatFs
 import android.provider.OpenableColumns
+import android.system.ErrnoException
+import android.system.Os
+import android.system.OsConstants
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import java.io.File
-import java.io.IOException
-import java.nio.file.FileVisitResult
-import java.nio.file.Files
-import java.nio.file.Path
-import java.nio.file.SimpleFileVisitor
-import java.nio.file.attribute.BasicFileAttributes
 import java.security.MessageDigest
 
 /**
@@ -226,6 +223,10 @@ if [ ! -d "${'$'}SRC" ] || [ ! -e "${'$'}SRC/AppRun" ]; then
   exit 1
 fi
 mv "${'$'}SRC" app && rm -f squashfs-root
+# folder hasil ekstraksi squashfs bisa berizin baca-saja atau tanpa izin sama sekali (dr-xr-xr-x, d---------). Jadikan milik
+# pengguna penuh: aplikasi yang menulis konfigurasi/cache di dalam folder-nya tidak lagi gagal diam-diam, dan uninstall
+# bisa membuka tiap folder untuk menghapusnya. chmod -R membuka sebuah folder SEBELUM masuk ke isinya.
+chmod -R u+rwX app 2>/dev/null
 # symlink hasil proot (link2symlink) menunjuk ke <folder-ekstraksi>/... dengan path absolut; tanpa folder lama itu semuanya putus
 # (termasuk app/sharun, sehingga [ -e ] di bawah salah menyangka bukan AppImage sharun). Arahkan nama lama ke app.
 ln -sfn app "${'$'}(basename "${'$'}SRC")"
@@ -286,7 +287,6 @@ mkdir -p "${'$'}APPS"
   [ -n "${'$'}COMMENT" ] && echo "Comment=${'$'}COMMENT"
   [ -n "${'$'}ICON" ] && echo "Icon=${'$'}ICON"
   echo "Exec=${'$'}{LAUNCH:-${'$'}BASE/app/AppRun} %U"
-  echo "Path=${'$'}BASE/app"
   echo "Terminal=false"
   echo "Categories=${'$'}CATS"
   echo "X-Tiny-AppImage=${'$'}ID"
@@ -344,6 +344,14 @@ DESK="${'$'}APPS/${'$'}ID.desktop"
 NAME=""
 [ -f "${'$'}DESK" ] && NAME="${'$'}(sed -n 's/^Name=//p' "${'$'}DESK" | head -n 1 | tr -d '\r')"
 [ -z "${'$'}NAME" ] && NAME="${'$'}ID"
+# chmod -R u+w TIDAK cukup: folder hasil ekstraksi bisa tanpa izin baca/lewat (d---------), isinya tidak bisa dibuka dan rm
+# gagal "Permission denied". u+rwX membukanya satu per satu (chmod -R membuka folder sebelum masuk), lalu find memeriksa sisanya.
+fixperm() {
+  [ -e "${'$'}1" ] || [ -L "${'$'}1" ] || return 0
+  chmod -R u+rwX "${'$'}1" 2>/dev/null
+  chmod u+rwx "${'$'}1" 2>/dev/null
+  find "${'$'}1" -type d ! -perm -u+rwx -exec chmod u+rwx {} + 2>/dev/null
+}
 cd "${'$'}HOME" || exit 1
 echo "=== Hapus AppImage: ${'$'}NAME ==="
 echo "[1/4] Mencabut penanda pemasangan..."
@@ -362,15 +370,22 @@ if [ -d "${'$'}BASE/app" ]; then
   echo "    ${'$'}(find "${'$'}BASE/app" -type f 2>/dev/null | wc -l) berkas dihapus"
 fi
 # rm -rf tidak mengikuti symlink: aman untuk isi AppImage yang penuh symlink absolut
-chmod -R u+w "${'$'}BASE/app" 2>/dev/null
+fixperm "${'$'}BASE"
 rm -rf "${'$'}BASE/app" "${'$'}BASE/squashfs-root" "${'$'}BASE/AppDir" "${'$'}BASE/extract.log" "${'$'}BASE/image.AppImage"
 # alias symlink nama folder ekstraksi lama -> app (dibuat saat pasang)
 find "${'$'}BASE" -maxdepth 1 -type l -exec rm -f {} + 2>/dev/null
 echo "[4/4] Menghapus folder AppImage..."
-chmod -R u+w "${'$'}BASE" 2>/dev/null
+fixperm "${'$'}BASE"
 rm -rf "${'$'}BASE"
 if [ -e "${'$'}BASE" ] || [ -L "${'$'}BASE" ]; then
-  echo "GAGAL: ${'$'}BASE tidak bisa dihapus."
+  echo "    masih ada sisa, mencoba sekali lagi..."
+  fixperm "${'$'}BASE"
+  rm -rf "${'$'}BASE"
+fi
+if [ -e "${'$'}BASE" ] || [ -L "${'$'}BASE" ]; then
+  echo "GAGAL: ${'$'}BASE tidak bisa dihapus. Sisa yang tidak bisa diakses:"
+  find "${'$'}BASE" ! -perm -u+rwx 2>/dev/null | head -n 5
+  ls -ld "${'$'}BASE" 2>&1
   exit 1
 fi
 echo "Selesai: ${'$'}NAME dihapus."
@@ -408,28 +423,20 @@ rm -f "${'$'}SELF"
     /**
      * Menghapus pohon folder TANPA mengikuti symlink: isi AppImage penuh symlink absolut (path tamu) yang
      * dari sisi Android menunjuk ke path milik sistem host, jadi `deleteRecursively` tidak aman dipakai di sini.
+     * Folder hasil ekstraksi bisa berizin baca-saja atau tanpa izin sama sekali (`dr-xr-xr-x`, `d---------`); folder
+     * semacam itu tidak bisa dibuka sama sekali oleh penelusur `Files.walkFileTree` (ia membuka folder SEBELUM
+     * memanggil kita), jadi izin tiap folder dibuka dulu dengan `chmod` sebelum isinya didaftar.
      */
-    private fun deleteTree(dir: File) {
-        val start: Path = dir.toPath()
-        if (!Files.exists(start, java.nio.file.LinkOption.NOFOLLOW_LINKS)) return
-        try {
-            Files.walkFileTree(start, object : SimpleFileVisitor<Path>() {
-                override fun preVisitDirectory(d: Path, attrs: BasicFileAttributes): FileVisitResult {
-                    // folder dari ekstraksi bisa tanpa izin tulis; dibuka dulu supaya isinya bisa dihapus
-                    d.toFile().setWritable(true, false)
-                    return FileVisitResult.CONTINUE
-                }
-                override fun visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult {
-                    runCatching { Files.delete(file) }
-                    return FileVisitResult.CONTINUE
-                }
-                override fun visitFileFailed(file: Path, exc: IOException): FileVisitResult = FileVisitResult.CONTINUE
-                override fun postVisitDirectory(d: Path, exc: IOException?): FileVisitResult {
-                    runCatching { Files.delete(d) }
-                    return FileVisitResult.CONTINUE
-                }
-            })
-        } catch (_: IOException) {
+    private fun deleteTree(dir: File) = deleteNode(dir.path, 0)
+
+    private fun deleteNode(path: String, depth: Int) {
+        if (depth > 64) return
+        val mode = try { Os.lstat(path).st_mode } catch (_: ErrnoException) { return }
+        if (OsConstants.S_ISDIR(mode)) {
+            runCatching { Os.chmod(path, (mode and 0xfff) or 0x1c0) } // u+rwx
+            File(path).list()?.forEach { deleteNode("$path/$it", depth + 1) }
         }
+        // remove(3): unlink untuk berkas dan symlink (symlink tidak diikuti), rmdir untuk folder yang sudah kosong
+        runCatching { Os.remove(path) }
     }
 }

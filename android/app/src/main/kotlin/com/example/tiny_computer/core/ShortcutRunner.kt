@@ -99,7 +99,9 @@ object ShortcutRunner {
     /** Nama, perintah, variabel lingkungan, dan direktori kerja dari berkas .desktop (Name, Exec, Path). */
     fun desktopDefaults(app: DesktopApps.App): DesktopDefaults {
         val (env, command) = splitEnvPrefix(cleanExec(app.exec))
-        return DesktopDefaults(app.name, command, env, app.path)
+        // AppImage: tanpa direktori kerja bawaan (lihat script()); Path= lama menunjuk ke folder hasil ekstraksi
+        val workDir = if (AppImageInstaller.isAppImageShortcut(app.id)) "" else app.path
+        return DesktopDefaults(app.name, command, env, workDir)
     }
 
     /** Perintah yang dijalankan: isian pengguna bila ada, kalau tidak Exec dari .desktop (tanpa awalan env). */
@@ -234,8 +236,17 @@ fi
         }
 
         // direktori kerja: pengaturan > Path= di .desktop > rumah
-        val dir = s.workDir.trim().ifEmpty { app.path }
+        // AppImage: bawaannya rumah, seperti AppImage yang dibuka dari pengelola berkas. Dulu Path= menunjuk ke folder
+        // hasil ekstraksi (`app/`): aplikasi yang menulis konfigurasi/cache relatif terhadap direktori kerja menulis ke
+        // dalam folder aplikasi (yang bisa berizin baca-saja), gagal diam-diam, dan pengaturannya hilang.
+        val appImage = AppImageInstaller.isAppImageShortcut(app.id)
+        val dir = s.workDir.trim().ifEmpty { if (appImage) "" else app.path }
         if (dir.isNotEmpty()) sb.append("cd ${q(dir)} 2>/dev/null || cd \"\$HOME\"\n") else sb.append("cd \"\$HOME\"\n")
+        if (appImage) {
+            // tercatat di log shortcut: tempat konfigurasi aplikasi ini dan apakah bisa ditulis
+            sb.append("mkdir -p \"\$HOME/.config\" \"\$HOME/.local/share\" \"\$HOME/.cache\" 2>/dev/null\n")
+            sb.append("echo \"[tiny] AppImage: HOME=\$HOME cwd=\$(pwd) ~/.config bisa ditulis: \$([ -w \"\$HOME/.config\" ] && echo ya || echo TIDAK)\"\n")
+        }
 
         // bus sesi D-Bus: pakai milik desktop bila sedang berjalan (cari di /proc), kalau tidak, buat sendiri
         sb.append(

@@ -301,6 +301,23 @@ object BwrapSpawner {
         val pad = padBinds()
         pad.forEach { addBind(it) }
         if (pad.isNotEmpty()) notes.add("controller: " + pad.joinToString(" ") { it.guest })
+        // flatpak-spawn pengganti: runtime freedesktop 25.08+ (mis. PPSSPP) memuat gambar lewat glycin, dan glycin
+        // di dalam sandbox yang punya /.flatpak-info menjalankan pemuatnya lewat `flatpak-spawn --sandbox`, yang
+        // butuh helper sesi Flatpak lewat D-Bus. Di sini helper itu tidak ada: pemuat SVG keluar dengan status 1,
+        // GTK gagal memuat ikon `image-missing` dan aplikasi abort (sinyal 6) sebelum membuka satu jendela pun,
+        // sehingga layarnya tinggal hitam. Pengganti ini hanya menjalankan perintahnya langsung.
+        run {
+            val shim = File(dir, "flatpak-spawn")
+            try {
+                shim.writeText(SPAWN_SHIM)
+                chmod(shim, 0x1ed)
+                addBind(Bind(shim.path, "/usr/bin/flatpak-spawn"))
+                notes.add("flatpak-spawn: pengganti langsung dipasang di /usr/bin/flatpak-spawn")
+            } catch (e: Exception) {
+                Log.w(TAG, "flatpak-spawn pengganti gagal dibuat", e)
+                notes.add("flatpak-spawn: GAGAL membuat pengganti (${e.message})")
+            }
+        }
         notes.add("bind di /home: " + binds.filter { under(it.guest, "/home") }.joinToString(" ") { it.guest }.ifEmpty { "(tidak ada)" })
         notes.add("${binds.size} bind; /usr=${binds.firstOrNull { it.guest == "/usr" }?.host ?: "TIDAK ADA"}")
         notes.add(probe(binds, root, "/usr/bin/env"))
@@ -313,6 +330,27 @@ object BwrapSpawner {
     }
 
     private val APP_ID = Regex("[A-Za-z0-9_][A-Za-z0-9_.-]*")
+
+    private const val D = "$"
+
+    /**
+     * Pengganti `flatpak-spawn`: melewati opsi sandbox/bus (`--sandbox`, `--watch-bus`, `--forward-fd=N`, ...),
+     * menerapkan `--directory=` dan `--env=`, lalu menjalankan perintahnya langsung. Berkas yang diteruskan lewat
+     * `--forward-fd` tetap terbuka karena proses ini hanya `exec`.
+     */
+    private val SPAWN_SHIM = """#!/bin/sh
+while [ ${D}# -gt 0 ]; do
+  case "${D}1" in
+    --env=*) export "${D}{1#--env=}" ;;
+    --directory=*) cd "${D}{1#--directory=}" 2>/dev/null || true ;;
+    --) shift; break ;;
+    --*) ;;
+    *) break ;;
+  esac
+  shift
+done
+exec "${D}@"
+"""
 
     /** Id aplikasi Flatpak dari `FLATPAK_ID` (--setenv) atau baris `name=` di `/.flatpak-info`; null bila tak ada. */
     private fun flatpakAppId(request: JSONObject): String? {
