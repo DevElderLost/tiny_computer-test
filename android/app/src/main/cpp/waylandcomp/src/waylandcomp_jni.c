@@ -20,6 +20,7 @@
 #include "ahb_swapchain.h"
 #include "sc_layer.h"
 #include "effects_chain.h"
+#include "reshade_fx.h"
 #include "droiddeck_color.h"
 
 extern int droiddeck_wayland_run(void);
@@ -494,6 +495,26 @@ Java_com_droiddeck_launcher_wayland_WaylandCompositor_nativeSetHdr(JNIEnv *env, 
 JNIEXPORT void JNICALL
 Java_com_droiddeck_launcher_wayland_WaylandCompositor_nativeSetDeband(JNIEnv *env, jclass clazz, jboolean enabled, jint strength) {
     vkp_effects_set_deband(enabled ? 1 : 0, strength);
+}
+
+/* ReShade FX shader for the effect chain (reshade_fx.cpp). Empty / null fx path = off. The compile runs on a
+ * worker thread; the running shader keeps drawing until the new one is built, so switching is seamless. */
+JNIEXPORT void JNICALL
+Java_com_droiddeck_launcher_wayland_WaylandCompositor_nativeSetReshade(JNIEnv *env, jclass clazz, jstring fx, jstring inc, jstring tex) {
+    const char *f = fx ? (*env)->GetStringUTFChars(env, fx, NULL) : NULL;
+    const char *i = inc ? (*env)->GetStringUTFChars(env, inc, NULL) : NULL;
+    const char *t = tex ? (*env)->GetStringUTFChars(env, tex, NULL) : NULL;
+    vkp_reshade_set_shader(f, i, t);
+    if (f) (*env)->ReleaseStringUTFChars(env, fx, f);
+    if (i) (*env)->ReleaseStringUTFChars(env, inc, i);
+    if (t) (*env)->ReleaseStringUTFChars(env, tex, t);
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_droiddeck_launcher_wayland_WaylandCompositor_nativeReshadeStatus(JNIEnv *env, jclass clazz) {
+    char buf[300];
+    vkp_reshade_status(buf, sizeof(buf));
+    return (*env)->NewStringUTF(env, buf);
 }
 
 /* Colour grade (slider units: brightness/contrast -100..100, gamma 0.5..3, saturation 0..200 %) and the

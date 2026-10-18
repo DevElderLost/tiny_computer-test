@@ -456,6 +456,16 @@
     <string name="tc_fx_gamma">Gamma</string>
     <string name="tc_fx_saturation">Saturation</string>
     <string name="tc_fx_fxaa">FXAA</string>
+    <string name="tc_rs_title">ReShade shaders</string>
+    <string name="tc_rs_hint">Screen shaders (ReShade FX, like vkBasalt) run as the last effect of the compositor. Import .fx / .fxh files, textures (LUT images) or a whole shader pack as a zip (for example reshade-shaders). The active shader can also be switched while a session runs: session menu > Effects.</string>
+    <string name="tc_rs_import">Import shaders</string>
+    <string name="tc_rs_imported">Imported: %1$d effects, %2$d include files, %3$d textures</string>
+    <string name="tc_rs_failed">Import failed: %1$s</string>
+    <string name="tc_rs_active">Active shader</string>
+    <string name="tc_rs_off">Off</string>
+    <string name="tc_rs_none">No shaders imported yet. Use Import in Settings > ReShade shaders.</string>
+    <string name="tc_rs_count">%1$d shaders available</string>
+    <string name="tc_rs_status">Status: %1$s</string>
     <string name="tc_fx_reset">Reset effects</string>
     <string name="tc_nav_flathub">Flathub</string>
     <string name="tc_fh_title">Flathub Store</string>

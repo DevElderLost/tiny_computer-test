@@ -88,6 +88,8 @@ fun SettingsScreen() {
             DeckTextRow(stringResource(R.string.tc_ui_hidpi_env_var), Cfg.defaultHidpiOpt) { Cfg.defaultHidpiOpt = it }
         }
 
+        ReshadeGroup()
+
         DriverGroup()
 
         HangoverGroup()

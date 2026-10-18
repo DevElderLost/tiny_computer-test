@@ -3,6 +3,7 @@
 #include "effects_chain.h"
 #include "vk_loader.h"
 #include "vk_present.h" /* droiddeck_log */
+#include "reshade_fx.h"
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -147,9 +148,12 @@ int vkp_effects_sync(void) {
     return 1;
 }
 
+/* A ReShade shader being compiled / built / switched: the chain must keep running so vkp_reshade_prepare gets called. */
+void vkp_effects_poke(void) { g_changed = 1; }
+
 int vkp_effects_active(void) {
     vkp_effects_sync();
-    return spatial_mode(g_cur.scaling) || effect_count(&g_cur) > 0;
+    return spatial_mode(g_cur.scaling) || effect_count(&g_cur) > 0 || vkp_reshade_wanted();
 }
 
 VkFilter vkp_effects_blit_filter(void) {
@@ -209,6 +213,7 @@ static uint32_t g_ntsc_frame;
 void vkp_effects_bind_device(VkDevice dev, VkPhysicalDevice pd,
                              const VkPhysicalDeviceMemoryProperties *memprops) {
     g_dev = dev; g_pd = pd; g_mp = *memprops;
+    vkp_reshade_bind_device(dev, pd, memprops);
 }
 
 static int memtype(uint32_t bits, VkMemoryPropertyFlags want) {
@@ -353,6 +358,7 @@ static VkPipeline post_pipeline(VkShaderModule vert, const uint32_t *frag_code, 
 
 static void objects_destroy(void) {
     if (!g_dev) return;
+    vkp_reshade_destroy();
     scene_release();
     target_destroy(&g_t[0]); target_destroy(&g_t[1]); target_destroy(&g_mid);
     for (int i = 0; i < P_COUNT; i++) { if (g_pipe[i]) g_vk.DestroyPipeline(g_dev, g_pipe[i], NULL); g_pipe[i] = VK_NULL_HANDLE; }
@@ -516,7 +522,9 @@ VkImage vkp_effects_run(VkCommandBuffer cmd, VkImage scene, int scene_w, int sce
     const int upscaling = cw > scene_w || ch > scene_h;
     int spatial = 0;
     if (spatial_mode(s->scaling) && (s->scaling == 6 || upscaling)) spatial = s->scaling;
-    const int nfx = effect_count(s);
+    /* ReShade shader (reshade_fx.cpp): one more stage, built for the chain's size and format. */
+    const int rs = vkp_reshade_prepare(cw, ch, g_fx_fmt);
+    const int nfx = effect_count(s) + rs;
     const int resize = cw != scene_w || ch != scene_h;
     /* Passes that write the ping-pong pair: the scaling/resize stage (if any) + the effects.
      * Two targets are needed once any pass reads what an earlier one wrote. */
@@ -597,8 +605,8 @@ VkImage vkp_effects_run(VkCommandBuffer cmd, VkImage scene, int scene_w, int sce
         /* ---- stage 2: the effects, in the X11 renderer's locked order
          *      FXAA -> Toon -> Colour -> CAS -> HDR -> NTSC -> CRT -> Debanding (terminal dither).
          * Each writes the free ping-pong target; the one just read becomes free. */
-        enum { FX_FXAA, FX_TOON, FX_COLOR, FX_CAS, FX_HDR, FX_NTSC, FX_CRT, FX_DEBAND };
-        int order[8], n = 0;
+        enum { FX_FXAA, FX_TOON, FX_COLOR, FX_CAS, FX_HDR, FX_NTSC, FX_CRT, FX_RESHADE, FX_DEBAND };
+        int order[9], n = 0;
         if (s->fxaa) order[n++] = FX_FXAA;
         if (s->toon) order[n++] = FX_TOON;
         if (s->color_on) order[n++] = FX_COLOR;
@@ -606,6 +614,7 @@ VkImage vkp_effects_run(VkCommandBuffer cmd, VkImage scene, int scene_w, int sce
         if (s->hdr_on) order[n++] = FX_HDR;
         if (s->ntsc) order[n++] = FX_NTSC;
         if (s->crt) order[n++] = FX_CRT;
+        if (rs) order[n++] = FX_RESHADE;
         if (s->deband_on) order[n++] = FX_DEBAND;
         for (int i = 0; i < n; i++) {
             struct fx_target *dst = FREE_TARGET();
@@ -630,6 +639,7 @@ VkImage vkp_effects_run(VkCommandBuffer cmd, VkImage scene, int scene_w, int sce
                 pass(cmd, g_pipe[P_NTSC], dst, cur_ds, &pr, sizeof(pr));
                 break;
             case FX_CRT: pass(cmd, g_pipe[P_CRT], dst, cur_ds, &pr, sizeof(pr)); break;
+            case FX_RESHADE: vkp_reshade_record(cmd, cur ? cur->view : g_scene.view, dst->view, cw, ch); break;
             case FX_DEBAND: pr.extra = (float)s->deband_pct / 100.0f; pass(cmd, g_pipe[P_DEBAND], dst, cur_ds, &pr, sizeof(pr)); break;
             }
             cur = dst; cur_ds = dst->ds;

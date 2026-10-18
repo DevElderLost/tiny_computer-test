@@ -63,6 +63,9 @@ void vkp_effects_forget_image(VkImage img);
  * chain's objects on its next run (once per switch). */
 void vkp_effects_set_formats(VkFormat scene_fmt, VkFormat target_fmt);
 
+/* Any thread: something outside the settings changed (a ReShade shader compiled): redraw even a static scene. */
+void vkp_effects_poke(void);
+
 /* ---- settings (any thread; values 1:1 with the X11 Vulkan renderer's setters) ---- */
 /* 0=None 1=Linear 2=Nearest 3=SGSR 4=FSR 5=FSR Fit 6=Sharpen 7=NIS 8=SGSR HQ */
 void vkp_effects_set_scaling(int mode);

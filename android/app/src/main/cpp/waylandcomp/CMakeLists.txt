@@ -41,7 +41,21 @@ add_library(droiddeckwayland SHARED
         generated/xdg-output-unstable-v1-protocol.c
         src/framegen_bridge.c
         src/framegen_jni.c
+        # ReShade FX (vkBasalt-style) screen effect: reshadefx front end (BSD-3, same copy vkBasalt vendors) +
+        # the Vulkan side. See src/reshade_fx.h.
+        src/reshade_fx.cpp
+        src/reshadefx/effect_lexer.cpp
+        src/reshadefx/effect_parser.cpp
+        src/reshadefx/effect_preprocessor.cpp
+        src/reshadefx/effect_symbol_table.cpp
+        src/reshadefx/effect_expression.cpp
+        src/reshadefx/effect_codegen_spirv.cpp
 )
+set_source_files_properties(
+        src/reshade_fx.cpp src/reshadefx/effect_lexer.cpp src/reshadefx/effect_parser.cpp
+        src/reshadefx/effect_preprocessor.cpp src/reshadefx/effect_symbol_table.cpp
+        src/reshadefx/effect_expression.cpp src/reshadefx/effect_codegen_spirv.cpp
+        PROPERTIES COMPILE_FLAGS "-std=c++17 -fexceptions -frtti -Wno-unused-parameter -Wno-sign-compare -Wno-missing-field-initializers")
 # Warnings on for the compositor's own C. They do not fail the build; they are there to be read.
 target_compile_options(droiddeckwayland PRIVATE
         $<$<COMPILE_LANGUAGE:C>:-Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers>)
@@ -49,6 +63,7 @@ target_include_directories(droiddeckwayland PRIVATE
         generated
         prebuilt/include
         src
+        src/reshadefx
         # The X11 Vulkan renderer's committed SPIR-V headers (*_frag.h / upscale_vert.h, made by
         # Bannerlator's gen_shaders.sh): the screen-effect chain (src/effects_chain.c) runs the same bytes.
         ${CMAKE_CURRENT_SOURCE_DIR}/../shaders

@@ -462,6 +462,15 @@ public final class WaylandCompositor {
     /** Terminal debanding toggle + strength 0..200 (100 = 1 LSB). */
     public static native void nativeSetDeband(boolean enabled, int strength);
 
+    /** ReShade FX / vkBasalt-style shader as one more stage of the effect chain: the .fx file, ReShade's
+     *  {@code Shaders} folder (for #include) and {@code Textures} folder (for {@code source=} images).
+     *  Null or empty fx = off. Compiles on a worker thread and swaps in when ready, so it can be called
+     *  while the session runs (the old shader keeps drawing meanwhile). */
+    public static native void nativeSetReshade(String fxPath, String includeDir, String textureDir);
+
+    /** "off", "compiling X", "ok: N pass(es), X" or "error: ..." for the last {@link #nativeSetReshade}. */
+    public static native String nativeReshadeStatus();
+
     /** Colour grade in the drawer's slider units (brightness/contrast -100..100, gamma 0.5..3.0,
      *  saturation 0..200 percent; 0/0/1/100 = neutral, pass off) plus the FXAA / Toon / CRT / NTSC
      *  toggles - the same signature as {@code VulkanRenderer.setScreenEffects}. */

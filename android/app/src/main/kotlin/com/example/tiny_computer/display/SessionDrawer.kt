@@ -34,6 +34,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Keyboard
 import androidx.compose.material.icons.outlined.Mouse
@@ -70,11 +71,13 @@ import androidx.compose.ui.unit.sp
 import com.example.tiny_computer.R
 import com.example.tiny_computer.controller.ControllerEditorActivity
 import com.example.tiny_computer.core.Cfg
+import com.example.tiny_computer.core.ReshadeShaders
 import com.droiddeck.launcher.input.ControllerPrefs
 import kotlinx.coroutines.delay
 import androidx.compose.ui.platform.LocalContext
 import com.example.tiny_computer.ui.DeckChoiceRow
 import com.example.tiny_computer.ui.DeckGroup
+import com.example.tiny_computer.ui.DeckNote
 import com.example.tiny_computer.ui.DeckSliderRow
 import com.example.tiny_computer.ui.DeckToggle
 import com.example.tiny_computer.ui.LocalPalette
@@ -383,6 +386,49 @@ private fun EffectPage() {
         Column(Modifier.fillMaxWidth().padding(10.dp)) {
             DrawerActionButton(stringResource(R.string.tc_fx_reset), Icons.Outlined.Settings, pal.onBackground, { ScreenFx.reset(); rev++ })
         }
+    }
+    ReshadePanel()
+}
+
+/**
+ * Pergantian shader ReShade FX secara real-time: ketuk salah satu untuk menukar shader compositor tanpa menghentikan sesi
+ * (shader lama tetap tampil sampai yang baru selesai dikompilasi). Impor shader ada di Pengaturan > ReShade.
+ */
+@Composable
+private fun ReshadePanel() {
+    val effects = remember { ReshadeShaders.list() }
+    var current by remember { mutableStateOf(Cfg.reshadeShader) }
+    var status by remember { mutableStateOf(ReshadeShaders.status()) }
+    LaunchedEffect(Unit) {
+        while (true) { status = ReshadeShaders.status(); kotlinx.coroutines.delay(500) }
+    }
+    DeckGroup(stringResource(R.string.tc_rs_title)) {
+        DrawerShaderRow(stringResource(R.string.tc_rs_off), current.isEmpty()) { current = ""; ReshadeShaders.select("") }
+        effects.forEach { rel ->
+            DrawerShaderRow(ReshadeShaders.label(rel), current == rel) { current = rel; ReshadeShaders.select(rel) }
+        }
+        if (effects.isEmpty()) DeckNote(stringResource(R.string.tc_rs_none))
+        else if (status.isNotEmpty() && current.isNotEmpty()) DeckNote(stringResource(R.string.tc_rs_status, status))
+    }
+}
+
+/** Satu baris pilihan shader: nama di kiri, centang di kanan bila sedang dipakai. */
+@Composable
+private fun DrawerShaderRow(label: String, selected: Boolean, onClick: () -> Unit) {
+    val pal = LocalPalette.current
+    Column(Modifier.fillMaxWidth()) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(start = 14.dp, end = 12.dp, top = 11.dp, bottom = 11.dp),
+        ) {
+            Text(
+                label, fontSize = 15.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                color = if (selected) pal.onBackground else pal.onSurfaceVariant,
+                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(end = 8.dp),
+            )
+            if (selected) Icon(Icons.Outlined.Check, contentDescription = null, tint = pal.onBackground, modifier = Modifier.size(20.dp))
+        }
+        Box(Modifier.fillMaxWidth().height(1.dp).background(pal.line))
     }
 }
 

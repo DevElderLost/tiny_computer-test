@@ -170,6 +170,10 @@ object Cfg {
     var fpsLimit: Int
         get() = TinyPrefs.getInt("fpsLimit", 0)
         set(v) = TinyPrefs.setInt("fpsLimit", v)
+    /** Shader ReShade FX (.fx, jalur relatif terhadap folder Shaders) yang aktif di compositor; kosong = mati. */
+    var reshadeShader: String
+        get() = TinyPrefs.getString("reshadeShader", "")
+        set(v) = TinyPrefs.setString("reshadeShader", v)
     /** Kosong = pilih otomatis menurut GPU; selain itu id driver di files/graphics_driver. */
     var androidDriver: String
         get() = TinyPrefs.getString("androidDriver", "")

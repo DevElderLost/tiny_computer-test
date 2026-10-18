@@ -3,6 +3,7 @@ package com.example.tiny_computer.display
 import com.droiddeck.launcher.wayland.CompositorHost
 import com.droiddeck.launcher.wayland.WaylandCompositor
 import com.example.tiny_computer.core.Cfg
+import com.example.tiny_computer.core.ReshadeShaders
 import com.example.tiny_computer.core.TinyPrefs
 
 /**
@@ -22,6 +23,7 @@ object ScreenFx {
         // kunci yang belum pernah diatur pengguna membiarkan bawaan compositor
         if (TinyPrefs.contains("upscaleSharpness")) WaylandCompositor.nativeSetUpscaleSharpness(Cfg.upscaleSharpness)
         if (TinyPrefs.contains("hdrSdrWhite")) WaylandCompositor.nativeSetHdrSdrWhite(Cfg.hdrSdrWhite.toFloat())
+        ReshadeShaders.apply() // shader ReShade FX terpilih (Pengaturan > Display / menu sesi > Effect)
     }
 
     fun applyUpscalerIfRunning() {
