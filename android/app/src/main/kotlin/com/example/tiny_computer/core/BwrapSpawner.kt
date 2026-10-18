@@ -321,7 +321,13 @@ object BwrapSpawner {
         notes.add("bind di /home: " + binds.filter { under(it.guest, "/home") }.joinToString(" ") { it.guest }.ifEmpty { "(tidak ada)" })
         notes.add("${binds.size} bind; /usr=${binds.firstOrNull { it.guest == "/usr" }?.host ?: "TIDAK ADA"}")
         notes.add(probe(binds, root, "/usr/bin/env"))
-        if (binds.any { it.guest == "/proc" }) genericCpuinfo(context)?.let { addBind(Bind(it.path, "/proc/cpuinfo")) }
+        if (binds.any { it.guest == "/proc" }) {
+            val generic = genericCpuinfo(context)
+            if (generic != null) {
+                addBind(Bind(generic.path, "/proc/cpuinfo"))
+                notes.add("cpuinfo: nomor inti dibuang (inti ARMv9 dengan SVE2 palsu)")
+            } else notes.add("cpuinfo: asli (bukan inti ARMv9); LLVM/JIT memakai CPU sebenarnya")
+        }
         val argv = request.getJSONArray("argv").let { a -> (0 until a.length()).map { a.getString(it) } }
         val env = LinkedHashMap<String, String>()
         request.optJSONObject("env")?.let { e -> e.keys().forEach { k -> env[k] = e.getString(k) } }
@@ -404,21 +410,45 @@ exec "${D}@"
         }
     }
 
+    /** `CPU part` inti ARM ARMv9 (Cortex-A510/A710/X2/A715/X3/A520/A720/X4/X925/A725) yang dilaporkan punya SVE2. */
+    private val ARMV9_PARTS = setOf(0xd46, 0xd47, 0xd48, 0xd4d, 0xd4e, 0xd80, 0xd81, 0xd82, 0xd85, 0xd87)
+
+    private fun needsGenericCpuinfo(lines: List<String>): Boolean {
+        var implementer = -1
+        for (line in lines) {
+            val value = line.substringAfter(':', "").trim().removePrefix("0x")
+            if (line.startsWith("CPU implementer")) implementer = value.toIntOrNull(16) ?: -1
+            else if (line.startsWith("CPU part")) {
+                val part = value.toIntOrNull(16) ?: continue
+                // 0x41 = ARM; 0x51 part 0x001 = Qualcomm Oryon
+                if ((implementer == 0x41 && part in ARMV9_PARTS) || (implementer == 0x51 && part == 0x001)) return true
+            }
+        }
+        return false
+    }
+
     /**
-     * `/proc/cpuinfo` tanpa nomor bagian inti: inti ARMv9 Snapdragon membuat LLVM mengira SVE2 ada padahal
-     * Qualcomm mematikannya, dan shader pertama llvmpipe mati dengan SIGILL.
+     * `/proc/cpuinfo` tanpa nomor bagian inti, HANYA untuk inti ARMv9: inti ARMv9 Snapdragon membuat LLVM mengira
+     * SVE2 ada padahal Qualcomm mematikannya, dan shader pertama llvmpipe mati dengan SIGILL. Pada inti lain
+     * (Cortex-A53/A73/A75/A76/A78 dst.) nomor itu dibiarkan: tanpanya LLVM memilih CPU "generic" sehingga llvmpipe,
+     * JIT emulator, dan pustaka yang membaca cpuinfo jalan lebih lambat di sandbox Flatpak dibanding AppImage
+     * (proot sesi tidak mengubah cpuinfo). Mengembalikan null bila berkas asli boleh dipakai.
      */
     private fun genericCpuinfo(context: Context): File? = try {
-        val out = File(context.cacheDir, "cpuinfo-generic")
-        val text = File("/proc/cpuinfo").readLines()
-            .filterNot { it.startsWith("CPU implementer") || it.startsWith("CPU part") || it.startsWith("CPU variant") || it.startsWith("CPU revision") }
-            .joinToString("\n", postfix = "\n")
-        if (!out.isFile || out.readText() != text) {
-            val staged = File.createTempFile("cpuinfo", null, context.cacheDir)
-            staged.writeText(text)
-            if (!staged.renameTo(out)) staged.delete()
+        val lines = File("/proc/cpuinfo").readLines()
+        if (!needsGenericCpuinfo(lines)) null
+        else {
+            val out = File(context.cacheDir, "cpuinfo-generic")
+            val text = lines
+                .filterNot { it.startsWith("CPU implementer") || it.startsWith("CPU part") || it.startsWith("CPU variant") || it.startsWith("CPU revision") }
+                .joinToString("\n", postfix = "\n")
+            if (!out.isFile || out.readText() != text) {
+                val staged = File.createTempFile("cpuinfo", null, context.cacheDir)
+                staged.writeText(text)
+                if (!staged.renameTo(out)) staged.delete()
+            }
+            out
         }
-        out
     } catch (e: Exception) {
         Log.w(TAG, "cpuinfo", e); null
     }

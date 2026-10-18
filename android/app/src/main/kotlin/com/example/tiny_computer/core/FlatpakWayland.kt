@@ -22,28 +22,44 @@ import java.io.File
  *  - GPU: variabel Turnip/Zink + folder `tiny/extra` (ICD bawaan) bila Turnip aktif untuk aplikasi ini;
  *  - dialog berkas: tanpa portal di kontainer, Qt/GTK dipaksa memakai dialog sendiri (QT_QPA_PLATFORMTHEME=generic).
  *
- * Per aplikasi dapat dimatikan dengan env Shortcut `TINY_FLATPAK_DISPLAY=x11` (paksa X11, perilaku lama untuk
- * aplikasi yang tidak punya Wayland: Java, Tk, Wine) atau `TINY_FLATPAK_DISPLAY=off` (tidak mengubah apa pun).
+ * Per aplikasi dapat diatur dengan env Shortcut `TINY_FLATPAK_DISPLAY=`:
+ *  - `auto` (bawaan): X11/Xwayland bila Turnip aktif DAN Xwayland DRI3 hasil patch terpasang, selain itu Wayland;
+ *  - `wayland`: paksa Wayland dulu; `x11`: paksa X11 (Java, Tk, Wine); `off`: tidak mengubah apa pun.
+ *
+ * Kenapa `auto` tidak lagi selalu Wayland: platform EGL Wayland di Mesa tidak bisa memuat Zink tanpa node DRM
+ * sungguhan, lalu diam-diam jatuh ke llvmpipe (OpenGL software; lihat [WineSystem.x11Preferred], log Wine:
+ * GL_RENDERER "llvmpipe"). Aplikasi OpenGL Flathub (Qt/GTK/SDL, mis. emulator) yang dipaksa `wayland;xcb` /
+ * `wayland,x11` karena itu jalan di CPU, sedangkan AppImage di sesi yang sama memakai X11 (`GDK_BACKEND=x11`,
+ * `QT_QPA_PLATFORM=xcb`) dengan Zink + Kopper di Turnip (GPU). Sejak Xwayland punya DRI3 (extra/xwayland-dri3-nodrm),
+ * Vulkan lewat xcb juga jalan (vkcube --wsi xcb), jadi jalur X11 tidak lagi mengorbankan aplikasi Vulkan.
  */
 object FlatpakWayland {
-    enum class Mode { WAYLAND, X11, OFF }
+    enum class Mode { AUTO, WAYLAND, X11, OFF }
 
     class Result(val command: String, val note: String)
 
     private val RUN = Regex("^((?:\\S*/)?flatpak)\\s+run(\\s.*)?$", RegexOption.DOT_MATCHES_ALL)
     private const val GUEST_TINY = "/home/tiny/.local/share/tiny"
 
-    /** `TINY_FLATPAK_DISPLAY` dari env Shortcut (baris `KEY=VALUE`); bawaan WAYLAND. */
+    /** `TINY_FLATPAK_DISPLAY` dari env Shortcut (baris `KEY=VALUE`); bawaan AUTO. */
     fun mode(env: String): Mode {
         val v = env.lineSequence().map { it.trim() }
             .firstOrNull { it.startsWith("TINY_FLATPAK_DISPLAY=") }
             ?.substringAfter('=')?.trim()?.trim('\'', '"')?.lowercase()
         return when (v) {
             "x11" -> Mode.X11
+            "wayland" -> Mode.WAYLAND
             "off", "0", "none" -> Mode.OFF
-            else -> Mode.WAYLAND
+            else -> Mode.AUTO
         }
     }
+
+    /** Xwayland hasil patch (DRI3 tanpa DRM) terpasang dan dinyalakan: syarat jalur X11 memberi GPU untuk GL dan Vulkan. */
+    private fun dri3Xwayland(): Boolean = Cfg.dri3 && File(TinyEnv.dataPath, "tiny/extra/Xwayland").isFile
+
+    /** AUTO -> X11 (Zink/Turnip untuk OpenGL) bila Turnip aktif dan DRI3 ada, selain itu Wayland seperti sebelumnya. */
+    internal fun resolve(mode: Mode, turnipOn: Boolean): Mode =
+        if (mode == Mode.AUTO) (if (turnipOn && dri3Xwayland()) Mode.X11 else Mode.WAYLAND) else mode
 
     private fun q(s: String) = "'" + s.replace("'", "'\\''") + "'"
 
@@ -94,8 +110,9 @@ object FlatpakWayland {
      * Menulis ulang [cmd] bila itu `flatpak run ...`; null bila bukan flatpak atau [mode] OFF.
      * [turnipOn] = Turnip aktif untuk aplikasi ini (lihat ShortcutRunner).
      */
-    fun rewrite(ctx: Context, cmd: String, mode: Mode, turnipOn: Boolean): Result? {
-        if (mode == Mode.OFF) return null
+    fun rewrite(ctx: Context, cmd: String, requested: Mode, turnipOn: Boolean): Result? {
+        if (requested == Mode.OFF) return null
+        val mode = resolve(requested, turnipOn)
         val m = RUN.matchEntire(cmd.trim()) ?: return null
         val prog = m.groupValues[1]
         val rest = m.groupValues[2]
@@ -122,7 +139,7 @@ object FlatpakWayland {
                     "--env=ELECTRON_OZONE_PLATFORM_HINT=x11",
                 )
             }
-            Mode.OFF -> return null
+            Mode.OFF, Mode.AUTO -> return null
         }
         // Tanpa xdg-desktop-portal di kontainer, dialog berkas bawaan Flatpak (Qt tema "flatpak", GTK) tidak pernah
         // muncul: "org.freedesktop.portal.Desktop was not provided by any .service files". Pakai dialog Qt/GTK sendiri.
@@ -158,8 +175,12 @@ object FlatpakWayland {
         val audio = directAudio(opts)
         opts.distinct().let { opts.clear(); opts.addAll(it) }
         val command = prog + " run " + opts.joinToString(" ") { q(it) } + rest
-        val note = "[tiny] Flatpak display=${mode.name.lowercase()}" +
-            (if (mode == Mode.WAYLAND) " (Wayland dulu, X11 hanya cadangan)" else " (paksa X11/Xwayland)") +
+        val why = when {
+            requested != Mode.AUTO -> if (mode == Mode.WAYLAND) " (dipilih: Wayland dulu, X11 hanya cadangan)" else " (dipilih: X11/Xwayland)"
+            mode == Mode.X11 -> " (otomatis: X11 + Xwayland DRI3 supaya OpenGL memakai Zink/Turnip, bukan llvmpipe)"
+            else -> " (otomatis: Wayland, karena Turnip/Xwayland DRI3 tidak aktif)"
+        }
+        val note = "[tiny] Flatpak display=${mode.name.lowercase()}" + why +
             "; GPU: $gpu; $pad; $audio"
         return Result(command, note)
     }
