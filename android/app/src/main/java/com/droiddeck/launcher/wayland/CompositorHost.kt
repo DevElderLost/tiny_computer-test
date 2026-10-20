@@ -1,5 +1,7 @@
 package com.droiddeck.launcher.wayland
 
+import android.os.Handler
+import android.os.Looper
 import android.view.Choreographer
 import android.view.Surface
 import com.droiddeck.launcher.session.SessionState
@@ -13,12 +15,24 @@ import com.droiddeck.launcher.session.SessionState
 object CompositorHost {
     @Volatile
     private var started = false
+    @Volatile
     private var vsyncRunning = false
+
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    /**
+     * Choreographer is per-thread, and a callback can only be removed from the one it was posted on:
+     * every post/remove of [vsync] therefore goes through the main thread.
+     */
+    private fun onMain(block: () -> Unit) {
+        if (Looper.myLooper() === Looper.getMainLooper()) block() else mainHandler.post(block)
+    }
 
     private val vsync = object : Choreographer.FrameCallback {
         override fun doFrame(frameTimeNanos: Long) {
+            if (!vsyncRunning) return
             WaylandCompositor.nativeVsync(frameTimeNanos)
-            if (vsyncRunning) Choreographer.getInstance().postFrameCallback(this)
+            Choreographer.getInstance().postFrameCallback(this)
         }
     }
 
@@ -128,15 +142,29 @@ object CompositorHost {
         WaylandCompositor.nativeSetSurface(null)
     }
 
-    /** Frames are only worth drawing while a Surface is attached. */
+    /**
+     * Frames are only worth drawing while a Surface is attached.
+     *
+     * Exactly one callback chain may ever be alive. pauseVsync() used to only clear a flag and leave
+     * the already-posted callback pending, so a detach followed by an attach inside the same frame
+     * (an activity re-created by a Shortcut tap, a Surface swapped for the next session) started a
+     * SECOND self-reposting chain next to the first: the compositor then got two ticks per refresh,
+     * rendered/presented twice per frame and handed clients their frame callbacks twice - the whole
+     * display flickered and could freeze, until leaving and re-entering let both chains die. Removing
+     * the pending callback before posting makes the chain single no matter how often this is called.
+     */
     private fun resumeVsync() {
-        if (vsyncRunning) return
         vsyncRunning = true
-        Choreographer.getInstance().postFrameCallback(vsync)
+        onMain {
+            val c = Choreographer.getInstance()
+            c.removeFrameCallback(vsync)
+            c.postFrameCallback(vsync)
+        }
     }
 
     private fun pauseVsync() {
         vsyncRunning = false
+        onMain { Choreographer.getInstance().removeFrameCallback(vsync) }
     }
 
     /**

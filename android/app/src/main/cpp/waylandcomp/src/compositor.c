@@ -2920,6 +2920,9 @@ static int scene_waits_for_game(int64_t now) {
 
 /* A screen refresh (Choreographer tick): draw the newest state once. */
 static void on_vsync(int64_t frame_time_ns) {
+    /* Two ticks for one refresh (the app side must never send them, but a stale callback chain once did)
+     * would render and present the scene twice per frame: drop the repeat. */
+    if (frame_time_ns && frame_time_ns == g_tick_vsync_ns) return;
     int64_t now = now_ns();
     g_perf.ticks++;
     if (g_last_vsync_ns) {

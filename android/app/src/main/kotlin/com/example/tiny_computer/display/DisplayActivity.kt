@@ -318,6 +318,10 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
     // ------------------------------------------------------------------ Surface / compositor
 
     override fun surfaceCreated(holder: SurfaceHolder) {
+        // ukuran Surface lama bukan pembanding untuk Surface baru: tanpa ini surfaceChanged pertama
+        // dianggap "diubah ukurannya" dan memutus-pasang ulang swapchain tepat setelah dibuat
+        surfW = 0
+        surfH = 0
         val rt = TinyEnv.runtimeDir().apply { mkdirs() }
         // keymap yang diberikan compositor ke klien wl_keyboard (cara guest membaca kode evdev kita)
         runCatching {
@@ -390,6 +394,8 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
         surfaceReady = false
+        surfW = 0
+        surfH = 0
         CompositorHost.detach(holder.surface)
     }
 
