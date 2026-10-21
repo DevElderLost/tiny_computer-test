@@ -2142,7 +2142,13 @@ static void scene_size(int *w, int *h) {
         surface_size(s, &sw, &sh);
         if ((long long)sw * sh > best) { best = (long long)sw * sh; *w = sw; *h = sh; }
     }
-    if (*w <= 0 || *h <= 0) { *w = INPUT_SPACE_W; *h = INPUT_SPACE_H; }
+    if (*w <= 0 || *h <= 0) {
+        /* No window for a moment (a program unmaps one window and maps the next, e.g. a file dialog
+         * replacing its parent): keep the last scene size instead of jumping to the default and back,
+         * which re-fitted the whole screen and showed up as a flash. */
+        if (g_scene_w > 0 && g_scene_h > 0) { *w = g_scene_w; *h = g_scene_h; }
+        else { *w = INPUT_SPACE_W; *h = INPUT_SPACE_H; }
+    }
 }
 
 /* Without a Wine desktop nothing positions the windows: every toplevel used to sit at 0,0, so a window
@@ -2680,6 +2686,9 @@ static void hdr_count_copied(const struct draw_list *dl, const char *reason) {
     }
 }
 
+/* How long an empty scene keeps the previous picture on screen (see render_scene). */
+#define BLANK_SCENE_GRACE_NS 300000000LL
+
 static void render_scene(void) {
     struct draw_list dl = {0};
     struct surface *s;
@@ -2711,6 +2720,23 @@ static void render_scene(void) {
         add_tree(&dl, s, s->placed ? s->x : 0, s->placed ? s->y : 0, 0);
     }
     layers_add(&dl, ZWLR_LAYER_SHELL_V1_LAYER_TOP, ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY);
+
+    /* A scene with nothing to draw right after one that had content is almost always a window change
+     * in flight (the old toplevel unmapped or re-attached a buffer a moment before the new one maps,
+     * a surface swapped its buffer type): drawing it clears the whole screen to black for one refresh.
+     * Keep the last picture on screen for a short grace period instead; if the scene is still empty
+     * after it, the black frame is drawn as before. */
+    {
+        static int64_t last_content_ns;
+        const int64_t now = now_ns();
+        if (dl.n > 0) last_content_ns = now;
+        else if (last_content_ns && now - last_content_ns < BLANK_SCENE_GRACE_NS) {
+            free(dl.d);
+            g_dirty = 1; /* the next vsync tick looks again */
+            schedule_render();
+            return;
+        }
+    }
 
     int rendered = 0;
     int fx_on = vkp_effects_active();
