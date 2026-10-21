@@ -66,6 +66,17 @@ object TinyEnv {
             "SHELL=/bin/sh PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin " +
             "/bin/sh -c \"if [ -x /bin/bash ]; then exec /bin/bash -l; else exec /bin/sh -l; fi\""
 
+    /**
+     * Rootfs hasil ekspor Tiny Container master (tc4) tidak membawa `usr/local/etc/tmoe-linux`. Mount tiruan /proc
+     * (`--mount=$CONTAINER_DIR/usr/local/etc/tmoe-linux/proot_proc/...`) pada [defaultBoot] lalu menunjuk ke berkas
+     * yang tidak ada dan membuat proot gagal/menempelkan berkas kosong. Fungsi ini membuang mount itu bila folder
+     * tmoe-linux tidak ada di [root]; bila ada, perintah dikembalikan apa adanya.
+     */
+    fun bootForRootfs(root: File, boot: String): String {
+        if (File(root, "usr/local/etc/tmoe-linux/proot_proc").isDirectory) return boot
+        return boot.replace(Regex("""\s--mount=\S*/usr/local/etc/tmoe-linux/proot_proc/\S+"""), "")
+    }
+
     /** Perintah cepat untuk sistem hasil import: hanya yang pasti ada di rootfs Debian/Ubuntu tanpa sudo. */
     val genericCommands: JSONArray
         get() = JSONArray()

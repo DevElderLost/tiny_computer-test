@@ -150,10 +150,11 @@ object SystemImport {
 
         // rootfs hasil ekspor Tiny Computer (ada user tiny + tmoe-linux) memakai perintah boot bawaan; selain itu
         // dijalankan sebagai root dengan perintah boot generik
-        val tinyCompatible = File(root, "home/tiny").isDirectory && File(root, "usr/local/etc/tmoe-linux").exists()
+        val tinyCompatible = isTinyRootfs(root)
+        if (tinyCompatible) prepareTinyRootfs(root)
         val info = JSONObject()
             .put("name", systemName(displayName))
-            .put("boot", if (tinyCompatible) TinyEnv.defaultBoot else TinyEnv.bootGeneric)
+            .put("boot", if (tinyCompatible) TinyEnv.bootForRootfs(root, TinyEnv.defaultBoot) else TinyEnv.bootGeneric)
             .put("vnc", "startnovnc &")
             .put("vncUrl", "http://localhost:36082/vnc.html?host=localhost&port=36082&autoconnect=true&resize=remote&password=12345678")
             .put("vncUri", "vnc://127.0.0.1:5904?VncPassword=12345678&SecurityType=2")
@@ -164,6 +165,47 @@ object SystemImport {
         // `localedef` bawaan hanya untuk rootfs Tiny; di rootfs lain locale en_US belum tentu ada
         if (!tinyCompatible) TinyEnv.postCommand = ""
         Log.i(TAG, "import selesai: ${systemName(displayName)} (tiny=$tinyCompatible)")
+    }
+
+    /**
+     * True bila [root] adalah rootfs Tiny: ada user `tiny` (/home/tiny) DAN salah satu penanda Tiny, yaitu
+     * `usr/local/etc/tmoe-linux` (Tiny Computer lama) atau `/.tiny.yaml` (ekspor Tiny Container master/tc4,
+     * yang tidak memakai tmoe-linux). Sebelumnya hanya tmoe-linux yang dicek sehingga ekspor master salah
+     * ditandai "generic" dan desktop-nya diblokir.
+     */
+    fun isTinyRootfs(root: File): Boolean =
+        File(root, "home/tiny").isDirectory &&
+            (File(root, "usr/local/etc/tmoe-linux").exists() || File(root, ".tiny.yaml").exists())
+
+    /** Titik mount yang dipakai perintah boot Tiny harus ada di rootfs ekspor master (yang tidak membuatnya). */
+    private fun prepareTinyRootfs(root: File) {
+        val dirs = listOf(
+            "home/tiny/.local/share/tiny", "home/tiny/.local/bin",
+            "home/tiny/公共", "home/tiny/图片", "home/tiny/音乐", "home/tiny/视频", "home/tiny/下载", "home/tiny/照片", "home/tiny/文档",
+            "home/tiny/Public", "home/tiny/Pictures", "home/tiny/Music", "home/tiny/Videos", "home/tiny/Downloads",
+            "home/tiny/Documents", "home/tiny/Photos",
+            "usr/share/fonts/wpsm", "usr/share/fonts/yozom", "usr/share/fonts/androidm",
+            "tmp/.X11-unix",
+        )
+        for (d in dirs) runCatching { File(root, d).mkdirs() }
+        runCatching { File(root, "tmp").setWritable(true, false) }
+    }
+
+    /**
+     * Memperbaiki sistem yang SUDAH terlanjur diimpor dan ditandai generic padahal sebenarnya rootfs Tiny
+     * (mis. ekspor master): tanda generic dilepas dan boot/perintah diganti ke bawaan Tiny. Mengembalikan true
+     * bila ada yang diubah. Aman dipanggil berulang.
+     */
+    fun reclassify(index: Int): Boolean {
+        if (!Containers.isGeneric(index)) return false
+        val root = TinyEnv.containerDir(index)
+        if (!isTinyRootfs(root)) return false
+        prepareTinyRootfs(root)
+        Containers.put(index, "generic", false)
+        Containers.put(index, "boot", TinyEnv.bootForRootfs(root, TinyEnv.defaultBoot))
+        Containers.put(index, "commands", TinyEnv.defaultCommands)
+        Log.i(TAG, "container #$index dikenali sebagai rootfs Tiny (generic dilepas)")
+        return true
     }
 
     /** Membersihkan sisa impor yang gagal: folder rootfs dihapus, dan tidak ada penanda terpasang yang tertulis. */

@@ -858,7 +858,7 @@ ${WsiWayland.probeForDesktop(sessionEnv)}
         val spec = guestSpec(ctx, log)
         val tail = Regex("""/bin/bash(\s+-l)?\s*$""")
         val custom = Containers.boot(TinyEnv.currentContainer, TinyEnv.defaultBoot).trim()
-        val base = if (tail.containsMatchIn(custom)) custom else TinyEnv.defaultBoot.trim()
+        val base = if (tail.containsMatchIn(custom)) custom else TinyEnv.bootForRootfs(TinyEnv.containerDir(), TinyEnv.defaultBoot).trim()
         var prefix = tail.replace(base, "").trimEnd()
         if (!killOnExit) prefix = prefix.replace(" --kill-on-exit", "")
         return guestEnvScript(spec) + "\nexec " + prefix + " /bin/sh " + guestScript + "\n"
@@ -879,7 +879,7 @@ ${WsiWayland.probeForDesktop(sessionEnv)}
     fun runGuest(ctx: Context, argv: List<String>, env: String, onLine: (String) -> Unit): Int {
         val tail = Regex("""/bin/bash(\s+-l)?\s*$""")
         val custom = Containers.boot(TinyEnv.currentContainer, TinyEnv.defaultBoot).trim()
-        val base = if (tail.containsMatchIn(custom)) custom else TinyEnv.defaultBoot.trim()
+        val base = if (tail.containsMatchIn(custom)) custom else TinyEnv.bootForRootfs(TinyEnv.containerDir(), TinyEnv.defaultBoot).trim()
         val prefix = tail.replace(base, "").trimEnd()
         val script = guestEnvScript(GuestSpec("", env)) + "\nexec " + prefix + " " + argv.joinToString(" ") { shq(it) } + "\n"
         val p = ProcessBuilder("/system/bin/sh", "-c", script)
@@ -902,7 +902,7 @@ ${WsiWayland.probeForDesktop(sessionEnv)}
      * dan proot gagal dengan "'/usr/bin/env' not found" (lalu "ldconfig failed, exit status 256").
      */
     fun sandboxScript(root: File, cwd: String, binds: List<String>, env: Map<String, String>, argv: List<String>): String {
-        val head = TinyEnv.defaultBoot.trim().substringBefore(" /usr/bin/env -i ")
+        val head = TinyEnv.bootForRootfs(TinyEnv.containerDir(), TinyEnv.defaultBoot).trim().substringBefore(" /usr/bin/env -i ")
         fun keep(mount: String): Boolean {
             val spec = mount.removePrefix("--mount=")
             val guest = if (':' in spec) spec.substringAfterLast(':') else spec
