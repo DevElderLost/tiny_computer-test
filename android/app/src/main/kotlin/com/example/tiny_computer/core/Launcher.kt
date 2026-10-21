@@ -744,6 +744,11 @@ export PROOT_LOADER_32=${'$'}DATA_DIR/applib/libproot-loader32.so""".trimIndent(
         } else ""
         // sesi aplikasi dari menu Shortcut memegang display :4; hentikan dulu sebelum desktop memakainya
         val stopApps = if (replaceAppSession) "pkill -x Xwayland 2>/dev/null; sleep 1\n" else ""
+        // pemilih sesi desktop: rootfs ekspor master tidak punya /etc/X11/xinit/Xsession (lihat assets/tiny/xsession.sh)
+        runCatching {
+            val vnc = File(TinyEnv.containerDir(), "home/tiny/.vnc").apply { mkdirs() }
+            File(vnc, "tiny-session.sh").writeText(Rootfs.asset(ctx, "tiny/xsession.sh"))
+        }
         return stopApps + """
 mkdir -p "${'$'}HOME/.vnc"
 command -v Xwayland >/dev/null 2>&1 || { echo "Memasang xwayland..."; sudo apt update && sudo apt install -y xwayland; }
@@ -755,9 +760,9 @@ for i in ${'$'}(seq 1 150); do [ -S /tmp/wayland-0 ] && break; sleep 0.2; done
 (XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0 ${xwaylandEnv()}${xwaylandBin()} :4 -fullscreen -geometry ${w}x$h -noreset -ac +iglx -extension MIT-SHM > "${'$'}HOME/.vnc/xwayland.log" 2>&1 &)
 for i in ${'$'}(seq 1 150); do [ -S /tmp/.X11-unix/X4 ] && break; sleep 0.2; done
 if [ -n "${'$'}TINY_LAUNCH_LOG" ] && [ -w "${'$'}TINY_LAUNCH_LOG" ]; then
-(${sessionEnv}bash /etc/X11/xinit/Xsession 2>&1 | tee "${'$'}HOME/.vnc/x.log" >> "${'$'}TINY_LAUNCH_LOG") &
+(${sessionEnv}bash "${'$'}HOME/.vnc/tiny-session.sh" xinit/Xsession 2>&1 | tee "${'$'}HOME/.vnc/x.log" >> "${'$'}TINY_LAUNCH_LOG") &
 else
-${sessionEnv}bash /etc/X11/xinit/Xsession &> "${'$'}HOME/.vnc/x.log" &
+${sessionEnv}bash "${'$'}HOME/.vnc/tiny-session.sh" xinit/Xsession &> "${'$'}HOME/.vnc/x.log" &
 fi
 ${WsiWayland.probeForDesktop(sessionEnv)}
 """.trimIndent()
