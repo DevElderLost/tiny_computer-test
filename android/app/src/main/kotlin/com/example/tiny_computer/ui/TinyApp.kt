@@ -1,6 +1,10 @@
 package com.example.tiny_computer.ui
 
 import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
@@ -44,10 +48,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.DesktopWindows
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Store
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.Terminal
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -57,6 +63,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -84,6 +91,7 @@ import com.example.tiny_computer.core.FlatpakManager
 import com.example.tiny_computer.core.Launcher
 import com.example.tiny_computer.core.NavRequest
 import com.example.tiny_computer.core.Startup
+import com.example.tiny_computer.core.SystemImport
 import com.example.tiny_computer.core.TermSessions
 import com.example.tiny_computer.core.TinyEnv
 import com.example.tiny_computer.display.DisplayActivity
@@ -120,7 +128,14 @@ fun TinyApp() {
 
     val openDesktop = { ctx.startActivity(Intent(ctx, DisplayActivity::class.java)) }
     val requestDesktop: () -> Unit = {
-        if (Startup.phase == Startup.Phase.DONE) openDesktop() else Startup.begin(ctx, openDesktop = true)
+        when {
+            // terminal tanpa sistem tidak punya desktop; sistem hasil import (bukan rootfs Tiny) hanya untuk terminal
+            Startup.hostMode -> Startup.warn(ctx.getString(R.string.tc_host_no_desktop))
+            Startup.needsImport(ctx) -> Startup.warn(ctx.getString(R.string.tc_no_system_notice))
+            Startup.installed && Containers.isGeneric(Cfg.defaultContainer) -> Startup.warn(ctx.getString(R.string.tc_generic_no_desktop))
+            Startup.phase == Startup.Phase.DONE -> openDesktop()
+            else -> Startup.begin(ctx, openDesktop = true)
+        }
     }
     // Shortcut: jalankan aplikasi langsung (tanpa Open desktop) di proot terpisah; kontainer/terminal tidak perlu hidup
     val openApp = { id: String ->
@@ -141,7 +156,9 @@ fun TinyApp() {
     LaunchedEffect(phase) {
         if (phase == Startup.Phase.DONE) {
             // proses shell keluar normal (kode 0) -> tutup aplikasi, seperti SystemNavigator.pop di versi Dart
-            TermSessions.forCurrent(ctx).onExit = { code -> if (code == 0) ctx.findActivity()?.finish() }
+            // terminal tanpa sistem: `exit` hanya menutup terminalnya (kembali ke tombol Start), aplikasi tetap terbuka
+            val hostTerminal = Startup.hostMode
+            TermSessions.forCurrent(ctx).onExit = { code -> if (code == 0 && !hostTerminal) ctx.findActivity()?.finish() }
             val app = Startup.consumeApp()
             val terminalCommand = Startup.consumeTerminal()
             if (terminalCommand != null) {
@@ -339,6 +356,28 @@ private fun HomeScreen(onOpen: () -> Unit, onSettings: () -> Unit) {
     val ctx = LocalContext.current
     val land = isLandscape()
     val (w, h) = Launcher.displaySize(ctx)
+    // berkas yang dipilih menunggu konfirmasi: (uri, nama, ukuran)
+    var pendingImport by remember { mutableStateOf<Triple<Uri, String, Long>?>(null) }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri != null) {
+            val name = SystemImport.queryName(ctx, uri)
+            if (SystemImport.isSupportedName(name)) pendingImport = Triple(uri, name, SystemImport.querySize(ctx, uri))
+            else Toast.makeText(ctx, ctx.getString(R.string.tc_import_unsupported, name), Toast.LENGTH_LONG).show()
+        }
+    }
+    pendingImport?.let { (uri, name, size) ->
+        AlertDialog(
+            onDismissRequest = { pendingImport = null },
+            title = { Text(stringResource(R.string.tc_import_confirm_title)) },
+            text = { Text(stringResource(R.string.tc_import_confirm_body, name, formatSize(size))) },
+            confirmButton = {
+                TextButton(onClick = { pendingImport = null; Startup.beginImport(ctx, uri, name) }) {
+                    Text(stringResource(R.string.tc_import_button))
+                }
+            },
+            dismissButton = { TextButton(onClick = { pendingImport = null }) { Text(stringResource(R.string.tc_ui_cancel)) } },
+        )
+    }
     val mainCard: @Composable () -> Unit = {
         // kartu utama: gradasi lembut dari warna sinyal
         val shape = RoundedCornerShape(20.dp)
@@ -352,7 +391,7 @@ private fun HomeScreen(onOpen: () -> Unit, onSettings: () -> Unit) {
             StatusChip(
                 stringResource(
                     when (phase) {
-                        Startup.Phase.DONE -> R.string.tc_status_running
+                        Startup.Phase.DONE -> if (Startup.hostMode) R.string.tc_status_host else R.string.tc_status_running
                         Startup.Phase.RUNNING -> R.string.tc_status_starting
                         else -> R.string.tc_status_idle
                     },
@@ -363,10 +402,16 @@ private fun HomeScreen(onOpen: () -> Unit, onSettings: () -> Unit) {
                     else -> pal.onSurfaceVariant
                 },
             )
-            Text(stringResource(R.string.tc_home_hint), style = MaterialTheme.typography.bodyMedium, color = pal.onBackground)
+            val needImport = Startup.needsImport(ctx)
+            Text(
+                stringResource(if (needImport) R.string.tc_home_no_system_hint else R.string.tc_home_hint),
+                style = MaterialTheme.typography.bodyMedium, color = pal.onBackground,
+            )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                 DeckButton(stringResource(R.string.tc_home_start), Modifier.weight(1f), onClick = onOpen)
                 SettingsCog(onSettings)
+                // APK tanpa data sistem dan belum ada sistem terpasang: import arsip rootfs Linux arm64 (tar.xz / tar.zst)
+                if (needImport) ImportButton { picker.launch(arrayOf("*/*")) }
             }
         }
     }
@@ -386,7 +431,10 @@ private fun HomeScreen(onOpen: () -> Unit, onSettings: () -> Unit) {
         )
     }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-        ScreenTitle(stringResource(R.string.tc_ui_app_title), Containers.name(TinyEnv.currentContainer))
+        ScreenTitle(
+            stringResource(R.string.tc_ui_app_title),
+            if (Startup.needsImport(ctx)) stringResource(R.string.tc_home_no_system_title) else Containers.name(TinyEnv.currentContainer),
+        )
         if (land) {
             // dua kolom: kartu mulai di kiri, info sesi di kanan; tinggi layar lanskap sempit
             Row(Modifier.fillMaxWidth()) {
@@ -433,6 +481,29 @@ private fun SettingsCog(onClick: () -> Unit) {
     }
 }
 
+/** Tombol Import di kanan roda gigi: tinggi 48 dp, ikon + teks, gaya sama dengan [SettingsCog]. */
+@Composable
+private fun ImportButton(onClick: () -> Unit) {
+    val pal = LocalPalette.current
+    val shape = RoundedCornerShape(12.dp)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier.height(48.dp).clip(shape).background(Color.White.copy(alpha = 0.03f)).border(1.dp, pal.line2, shape)
+            .clickable(onClick = onClick).padding(horizontal = 14.dp),
+    ) {
+        Icon(Icons.Filled.FileDownload, null, tint = pal.onBackground, modifier = Modifier.size(20.dp))
+        Text(stringResource(R.string.tc_import_button), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = pal.onBackground)
+    }
+}
+
+private fun formatSize(bytes: Long): String = when {
+    bytes < 0 -> "?"
+    bytes >= 1_000_000_000L -> "%.2f GB".format(bytes / 1_000_000_000.0)
+    bytes >= 1_000_000L -> "%.1f MB".format(bytes / 1_000_000.0)
+    else -> "%d KB".format(bytes / 1000)
+}
+
 /**
  * Halaman Pengaturan; tampil di area isi, navigasi (rel/bilah bawah) tetap terlihat. Tanpa panah kembali:
  * keluar dengan tombol Back sistem (BackHandler di [TinyApp]) atau dengan memilih salah satu tab navigasi.
@@ -448,17 +519,30 @@ private fun SettingsPage() {
     }
 }
 
-/** Tab Terminal sebelum kontainer berjalan: penjelasan singkat + tombol untuk menyalakannya tanpa membuka desktop. */
+/**
+ * Tab Terminal sebelum kontainer berjalan: tombol untuk menyalakan kontainer tanpa membuka desktop, dan tombol
+ * Start terminal yang membuka shell Android (proot/tar/busybox) seperti Termux, dengan atau tanpa data sistem.
+ */
 @Composable
 private fun TerminalGate() {
     val ctx = LocalContext.current
+    val noSystem = Startup.needsImport(ctx)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-        ScreenTitle(stringResource(R.string.tc_nav_terminal), stringResource(R.string.tc_start_terminal_hint))
+        ScreenTitle(
+            stringResource(R.string.tc_nav_terminal),
+            stringResource(if (noSystem) R.string.tc_start_terminal_hint_nosystem else R.string.tc_start_terminal_hint),
+        )
         StartupNotice()
         Group {
-            DeckButton(stringResource(R.string.tc_start_container_button), Modifier.fillMaxWidth().padding(14.dp)) {
-                Startup.begin(ctx, openDesktop = false)
+            if (!noSystem) {
+                DeckButton(stringResource(R.string.tc_start_container_button), Modifier.fillMaxWidth().padding(14.dp)) {
+                    Startup.begin(ctx, openDesktop = false)
+                }
             }
+            DeckButton(
+                stringResource(if (noSystem) R.string.tc_start_terminal_button else R.string.tc_start_terminal_host_button),
+                Modifier.fillMaxWidth().padding(14.dp), primary = noSystem,
+            ) { Startup.beginHostTerminal(ctx) }
         }
     }
 }

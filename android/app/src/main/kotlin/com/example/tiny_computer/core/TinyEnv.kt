@@ -51,6 +51,29 @@ object TinyEnv {
     val defaultCommands: JSONArray
         get() = defaults.getJSONArray(if (isChineseLocale) "commands" else "commands4En")
 
+    /**
+     * Perintah boot proot untuk rootfs Linux bebas (Debian, Ubuntu, dst.) hasil import: masuk sebagai root,
+     * tanpa mount khusus Tiny (tmoe-linux, /home/tiny) dan tanpa EXTRA_MOUNT/EXTRA_OPT yang merujuk ke /home/tiny.
+     * Memakai `$DATA_DIR` dan `$CONTAINER_DIR` dari skrip lingkungan, seperti [defaultBoot].
+     */
+    val bootGeneric: String
+        get() = "\$DATA_DIR/bin/proot -0 -H --pwd=/root --rootfs=\$CONTAINER_DIR --mount=/system --mount=/apex --mount=/sys " +
+            "--mount=/data --kill-on-exit --mount=/storage --sysvipc -L --link2symlink --mount=/proc --mount=/dev " +
+            "--mount=\$CONTAINER_DIR/tmp:/dev/shm --mount=/dev/urandom:/dev/random --mount=/proc/self/fd:/dev/fd " +
+            "--mount=/proc/self/fd/0:/dev/stdin --mount=/proc/self/fd/1:/dev/stdout --mount=/proc/self/fd/2:/dev/stderr " +
+            "--mount=/dev/null:/dev/tty0 --mount=/dev/null:/proc/sys/kernel/cap_last_cap --mount=/storage/self/primary:/media/sd " +
+            "/usr/bin/env -i HOSTNAME=TINY HOME=/root USER=root LOGNAME=root TERM=xterm-256color TMPDIR=/tmp LANG=C.UTF-8 " +
+            "SHELL=/bin/sh PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin " +
+            "/bin/sh -c \"if [ -x /bin/bash ]; then exec /bin/bash -l; else exec /bin/sh -l; fi\""
+
+    /** Perintah cepat untuk sistem hasil import: hanya yang pasti ada di rootfs Debian/Ubuntu tanpa sudo. */
+    val genericCommands: JSONArray
+        get() = JSONArray()
+            .put(JSONObject().put("name", "Update Packages").put("command", "apt update && apt full-upgrade -y && apt autoremove -y"))
+            .put(JSONObject().put("name", "System Info").put("command", "cat /etc/os-release"))
+            .put(JSONObject().put("name", "Clear").put("command", "clear"))
+            .put(JSONObject().put("name", "Interrupt").put("command", "\u0003"))
+
     val wineCommands: JSONArray
         get() = defaults.getJSONArray(if (isChineseLocale) "wineCommands" else "wineCommands4En")
 

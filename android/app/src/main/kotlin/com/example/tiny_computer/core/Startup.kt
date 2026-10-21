@@ -1,12 +1,15 @@
 package com.example.tiny_computer.core
 
 import android.content.Context
+import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.widget.Toast
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.example.tiny_computer.R
 
 /**
  * Alur "Open desktop" seperti DroidDeck. Pemasangan data sistem (peluncuran pertama) dan start
@@ -55,6 +58,20 @@ object Startup {
     var pendingTerminal by mutableStateOf<String?>(null)
         private set
 
+    /** Mode terminal tanpa kontainer: shell Android + proot/tar/busybox (seperti Termux), lihat [beginHostTerminal]. */
+    var hostMode by mutableStateOf(false)
+        private set
+
+    /** Alur yang sedang/terakhir berjalan adalah import data sistem ([beginImport]); tetap true saat gagal agar Coba lagi mengulang import. */
+    var importing by mutableStateOf(false)
+        private set
+
+    private var importUri: Uri? = null
+    private var importName: String = ""
+
+    /** Alur terakhir adalah terminal tanpa sistem: Coba lagi mengulang [beginHostTerminal]. */
+    private var lastWasHost = false
+
     /** APK tanpa asset patch (patch.tzst): beri tahu di Beranda apa yang hilang dan cara memperbaikinya. */
     private fun patchWarning() {
         if (Rootfs.patchAssetMissing) {
@@ -65,6 +82,15 @@ object Startup {
 
     /** Data sistem sudah pernah dipasang (penanda yang sama dengan `Rootfs.initData`). */
     val installed: Boolean get() = TinyPrefs.contains("defaultContainer")
+
+    /**
+     * APK tidak membawa data sistem (xa*) dan belum ada sistem terpasang: Beranda menampilkan tombol Import
+     * di samping roda gigi, dan Open desktop / Start container tidak bisa dijalankan.
+     */
+    fun needsImport(ctx: Context): Boolean = !installed && !Rootfs.hasBundledSystem(ctx)
+
+    /** Menampilkan peringatan di Beranda / tab Terminal (kartu merah yang sama dengan peringatan tahap tambahan). */
+    fun warn(message: String) { notice = message }
 
     /** Data sistem sudah disiapkan (`Rootfs.initData`) di proses ini. */
     private val dataReady = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -87,12 +113,16 @@ object Startup {
 
     /** Dari menu Shortcut saat sistem belum terpasang / kontainer sedang dinyalakan: tunggu sampai siap lalu jalankan [appId]. */
     fun beginForApp(ctx: Context, appId: String) {
+        if (needsImport(ctx)) { notice = ctx.getString(R.string.tc_no_system_notice); return }
+        if (hostMode) { notice = ctx.getString(R.string.tc_host_busy); return }
         pendingApp = appId
         begin(ctx, openDesktop = false)
     }
 
     /** Dari menu Shortcut: jalankan [command] di terminal; kontainer dinyalakan dulu bila belum berjalan. */
     fun beginForTerminal(ctx: Context, command: String) {
+        if (needsImport(ctx)) { notice = ctx.getString(R.string.tc_no_system_notice); return }
+        if (hostMode) { notice = ctx.getString(R.string.tc_host_busy); return }
         pendingTerminal = command
         begin(ctx, openDesktop = false)
     }
@@ -103,6 +133,7 @@ object Startup {
      */
     fun reset() {
         if (phase == Phase.RUNNING) return
+        hostMode = false
         phase = Phase.IDLE
         openWhenReady = false
         pendingApp = null
@@ -112,7 +143,12 @@ object Startup {
     @Synchronized
     fun begin(ctx: Context, openDesktop: Boolean) {
         if (phase == Phase.RUNNING || phase == Phase.DONE) return
+        // tanpa data sistem di APK dan belum ada sistem terpasang: arahkan ke tombol Import, jangan memasang rootfs kosong
+        if (!Launcher.isStarted && needsImport(ctx)) { notice = ctx.getString(R.string.tc_no_system_notice); return }
         val app = ctx.applicationContext
+        importing = false
+        hostMode = false
+        lastWasHost = false
         resumed = Launcher.isStarted
         firstInstall = !installed && !resumed
         withExtras = ExtraSetup.missing().isNotEmpty()
@@ -154,9 +190,97 @@ object Startup {
         }, "tiny-startup").start()
     }
 
+    /**
+     * Import data sistem dari berkas pilihan pengguna ([SystemImport]); layar progres yang sama dengan Open desktop.
+     * Selesai -> kembali ke IDLE dengan sistem terpasang (tombol Import hilang); gagal -> FAILED dengan pesan,
+     * sisa ekstraksi dibersihkan sehingga tombol Import tetap ada.
+     */
+    @Synchronized
+    fun beginImport(ctx: Context, uri: Uri, displayName: String) {
+        if (phase == Phase.RUNNING || phase == Phase.DONE) return
+        val app = ctx.applicationContext
+        importUri = uri
+        importName = displayName
+        importing = true
+        lastWasHost = false
+        hostMode = false
+        resumed = false
+        firstInstall = true
+        withExtras = false
+        notice = null
+        error = null
+        openWhenReady = false
+        Rootfs.percent = -1
+        Rootfs.statusText = ""
+        phase = Phase.RUNNING
+        Thread({
+            try {
+                SystemImport.run(app, uri, displayName)
+                importing = false
+                importUri = null
+                phase = Phase.IDLE
+                Handler(Looper.getMainLooper()).post {
+                    Toast.makeText(app, app.getString(R.string.tc_import_done, SystemImport.systemName(displayName)), Toast.LENGTH_LONG).show()
+                }
+            } catch (t: Throwable) {
+                Log.e(TAG, "import gagal", t)
+                SystemImport.cleanup()
+                error = t.message ?: t.javaClass.simpleName
+                phase = Phase.FAILED
+            }
+        }, "tiny-import").start()
+    }
+
+    /**
+     * Terminal tanpa data sistem: hanya paket boot (proot, tar, busybox) yang dipasang, lalu shell Android dibuka
+     * di tab Terminal, seperti Termux. Tidak perlu data sistem; bisa dipakai juga bila sistem sudah terpasang.
+     * Mengetik `exit` menutup terminal dan kembali ke tombol Start.
+     */
+    @Synchronized
+    fun beginHostTerminal(ctx: Context) {
+        if (phase == Phase.RUNNING || phase == Phase.DONE) return
+        val app = ctx.applicationContext
+        importing = false
+        lastWasHost = true
+        resumed = false
+        firstInstall = false
+        withExtras = false
+        notice = null
+        error = null
+        openWhenReady = false
+        Rootfs.percent = -1
+        Rootfs.statusText = ""
+        hostMode = true
+        phase = Phase.RUNNING
+        Thread({
+            try {
+                Launcher.startHostTerminal(app)
+                phase = Phase.DONE
+            } catch (t: Throwable) {
+                Log.e(TAG, "terminal gagal", t)
+                hostMode = false
+                error = t.message ?: t.javaClass.simpleName
+                phase = Phase.FAILED
+            }
+        }, "tiny-host-terminal").start()
+    }
+
+    /** Coba lagi dari layar galat: mengulang import yang gagal, atau Open desktop / Start container seperti semula. */
+    fun retry(ctx: Context) {
+        val uri = importUri
+        when {
+            importing && uri != null -> beginImport(ctx, uri, importName)
+            lastWasHost -> beginHostTerminal(ctx)
+            else -> begin(ctx, openWhenReady)
+        }
+    }
+
     /** Menutup layar galat dan kembali ke Beranda. */
     fun dismiss() {
         if (phase == Phase.FAILED) {
+            importing = false
+            importUri = null
+            hostMode = false
             phase = Phase.IDLE
             error = null
             openWhenReady = false
@@ -190,6 +314,8 @@ object Startup {
 
     /** Tahap yang ditampilkan di layar progres; kuncinya sama dengan `Rootfs.statusText`. */
     fun stageKeys(): List<String> {
+        if (importing) return listOf("installingBootPackage", "importingSystem")
+        if (hostMode) return listOf("preparing")
         val base = when {
             resumed -> emptyList()
             firstInstall -> listOf("installingBootPackage", "copyingContainerSystem", "installingContainerSystem", "startingContainer")

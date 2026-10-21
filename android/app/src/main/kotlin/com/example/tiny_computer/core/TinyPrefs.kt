@@ -336,6 +336,9 @@ object Containers {
 
     fun name(index: Int): String = json(index).optString("name", "Debian Trixie")
 
+    /** True untuk sistem hasil import yang bukan rootfs Tiny (root, tanpa desktop Tiny): hanya terminal. */
+    fun isGeneric(index: Int): Boolean = json(index).optBoolean("generic", false)
+
     fun boot(index: Int, defaultBoot: String): String =
         json(index).optString("boot", "").ifEmpty { defaultBoot }
 

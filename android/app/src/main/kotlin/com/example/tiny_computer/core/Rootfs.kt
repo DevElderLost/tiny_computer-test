@@ -34,12 +34,12 @@ object Rootfs {
     var percent: Int = -1
 
     // persen direset lebih dulu agar layar progres tidak sempat memadukan tahap baru dengan persen lama
-    private fun step(name: String) {
+    internal fun step(name: String) {
         percent = -1
         statusText = name
     }
 
-    private fun asset(ctx: Context, name: String) =
+    internal fun asset(ctx: Context, name: String) =
         ctx.assets.open(name).bufferedReader(Charsets.UTF_8).use { it.readText() }
 
     private fun copyAsset(ctx: Context, src: String, dst: File) {
@@ -47,6 +47,30 @@ object Rootfs {
     }
 
     fun setupBootstrap(ctx: Context) {
+        unpackBootstrap(ctx)
+        // patch (folder tiny -> ~/.local/share/tiny) diekstrak dari Kotlin, bukan dari skrip shell.
+        // Di assets APK berkasnya `patch.tzst` (tar + zstd); ekstensi `.gz` sengaja dihindari karena AGP/AAPT
+        // meng-gunzip-nya dan membuang akhiran. Pemasangan ulang paket boot juga memulihkan berkas yang sudah ada.
+        extractPatch(ctx, overwrite = true)
+        ensureFakeInput(ctx)
+    }
+
+    /** Membuat symlink `applib` -> nativeLibraryDir (proot, busybox, dll. dipaketkan sebagai .so). */
+    internal fun linkApplib(ctx: Context) {
+        Shell.execute("ln -sf ${ctx.applicationInfo.nativeLibraryDir} ${TinyEnv.dataPath}/applib")
+    }
+
+    /** True bila proot, tar, dan busybox sudah terpasang (assets.zip sudah diekstrak oleh [unpackBootstrap]). */
+    fun bootstrapReady(): Boolean {
+        val bin = File(TinyEnv.dataPath, "bin")
+        return listOf("proot", "tar", "busybox").all { File(bin, it).exists() }
+    }
+
+    /**
+     * Bagian dasar saja dari paket boot: assets.zip (bin/ + libexec/) dan symlink alat. Tanpa patch (tiny/extra).
+     * Dipakai [setupBootstrap] dan terminal tanpa data sistem ([Launcher.startHostTerminal]).
+     */
+    fun unpackBootstrap(ctx: Context) {
         val data = TinyEnv.dataPath
         for (d in listOf("share", "bin", "lib", "tmp", "proot_tmp", "pulseaudio_tmp")) File(data, d).mkdirs()
         // assets.zip: bin/ (proot, pulseaudio, tar, ...) dan libexec/ (proot loader)
@@ -54,12 +78,17 @@ object Rootfs {
         val script = asset(ctx, "tiny/setup_bootstrap.sh").replace("@DATA_PATH@", data)
         val code = Shell.execute(script)
         if (code != 0) Log.w(TAG, "setup_bootstrap.sh exit=$code")
-        // patch (folder tiny -> ~/.local/share/tiny) diekstrak dari Kotlin, bukan dari skrip shell.
-        // Di assets APK berkasnya `patch.tzst` (tar + zstd); ekstensi `.gz` sengaja dihindari karena AGP/AAPT
-        // meng-gunzip-nya dan membuang akhiran. Pemasangan ulang paket boot juga memulihkan berkas yang sudah ada.
-        extractPatch(ctx, overwrite = true)
-        ensureFakeInput(ctx)
     }
+
+    /** Bagian rootfs bawaan APK (`xaa`, `xab`, ...) di assets; kosong bila APK dibangun tanpa data sistem. */
+    fun bundledParts(ctx: Context): List<String> =
+        (ctx.assets.list("") ?: emptyArray()).filter { it.startsWith("xa") }.sorted()
+
+    @Volatile private var bundledCache: Boolean? = null
+
+    /** True bila APK membawa data sistem (xa*) di assets. Hasilnya disimpan: dibaca tiap rekomposisi Beranda. */
+    fun hasBundledSystem(ctx: Context): Boolean =
+        bundledCache ?: bundledParts(ctx).isNotEmpty().also { bundledCache = it }
 
     /**
      * Berkas yang HARUS ada setelah patch diekstrak (`tiny/extra`): driver Vulkan Linux bawaan
@@ -185,7 +214,32 @@ object Rootfs {
     private fun extractRootfs(data: String) {
         val parts = File(data).listFiles { f -> f.isFile && f.name.startsWith("xa") }?.sortedBy { it.name } ?: emptyList()
         val total = parts.sumOf { it.length() }
-        val cmd = "$data/bin/proot --link2symlink sh -c \"$data/bin/tar x -J --delay-directory-restore --preserve-permissions -C containers/0\""
+        var fed = 0L
+        val res = runTar(data, xz = true) { out ->
+            val buf = ByteArray(1 shl 16)
+            for (f in parts) f.inputStream().use { i ->
+                while (true) {
+                    val n = i.read(buf)
+                    if (n < 0) break
+                    out.write(buf, 0, n)
+                    fed += n
+                    if (total > 0) percent = (fed * 99 / total).toInt()
+                }
+            }
+        }
+        if (res.code != 0) Log.w(TAG, "ekstraksi rootfs exit=${res.code} ($fed/$total byte): ${res.tail}")
+    }
+
+    internal class TarResult(val code: Int, val tail: String)
+
+    /**
+     * Menjalankan `tar x` di bawah proot (--link2symlink) ke containers/0; [feed] menulis arsip ke stdin tar.
+     * [xz] true = arsip tar.xz mentah (didekompresi `tar -J`), false = tar polos (pemanggil sudah mendekompresi).
+     * Keluaran tar dibaca terus agar proses tidak macet; sepuluh baris terakhir dikembalikan untuk log.
+     */
+    internal fun runTar(data: String, xz: Boolean, feed: (java.io.OutputStream) -> Unit): TarResult {
+        val flag = if (xz) " -J" else ""
+        val cmd = "$data/bin/proot --link2symlink sh -c \"$data/bin/tar x$flag --delay-directory-restore --preserve-permissions -C containers/0\""
         val pb = ProcessBuilder("/system/bin/sh", "-c", cmd).directory(File(data)).redirectErrorStream(true)
         pb.environment().apply {
             put("PATH", "$data/bin:" + (get("PATH") ?: ""))
@@ -205,26 +259,14 @@ object Rootfs {
             }
         }.apply { start() }
 
-        var fed = 0L
         try {
-            p.outputStream.use { out ->
-                val buf = ByteArray(1 shl 16)
-                for (f in parts) f.inputStream().use { i ->
-                    while (true) {
-                        val n = i.read(buf)
-                        if (n < 0) break
-                        out.write(buf, 0, n)
-                        fed += n
-                        if (total > 0) percent = (fed * 99 / total).toInt()
-                    }
-                }
-            }
+            p.outputStream.use { feed(it) }
         } catch (e: java.io.IOException) {
-            Log.w(TAG, "tar berhenti sebelum semua xa* terkirim ($fed/$total byte): ${e.message}")
+            Log.w(TAG, "tar berhenti sebelum seluruh arsip terkirim: ${e.message}")
         }
         val code = p.waitFor()
         drain.join(2000)
-        if (code != 0) Log.w(TAG, "ekstraksi rootfs exit=$code: ${synchronized(tail) { tail.joinToString(" | ") }}")
+        return TarResult(code, synchronized(tail) { tail.joinToString(" | ") })
     }
 
     private fun initForFirstTime(ctx: Context) {
@@ -235,7 +277,7 @@ object Rootfs {
         step("copyingContainerSystem")
         File(data, "containers/0/.l2s").mkdirs()
         // rootfs dipecah dengan `split` menjadi xa*, ditaruh di assets
-        val parts = (ctx.assets.list("") ?: emptyArray()).filter { it.startsWith("xa") }.sorted()
+        val parts = bundledParts(ctx)
         for ((i, name) in parts.withIndex()) {
             copyAsset(ctx, name, File(data, name))
             percent = (i + 1) * 100 / parts.size
@@ -264,6 +306,32 @@ object Rootfs {
         statusText = "installationComplete"
     }
 
+    /**
+     * Nilai bawaan peluncuran pertama: resolusi layar, pengaturan terminal untuk pengguna non-Mandarin, dan
+     * penanda `defaultContainer` (tanda sistem sudah terpasang, ditulis paling akhir). Dipakai pemasangan
+     * bawaan APK ([initData]) dan import data sistem ([SystemImport]).
+     */
+    internal fun applyFirstTimeDefaults(ctx: Context) {
+        // Dulu: sesuaikan resolusi VNC dengan layar pengguna. Kini resolusi layar diatur di
+        // pengaturan Layar (0 = otomatis 75% dari ukuran panel), jadi cukup tulis nilainya.
+        val dm: DisplayMetrics = ctx.resources.displayMetrics
+        val w = (max(dm.widthPixels, dm.heightPixels) * 0.75).roundToInt()
+        val h = (min(dm.widthPixels, dm.heightPixels) * 0.75).roundToInt()
+        Cfg.displayWidth = w
+        Cfg.displayHeight = h
+        TinyEnv.postCommand = ""
+        if (!TinyEnv.isChineseLocale) {
+            TinyEnv.postCommand += "localedef -c -i en_US -f UTF-8 en_US.UTF-8"
+            // Pengguna non-Mandarin diasumsikan perlu menulis ke terminal
+            Cfg.isTerminalWriteEnabled = true
+            Cfg.isTerminalCommandsEnabled = true
+            Cfg.isStickyKey = false
+            Cfg.wakelock = true
+        }
+        Cfg.getifaddrsBridge = Build.VERSION.SDK_INT >= 31
+        Cfg.defaultContainer = 0
+    }
+
     /** Port `initData`. Dipanggil di thread latar. Mengembalikan true bila ini peluncuran pertama. */
     fun initData(ctx: Context): Boolean {
         TinyEnv.currentContainer = 0
@@ -274,24 +342,7 @@ object Rootfs {
         if (!TinyPrefs.contains("defaultContainer")) {
             first = true
             initForFirstTime(ctx)
-            // Dulu: sesuaikan resolusi VNC dengan layar pengguna. Kini resolusi layar diatur di
-            // pengaturan Layar (0 = otomatis 75% dari ukuran panel), jadi cukup tulis nilainya.
-            val dm: DisplayMetrics = ctx.resources.displayMetrics
-            val w = (max(dm.widthPixels, dm.heightPixels) * 0.75).roundToInt()
-            val h = (min(dm.widthPixels, dm.heightPixels) * 0.75).roundToInt()
-            Cfg.displayWidth = w
-            Cfg.displayHeight = h
-            TinyEnv.postCommand = ""
-            if (!TinyEnv.isChineseLocale) {
-                TinyEnv.postCommand += "localedef -c -i en_US -f UTF-8 en_US.UTF-8"
-                // Pengguna non-Mandarin diasumsikan perlu menulis ke terminal
-                Cfg.isTerminalWriteEnabled = true
-                Cfg.isTerminalCommandsEnabled = true
-                Cfg.isStickyKey = false
-                Cfg.wakelock = true
-            }
-            Cfg.getifaddrsBridge = Build.VERSION.SDK_INT >= 31
-            Cfg.defaultContainer = 0
+            applyFirstTimeDefaults(ctx)
         }
         TinyEnv.currentContainer = Cfg.defaultContainer
 

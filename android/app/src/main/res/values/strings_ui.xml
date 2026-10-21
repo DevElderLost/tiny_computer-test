@@ -541,4 +541,28 @@
     <string name="tc_fh_installed_size">Installed size</string>
     <string name="tc_fh_runtime">Runtime</string>
     <string name="tc_fh_website">Website</string>
+
+    <!-- Import data sistem + terminal tanpa sistem -->
+    <string name="tc_import_button">Import</string>
+    <string name="tc_import_title">Importing system</string>
+    <string name="tc_import_stage">Extracting system files…</string>
+    <string name="tc_import_confirm_title">Import system data?</string>
+    <string name="tc_import_confirm_body">File: %1$s\nSize: %2$s\n\nThe archive is extracted as the system. It must be a Linux arm64 root filesystem (Debian, Ubuntu, …) in .tar.xz or .tar.zst. This can take several minutes and needs free storage of about three times the file size. Do not exit the app.</string>
+    <string name="tc_import_unsupported">Unsupported file: %1$s. Choose a .tar.xz or .tar.zst archive.</string>
+    <string name="tc_import_done">System imported: %1$s</string>
+    <string name="tc_import_no_space">Not enough free storage to extract this archive.</string>
+    <string name="tc_import_cannot_open">The selected file cannot be opened.</string>
+    <string name="tc_import_read_failed">Reading the archive failed: %1$s</string>
+    <string name="tc_import_not_rootfs">This archive is not a Linux root filesystem. etc/ and usr/ must be at its top level.</string>
+    <string name="tc_import_wrong_arch">Import cancelled: this system is built for %1$s, not ARM64 (aarch64).</string>
+    <string name="tc_no_system_notice">No system data is installed. Tap Import on the Desktop page and choose a Linux arm64 archive (.tar.xz or .tar.zst), or use Start terminal in the Terminal tab.</string>
+    <string name="tc_home_no_system_title">No system data</string>
+    <string name="tc_home_no_system_hint">This APK has no system data. Tap Import and choose a Linux arm64 root filesystem (.tar.xz or .tar.zst: Debian trixie, Debian 12, Ubuntu, …). You can also open the Terminal tab and start a terminal without a system.</string>
+    <string name="tc_status_host">Terminal running</string>
+    <string name="tc_start_terminal_hint_nosystem">No system data yet. Start a terminal without a system, like Termux, to build your own Linux system, or import one on the Desktop page.</string>
+    <string name="tc_start_terminal_button">Start terminal</string>
+    <string name="tc_start_terminal_host_button">Start terminal without system</string>
+    <string name="tc_host_no_desktop">The terminal without a system has no desktop. Type exit to close it, then open the desktop.</string>
+    <string name="tc_host_busy">The terminal without a system is running. Type exit to close it first.</string>
+    <string name="tc_generic_no_desktop">This imported system has no Tiny desktop. Use the Terminal tab and tap Start container.</string>
 </resources>

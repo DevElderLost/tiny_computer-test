@@ -378,4 +378,28 @@
     <string name="tc_fh_installed_size">安装后大小</string>
     <string name="tc_fh_runtime">运行时</string>
     <string name="tc_fh_website">网站</string>
+
+    <!-- Import data sistem + terminal tanpa sistem -->
+    <string name="tc_import_button">导入</string>
+    <string name="tc_import_title">正在导入系统</string>
+    <string name="tc_import_stage">正在解压系统文件…</string>
+    <string name="tc_import_confirm_title">导入系统数据？</string>
+    <string name="tc_import_confirm_body">文件：%1$s\n大小：%2$s\n\n压缩包将作为系统解压。必须是 .tar.xz 或 .tar.zst 格式的 Linux arm64 根文件系统（Debian、Ubuntu 等）。可能需要几分钟，并需要约三倍于文件大小的可用存储空间。请勿退出应用。</string>
+    <string name="tc_import_unsupported">不支持的文件：%1$s。请选择 .tar.xz 或 .tar.zst 压缩包。</string>
+    <string name="tc_import_done">系统已导入：%1$s</string>
+    <string name="tc_import_no_space">可用存储空间不足，无法解压此压缩包。</string>
+    <string name="tc_import_cannot_open">无法打开所选文件。</string>
+    <string name="tc_import_read_failed">读取压缩包失败：%1$s</string>
+    <string name="tc_import_not_rootfs">此压缩包不是 Linux 根文件系统。etc/ 和 usr/ 必须位于其顶层。</string>
+    <string name="tc_import_wrong_arch">已取消导入：此系统为 %1$s 架构，不是 ARM64（aarch64）。</string>
+    <string name="tc_no_system_notice">尚未安装系统数据。请在桌面页点击“导入”并选择 Linux arm64 压缩包（.tar.xz 或 .tar.zst），或在终端标签页使用“启动终端”。</string>
+    <string name="tc_home_no_system_title">没有系统数据</string>
+    <string name="tc_home_no_system_hint">此 APK 不含系统数据。点击“导入”并选择 Linux arm64 根文件系统（.tar.xz 或 .tar.zst：Debian trixie、Debian 12、Ubuntu 等）。也可以打开终端标签页，启动无需系统的终端。</string>
+    <string name="tc_status_host">终端运行中</string>
+    <string name="tc_start_terminal_hint_nosystem">尚无系统数据。可像 Termux 一样启动无需系统的终端来自己构建 Linux 系统，或在桌面页导入一个系统。</string>
+    <string name="tc_start_terminal_button">启动终端</string>
+    <string name="tc_start_terminal_host_button">启动无系统终端</string>
+    <string name="tc_host_no_desktop">无系统终端没有桌面。输入 exit 关闭它，然后再打开桌面。</string>
+    <string name="tc_host_busy">无系统终端正在运行。请先输入 exit 关闭它。</string>
+    <string name="tc_generic_no_desktop">此导入的系统没有 Tiny 桌面。请在终端标签页点击“启动容器”。</string>
 </resources>

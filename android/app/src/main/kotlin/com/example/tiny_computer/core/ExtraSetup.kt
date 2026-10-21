@@ -35,6 +35,8 @@ object ExtraSetup {
 
     /** Paket yang belum ada di kontainer saat ini; dibaca langsung dari rootfs, tanpa menjalankan apa pun. */
     fun missing(): List<String> {
+        // sistem hasil import (bukan rootfs Tiny) tidak punya desktop Tiny: tidak ada yang perlu dipasang
+        if (Containers.isGeneric(TinyEnv.currentContainer)) return emptyList()
         val root = TinyEnv.containerDir()
         val installed = installedPackages(root)
         return PACKAGES.filter { (pkg, probe) ->

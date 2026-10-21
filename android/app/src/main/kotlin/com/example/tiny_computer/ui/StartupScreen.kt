@@ -80,6 +80,7 @@ fun StartupOverlay(onClose: () -> Unit) {
     val active = reached.coerceAtMost(keys.lastIndex)
     val title = when {
         failed -> stringResource(R.string.tc_start_failed)
+        Startup.importing -> stringResource(R.string.tc_import_title)
         first -> stringResource(R.string.tc_start_title_first)
         else -> stringResource(R.string.tc_start_title)
     }
@@ -101,7 +102,7 @@ fun StartupOverlay(onClose: () -> Unit) {
                 modifier = Modifier.padding(top = 6.dp).widthIn(max = 520.dp))
             if (!failed) LoadSegments(keys.size, active, percent, Modifier.padding(top = 18.dp))
             if (failed) Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 22.dp)) {
-                DeckButton(stringResource(R.string.tc_start_retry)) { Startup.begin(ctx, Startup.openWhenReady) }
+                DeckButton(stringResource(R.string.tc_start_retry)) { Startup.retry(ctx) }
                 DeckButton(stringResource(R.string.tc_start_back), primary = false, onClick = onClose)
             }
         }
@@ -117,6 +118,7 @@ private fun stageDetail(key: String, percent: Int): String {
             "installingContainerSystem" -> R.string.tc_ui_installing_container_system
             "startingContainer" -> R.string.tc_start_container
             "installingExtras" -> R.string.tc_extras_installing
+            "importingSystem" -> R.string.tc_import_stage
             else -> R.string.tc_start_prepare
         },
     )

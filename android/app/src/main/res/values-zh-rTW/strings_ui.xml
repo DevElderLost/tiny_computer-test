@@ -378,4 +378,28 @@
     <string name="tc_fh_installed_size">安裝後大小</string>
     <string name="tc_fh_runtime">執行環境</string>
     <string name="tc_fh_website">網站</string>
+
+    <!-- Import data sistem + terminal tanpa sistem -->
+    <string name="tc_import_button">匯入</string>
+    <string name="tc_import_title">正在匯入系統</string>
+    <string name="tc_import_stage">正在解壓縮系統檔案…</string>
+    <string name="tc_import_confirm_title">匯入系統資料？</string>
+    <string name="tc_import_confirm_body">檔案：%1$s\n大小：%2$s\n\n壓縮檔將作為系統解壓縮。必須是 .tar.xz 或 .tar.zst 格式的 Linux arm64 根檔案系統（Debian、Ubuntu 等）。可能需要幾分鐘，並需要約三倍於檔案大小的可用儲存空間。請勿結束應用程式。</string>
+    <string name="tc_import_unsupported">不支援的檔案：%1$s。請選擇 .tar.xz 或 .tar.zst 壓縮檔。</string>
+    <string name="tc_import_done">系統已匯入：%1$s</string>
+    <string name="tc_import_no_space">可用儲存空間不足，無法解壓縮此壓縮檔。</string>
+    <string name="tc_import_cannot_open">無法開啟所選檔案。</string>
+    <string name="tc_import_read_failed">讀取壓縮檔失敗：%1$s</string>
+    <string name="tc_import_not_rootfs">此壓縮檔不是 Linux 根檔案系統。etc/ 和 usr/ 必須位於其最上層。</string>
+    <string name="tc_import_wrong_arch">已取消匯入：此系統為 %1$s 架構，不是 ARM64（aarch64）。</string>
+    <string name="tc_no_system_notice">尚未安裝系統資料。請在桌面頁點選「匯入」並選擇 Linux arm64 壓縮檔（.tar.xz 或 .tar.zst），或在終端機分頁使用「啟動終端機」。</string>
+    <string name="tc_home_no_system_title">沒有系統資料</string>
+    <string name="tc_home_no_system_hint">此 APK 不含系統資料。點選「匯入」並選擇 Linux arm64 根檔案系統（.tar.xz 或 .tar.zst：Debian trixie、Debian 12、Ubuntu 等）。也可以開啟終端機分頁，啟動不需系統的終端機。</string>
+    <string name="tc_status_host">終端機執行中</string>
+    <string name="tc_start_terminal_hint_nosystem">尚無系統資料。可像 Termux 一樣啟動不需系統的終端機來自行建立 Linux 系統，或在桌面頁匯入一個系統。</string>
+    <string name="tc_start_terminal_button">啟動終端機</string>
+    <string name="tc_start_terminal_host_button">啟動無系統終端機</string>
+    <string name="tc_host_no_desktop">無系統終端機沒有桌面。輸入 exit 關閉它，然後再開啟桌面。</string>
+    <string name="tc_host_busy">無系統終端機正在執行。請先輸入 exit 關閉它。</string>
+    <string name="tc_generic_no_desktop">此匯入的系統沒有 Tiny 桌面。請在終端機分頁點選「啟動容器」。</string>
 </resources>

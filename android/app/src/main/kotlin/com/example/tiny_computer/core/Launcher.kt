@@ -771,6 +771,26 @@ ${WsiWayland.probeForDesktop(sessionEnv)}
         TermSessions.forCurrent(ctx).writeLine(command)
     }
 
+    /**
+     * Terminal tanpa kontainer, seperti Termux: shell Android (`/system/bin/sh`) dengan PATH ke proot, tar, xz,
+     * gzip, dan busybox dari paket boot. Tidak membutuhkan data sistem, sehingga pengguna bisa menyiapkan rootfs
+     * Linux sendiri (`tiny_extract`, `tiny_enter`, lihat assets/tiny/host_terminal.sh). Hanya bagian dasar paket
+     * boot yang dipasang (tanpa patch). Dipanggil di thread latar oleh [Startup.beginHostTerminal].
+     */
+    fun startHostTerminal(ctx: Context) {
+        TinyEnv.currentContainer = Cfg.defaultContainer
+        Rootfs.linkApplib(ctx)
+        if (!Rootfs.bootstrapReady()) Rootfs.unpackBootstrap(ctx)
+        val data = TinyEnv.dataPath
+        val script = Rootfs.asset(ctx, "tiny/host_terminal.sh")
+            .replace("@DATA_PATH@", data)
+            .replace("@CONTAINER_INDEX@", TinyEnv.currentContainer.toString())
+            .replace("@GENERIC_BOOT@", TinyEnv.bootGeneric)
+        val file = File(data, "host_terminal.sh")
+        file.writeText(script)
+        TermSessions.forCurrent(ctx).writeLine(". ${shq(file.absolutePath)}")
+    }
+
     fun launchGuiBackend(ctx: Context) {
         val term = TermSessions.forCurrent(ctx)
         val replace = appSessionStarted
