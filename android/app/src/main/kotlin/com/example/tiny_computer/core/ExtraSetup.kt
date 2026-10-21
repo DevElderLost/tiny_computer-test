@@ -18,7 +18,10 @@ import java.nio.file.LinkOption
  *  - socat             : klien soket mikrofon (cadangan bila `tiny_virtual_mic` tidak ada)
  *  - pulseaudio-utils  : `pactl` / `pacat` untuk sink + source mikrofon virtual
  *  - libxkbregistry0   : pustaka registri keymap xkb
- * Keempatnya dipasang ONLINE lewat apt (butuh internet sekali, saat instalasi pertama). Hanya paket yang
+ *  - libasound2-plugins: plugin ALSA `pulse` (aplikasi ALSA/PortAudio seperti Audacity bisa merekam dari
+ *                        mikrofon virtual PulseAudio dan memutar lewat pulse)
+ *  - alsa-utils        : `aplay` / `arecord` / `alsamixer` untuk menguji suara
+ * Semuanya dipasang ONLINE lewat apt (butuh internet sekali, saat instalasi pertama). Hanya paket yang
  * BELUM terpasang yang dipasang, sehingga peluncuran berikutnya tidak butuh internet.
  */
 object ExtraSetup {
@@ -31,6 +34,8 @@ object ExtraSetup {
         "socat" to "usr/bin/socat",
         "pulseaudio-utils" to "usr/bin/pacat",
         "libxkbregistry0" to "usr/lib/aarch64-linux-gnu/libxkbregistry.so.0",
+        "libasound2-plugins" to "usr/lib/aarch64-linux-gnu/alsa-lib/libasound_module_pcm_pulse.so",
+        "alsa-utils" to "usr/bin/aplay",
     )
 
     /** Paket yang belum ada di kontainer saat ini; dibaca langsung dari rootfs, tanpa menjalankan apa pun. */

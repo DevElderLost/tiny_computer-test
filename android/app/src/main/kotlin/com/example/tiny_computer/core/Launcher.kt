@@ -398,26 +398,40 @@ pcm.tinyaudio {
     type plug
     slave.pcm "tinyaudio_raw"
 }
+# Keluaran lewat tinyaudio (AAudio langsung). Plugin tinyaudio hanya untuk output, jadi MASUKAN (rekam) diarahkan ke
+# PulseAudio (sumber mikrofon virtual AndroidMic; butuh paket libasound2-plugins, dipasang ExtraSetup).
+pcm.tinyaudio_duplex {
+    type asym
+    playback.pcm "tinyaudio"
+    capture.pcm "pulse"
+}
 pcm.!default {
     type plug
-    slave.pcm "tinyaudio_raw"
+    slave.pcm "tinyaudio_duplex"
 }
 """.trimStart()
 
     /** Menulis / menghapus /etc/asound.conf di rootfs kontainer saat ini (hanya berkas buatan kita yang disentuh). */
     private fun installGuestAudio(on: Boolean) {
         val f = File(TinyEnv.containerDir(), "etc/asound.conf")
+        // asound.conf bawaan rootfs lain (mis. ekspor Tiny Container master) disimpan di sini dan dikembalikan
+        // saat Direct audio dimatikan; tanpa ini ALSA tidak pernah diarahkan ke tinyaudio
+        val backup = File(f.parentFile, "asound.conf.pre-tiny")
         runCatching {
             val mine = f.isFile && f.readText().startsWith(ASOUND_MARK)
             if (on) {
                 if (f.exists() && !mine) {
-                    Log.w("Launcher", "asound.conf milik pengguna sudah ada; audio langsung tidak dipasang ke ALSA default")
-                    return
+                    if (backup.exists()) backup.delete()
+                    f.renameTo(backup)
+                    Log.i("Launcher", "asound.conf milik rootfs dicadangkan ke asound.conf.pre-tiny")
                 }
                 f.parentFile?.mkdirs()
                 val want = asoundConf()
                 if (!f.isFile || f.readText() != want) f.writeText(want)
-            } else if (mine) f.delete()
+            } else {
+                if (mine) f.delete()
+                if (!f.exists() && backup.isFile) backup.renameTo(f)
+            }
         }.onFailure { Log.w("Launcher", "asound.conf: ${it.message}") }
     }
 
