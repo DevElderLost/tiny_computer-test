@@ -128,6 +128,8 @@ fun TinyApp() {
 
     val openDesktop = { ctx.startActivity(Intent(ctx, DisplayActivity::class.java)) }
     val requestDesktop: () -> Unit = {
+        // sistem hasil import ekspor Tiny Container master yang dulu salah ditandai generic: perbaiki dulu
+        if (Startup.installed && Containers.isGeneric(Cfg.defaultContainer)) SystemImport.reclassify(Cfg.defaultContainer)
         when {
             // terminal tanpa sistem tidak punya desktop; sistem hasil import (bukan rootfs Tiny) hanya untuk terminal
             Startup.hostMode -> Startup.warn(ctx.getString(R.string.tc_host_no_desktop))
