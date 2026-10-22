@@ -482,13 +482,40 @@ exec "${D}@"
     }
 
     /**
+     * Isi rumah asli (`/home/tiny` di rootfs) sebagai bind per entri, dipakai saat bind seluruh rumah dibuang
+     * (tingkat 2-3). Tanpa ini sandbox hanya melihat folder sesi (Documents, Downloads, Music, Photos, Pictures,
+     * Public, Videos) dan semua folder lain di rumah (Desktop, folder buatan sendiri) hilang dari dialog berkas
+     * aplikasi Flathub. Entri tersembunyi (`.config`, `.local`, `.var`, ...) sengaja dilewati: data aplikasi
+     * sudah dipasang terpisah, dan bind di dalam pohon yang sama dengan runtime Flatpak (`~/.local/share/flatpak`)
+     * adalah pola yang membuat proot gagal menemukan `/usr/bin/env`. Bind yang sudah ada tidak ditimpa.
+     */
+    private fun homeChildren(plan: Plan, binds: List<Bind>): List<Bind> {
+        val home = plan.binds.firstOrNull { it.guest == "/home/tiny" } ?: return emptyList()
+        val kids = File(home.host).listFiles()?.sortedBy { it.name } ?: return emptyList()
+        val out = ArrayList<Bind>()
+        for (k in kids) {
+            if (k.name.startsWith(".") || !k.exists()) continue
+            val guest = "/home/tiny/" + k.name
+            if (binds.any { it.guest == guest } || binds.any { under(it.guest, guest) }) continue
+            out.add(Bind(k.path, guest))
+            if (out.size >= MAX_HOME_CHILDREN) break
+        }
+        return out
+    }
+
+    private const val MAX_HOME_CHILDREN = 64
+
+    /**
      * Tingkat 0 = rencana apa adanya; 1 = + `/usr/bin/env` langsung; 2 = + buang bind ekspor host dan bind seluruh
-     * rumah (`/home`, `/home/tiny`); 3 = hanya bind yang esensial + folder rumah sesi (Download, Documents, ...);
+     * rumah (`/home`, `/home/tiny`) lalu ganti dengan bind per entri isi rumah ([homeChildren]) bila [children];
+     * 3 = hanya bind yang esensial + folder rumah sesi (Download, Documents, ...) + entri rumah bila [children];
      * 4 = hanya bind yang esensial. Makin tinggi makin sedikit yang dibagikan ke aplikasi, tetapi makin kecil peluang
      * proot gagal. Log 2026-10-17 (Azahar, 89 bind): tingkat 0-2 gagal dan hanya tingkat esensial lolos, sehingga
      * `/home/tiny` kosong; bind seluruh rumah di atas folder sesi dibuang dulu, folder Android-nya dipertahankan.
+     * Log 2026-10-22 (VS Code): tingkat 2 lolos, tetapi dengan bind rumah dibuang, `/home/tiny` hanya berisi folder
+     * sesi dan folder lain tidak muncul; karena itu isi rumah dikembalikan per entri.
      */
-    private fun variant(plan: Plan, tier: Int): Plan {
+    private fun variant(plan: Plan, tier: Int, children: Boolean = true): Plan {
         if (tier == 0) return plan
         var binds: List<Bind> = plan.binds
         if (tier >= 2) binds = binds.filterNot { b -> b.guest == "/home" || b.guest == "/home/tiny" || HOST_EXPORTS.any { under(b.guest, it) } }
@@ -496,6 +523,7 @@ exec "${D}@"
             val keepHome = if (tier == 3) homeMounts().map { it.guest }.toSet() else emptySet()
             binds = binds.filter { b -> ESSENTIAL.any { under(b.guest, it) } || b.guest in keepHome }
         }
+        if (children && tier in 2..3) binds = binds + homeChildren(plan, binds)
         directEnv(binds)?.let { env -> binds = binds.filterNot { it.guest == "/usr/bin/env" } + env }
         return Plan(plan.root, binds, plan.cwd, plan.argv, plan.env, plan.notes)
     }
@@ -529,18 +557,25 @@ exec "${D}@"
         Log.w(TAG, "preflight", e); null
     }
 
-    /** Rencana pertama (mulai dari [startTier]) yang lolos [preflight]; bila semuanya gagal, rencana awal beserta diagnosisnya. */
+    /**
+     * Rencana pertama (mulai dari [startTier]) yang lolos [preflight]; bila semuanya gagal, rencana awal beserta
+     * diagnosisnya. Di tingkat 2-3 dicoba dulu dengan isi rumah per entri, lalu tanpa itu bila proot menolaknya.
+     */
     private fun startable(plan: Plan): Plan {
         val log = ArrayList<String>()
         for (tier in startTier..MAX_TIER) {
-            val candidate = variant(plan, tier)
-            val error = preflight(candidate)
-            if (error == null) {
-                startTier = tier
-                if (tier > 0 || log.isNotEmpty()) log.add("preflight: tingkat $tier lolos (${candidate.binds.size} bind)")
-                return Plan(candidate.root, candidate.binds, candidate.cwd, candidate.argv, candidate.env, plan.notes + log)
+            for (children in if (tier in 2..3) listOf(true, false) else listOf(false)) {
+                val candidate = variant(plan, tier, children)
+                val error = preflight(candidate)
+                if (error == null) {
+                    startTier = tier
+                    val label = if (tier in 2..3) (if (children) ", isi rumah per entri" else ", TANPA isi rumah") else ""
+                    if (tier > 0 || log.isNotEmpty()) log.add("preflight: tingkat $tier lolos (${candidate.binds.size} bind$label)")
+                    log.add("bind di /home akhir: " + candidate.binds.filter { under(it.guest, "/home") }.joinToString(" ") { it.guest }.ifEmpty { "(tidak ada)" })
+                    return Plan(candidate.root, candidate.binds, candidate.cwd, candidate.argv, candidate.env, plan.notes + log)
+                }
+                log.add("preflight tingkat $tier${if (tier in 2..3) (if (children) " (+isi rumah)" else " (tanpa isi rumah)") else ""} gagal: $error")
             }
-            log.add("preflight tingkat $tier gagal: $error")
         }
         log.add("preflight: semua tingkat gagal; memakai rencana awal. bind: " + plan.binds.joinToString(" ") { it.spec }.take(3000))
         return Plan(plan.root, plan.binds, plan.cwd, plan.argv, plan.env, plan.notes + log)
