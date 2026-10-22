@@ -565,4 +565,7 @@
     <string name="tc_host_no_desktop">The terminal without a system has no desktop. Type exit to close it, then open the desktop.</string>
     <string name="tc_host_busy">The terminal without a system is running. Type exit to close it first.</string>
     <string name="tc_generic_no_desktop">This imported system has no Tiny desktop. Use the Terminal tab and tap Start container.</string>
+    <string name="tc_drawer_sound">Sound</string>
+    <string name="tc_sound_title">Sound</string>
+    <string name="tc_sound_mic_need_pulse">The microphone only works in PulseAudio mode. Turn off Direct audio in Settings > Audio to use it.</string>
 </resources>

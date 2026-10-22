@@ -402,4 +402,7 @@
     <string name="tc_host_no_desktop">无系统终端没有桌面。输入 exit 关闭它，然后再打开桌面。</string>
     <string name="tc_host_busy">无系统终端正在运行。请先输入 exit 关闭它。</string>
     <string name="tc_generic_no_desktop">此导入的系统没有 Tiny 桌面。请在终端标签页点击“启动容器”。</string>
+    <string name="tc_drawer_sound">声音</string>
+    <string name="tc_sound_title">声音</string>
+    <string name="tc_sound_mic_need_pulse">麦克风仅在 PulseAudio 模式下可用。请在“设置 > 音频”中关闭直连音频后再使用。</string>
 </resources>

@@ -37,6 +37,7 @@ import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Keyboard
+import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.Mouse
 import androidx.compose.material.icons.outlined.PowerSettingsNew
 import androidx.compose.material.icons.outlined.Settings
@@ -72,6 +73,7 @@ import com.example.tiny_computer.R
 import com.example.tiny_computer.controller.ControllerEditorActivity
 import com.example.tiny_computer.core.Cfg
 import com.example.tiny_computer.core.ReshadeShaders
+import com.example.tiny_computer.core.SoundControl
 import com.droiddeck.launcher.input.ControllerPrefs
 import kotlinx.coroutines.delay
 import androidx.compose.ui.platform.LocalContext
@@ -79,6 +81,7 @@ import com.example.tiny_computer.ui.DeckChoiceRow
 import com.example.tiny_computer.ui.DeckGroup
 import com.example.tiny_computer.ui.DeckNote
 import com.example.tiny_computer.ui.DeckSliderRow
+import com.example.tiny_computer.ui.DeckToggleRow
 import com.example.tiny_computer.ui.DeckToggle
 import com.example.tiny_computer.ui.LocalPalette
 import kotlin.math.roundToInt
@@ -172,6 +175,7 @@ fun SessionDrawer(
                         DrawerPage.POINTER -> PointerPage(state)
                         DrawerPage.INPUT -> InputPage(state, onPadOverlayChange)
                         DrawerPage.EFFECT -> EffectPage()
+                        DrawerPage.SOUND -> SoundPage()
                         DrawerPage.SESSION -> SessionPage(
                             onBack = { state.menuOpen = false; onBackToTerminal() },
                         )
@@ -208,6 +212,7 @@ private enum class DrawerPage(val title: Int, val icon: ImageVector) {
     POINTER(R.string.tc_drawer_pointer, Icons.Outlined.Mouse),
     INPUT(R.string.tc_drawer_input, Icons.Outlined.Keyboard),
     EFFECT(R.string.tc_drawer_effect, Icons.Outlined.AutoAwesome),
+    SOUND(R.string.tc_drawer_sound, Icons.Outlined.Mic),
     SESSION(R.string.tc_drawer_session, Icons.Outlined.Settings),
 }
 
@@ -325,6 +330,32 @@ private fun InputPage(state: DisplayUiState, onPadOverlayChange: (Boolean) -> Un
                 ctx.startActivity(Intent(ctx, ControllerEditorActivity::class.java))
             })
         }
+    }
+}
+
+/**
+ * Tab Sound: mikrofon dan monitor realtime-nya. Keadaan dan aturannya ada di [SoundControl] (sama dengan
+ * Pengaturan > Audio). Mikrofon hanya bisa hidup pada mode PulseAudio; pada mode Direct saklarnya terkunci.
+ * Mode keluaran suara sendiri hanya diganti dari Pengaturan > Audio.
+ */
+@Composable
+private fun SoundPage() {
+    val ctx = LocalContext.current
+    LaunchedEffect(SoundControl.micOn) { if (SoundControl.micOn) SoundControl.watchMic(ctx) }
+    DeckGroup(stringResource(R.string.tc_sound_title)) {
+        DeckToggleRow(
+            stringResource(R.string.tc_ui_start_streaming),
+            if (SoundControl.micAllowed) null else stringResource(R.string.tc_sound_mic_need_pulse),
+            SoundControl.micOn,
+            enabled = SoundControl.micAllowed,
+        ) { on -> if (on) SoundControl.startMic(ctx) else SoundControl.stopMic(ctx) }
+        DeckToggleRow(
+            stringResource(R.string.tc_ui_mic_monitoring),
+            if (SoundControl.micOn) null else stringResource(R.string.tc_ui_mic_monitoring_hint),
+            SoundControl.monitorOn && SoundControl.micOn,
+            enabled = SoundControl.micOn,
+        ) { on -> SoundControl.setMonitor(ctx, on) }
+        if (!SoundControl.micAllowed) DeckNote(stringResource(R.string.tc_sound_mic_need_pulse))
     }
 }
 
