@@ -398,12 +398,24 @@ pcm.tinyaudio {
     type plug
     slave.pcm "tinyaudio_raw"
 }
-# Keluaran lewat tinyaudio (AAudio langsung). Plugin tinyaudio hanya untuk output, jadi MASUKAN (rekam) diarahkan ke
-# PulseAudio (sumber mikrofon virtual AndroidMic; butuh paket libasound2-plugins, dipasang ExtraSetup).
+# Keluaran lewat tinyaudio (AAudio langsung). Plugin tinyaudio hanya untuk output.
+# MASUKAN bawaan (default) sengaja berupa senyap yang selalu siap (plugin null), BUKAN pulse: aplikasi PortAudio seperti
+# Audacity membuka stream duplex (output + input) walau hanya memutar, dan callback-nya menunggu data input di setiap
+# siklus. Sumber default pulse di mode direct adalah monitor sink null yang di-suspend (suspend-on-idle) sehingga tidak
+# pernah mengirim data -> stream "berjalan" tetapi playhead diam dan tidak ada suara. Untuk merekam dari mikrofon
+# virtual pilih perangkat "pulse" (atau "tinymic" di bawah) secara eksplisit di aplikasinya.
+pcm.tinyaudio_silent_in {
+    type plug
+    slave.pcm "null"
+}
+pcm.tinymic {
+    type plug
+    slave.pcm "pulse"
+}
 pcm.tinyaudio_duplex {
     type asym
     playback.pcm "tinyaudio"
-    capture.pcm "pulse"
+    capture.pcm "tinyaudio_silent_in"
 }
 pcm.!default {
     type plug
@@ -433,6 +445,21 @@ pcm.!default {
                 if (!f.exists() && backup.isFile) backup.renameTo(f)
             }
         }.onFailure { Log.w("Launcher", "asound.conf: ${it.message}") }
+        // ~/.asoundrc buatan kita (ditulis FlatpakWayland.directAudio) dibaca SEMUA aplikasi lewat $HOME dan menimpa
+        // /etc/asound.conf. Tanpa disamakan di sini: (a) Direct audio dimatikan -> berkas tertinggal dan ALSA default
+        // tetap menunjuk tinyaudio padahal server native sudah berhenti; (b) isi lama (mis. input pulse) tetap dipakai
+        // walau asoundConf() sudah diperbarui. Berkas milik pengguna (tanpa ASOUND_MARK) tidak pernah disentuh.
+        runCatching {
+            val rc = FlatpakWayland.asoundrcFile()
+            if (rc.isFile && rc.readText().startsWith(ASOUND_MARK)) {
+                if (!on) {
+                    rc.delete()
+                } else {
+                    val want = asoundConf()
+                    if (rc.readText() != want) { rc.writeText(want); rc.setReadable(true, false) }
+                }
+            }
+        }.onFailure { Log.w("Launcher", "~/.asoundrc: ${it.message}") }
     }
 
     /**
