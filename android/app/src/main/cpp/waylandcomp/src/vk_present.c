@@ -120,6 +120,45 @@ static VkResult timed_wait(VkFence fence, uint64_t timeout) {
     return r;
 }
 
+/* g_fence and g_cmds[0] are shared by the swapchain frame and every one-off submit (layer blit,
+ * effects copy, cursor read-back). Those used to wait 1 s and give up with the submit still in
+ * flight (a display release fence imported as a GPU wait that SurfaceFlinger is slow to signal does
+ * that); the next caller then reset the fence and the command buffer under the GPU - undefined
+ * behaviour that shows as garbage, rapid flicker and finally a black screen. A timed-out submit is
+ * now remembered and nothing touches g_fence / g_cmds[0] again until it has finished. */
+static int g_fence_inflight;
+static void device_lost(const char *where);
+
+static VkResult wait_gpu_fence(const char *what) {
+    VkResult r = timed_wait(g_fence, 1000000000ULL);
+    if (r == VK_TIMEOUT) {
+        static int64_t said_ns;
+        const int64_t now = perf_now();
+        g_fence_inflight = 1;
+        if (!said_ns || now - said_ns > 10000000000LL) {
+            said_ns = now;
+            droiddeck_log("gpu", "%s: the GPU has not finished after 1 s (a display release fence that has not "
+                       "signalled?): frames are skipped until it does", what);
+        }
+    } else {
+        g_fence_inflight = 0;
+    }
+    return r;
+}
+
+/* 1 = g_fence and g_cmds[0] are free to reuse; 0 = a submit that timed out is still running. */
+static int gpu_idle(void) {
+    if (!g_fence_inflight) return 1;
+    VkResult r = g_vk.GetFenceStatus(g_dev, g_fence);
+    if (r == VK_SUCCESS) {
+        g_fence_inflight = 0;
+        droiddeck_log("gpu", "the GPU work that timed out has finished: presenting again");
+        return 1;
+    }
+    if (r == VK_ERROR_DEVICE_LOST) { g_fence_inflight = 0; device_lost("fence status"); }
+    return 0;
+}
+
 /* The scene image (effects path only): every draw composited 1:1 at scene size, the input of the
  * screen-effect chain (effects_chain.c) - and of frame generation once that lands. Recreated on a
  * scene size change; frames are fenced, so never while the GPU reads it. */
@@ -233,8 +272,11 @@ static void reset_sync(void) {
     }
 }
 
+static int g_acq_stalls; /* consecutive acquires that returned no image (see acquire_image) */
+
 static void destroy_swapchain(void) {
     g_base_black = 0; /* a new swapchain starts with nothing on it */
+    g_acq_stalls = 0;
     if (g_dev_state != 1) return;
     g_vk.DeviceWaitIdle(g_dev);
     reset_sync();
@@ -554,6 +596,12 @@ int vkp_ready(void) { return dev_init(); }
 
 static int swap_init_locked(void);
 
+#define SWAP_STORM_N 6
+static int64_t g_swap_born[SWAP_STORM_N]; /* when the last SWAP_STORM_N swapchains were attempted */
+static int g_swap_born_i;
+static unsigned g_swap_builds;            /* swapchains built this session (the health line) */
+unsigned vkp_swapchain_builds(void) { return g_swap_builds; }
+
 static int swap_init(void) {
     struct timespec ts;
     int64_t now;
@@ -561,9 +609,25 @@ static int swap_init(void) {
     clock_gettime(CLOCK_MONOTONIC, &ts);
     now = (int64_t)ts.tv_sec * 1000000000LL + ts.tv_nsec;
     if (now < g_swap_retry_at_ns) return -1;
+    /* A swapchain that is torn down and rebuilt every frame (OUT_OF_DATE / SURFACE_LOST answered by a
+     * rebuild that is answered the same way) is a flicker storm: each new swapchain starts with a
+     * black frame, and every rebuild is a DeviceWaitIdle plus a new surface for SurfaceFlinger to
+     * chew on. SWAP_STORM_N builds inside 2 s back off for half a second instead. */
+    {
+        const int64_t oldest = g_swap_born[g_swap_born_i];
+        if (oldest && now - oldest < 2000000000LL) {
+            memset(g_swap_born, 0, sizeof(g_swap_born));
+            g_swap_retry_at_ns = now + 500000000LL;
+            droiddeck_log("gpu", "screen swapchain rebuilt %d times in under 2 s: backing off for 0.5 s", SWAP_STORM_N);
+            return -1;
+        }
+        g_swap_born[g_swap_born_i] = now;
+        g_swap_born_i = (g_swap_born_i + 1) % SWAP_STORM_N;
+    }
     if (swap_init_locked() == 0) {
         g_swap_retry_at_ns = 0;
         g_swap_fail_logged = 0;
+        g_swap_builds++;
         return 0;
     }
     destroy_swapchain();
@@ -1095,6 +1159,19 @@ void vkp_image_upload_shm(struct vkp_image *img, const void *data, int stride) {
                (const uint8_t *)data + (size_t)y * stride, rowbytes);
 }
 
+void vkp_image_upload_shm_rect(struct vkp_image *img, const void *data, int stride, int x, int y, int w, int h) {
+    if (!img || !img->map || !data) return;
+    if (x < 0) { w += x; x = 0; }
+    if (y < 0) { h += y; y = 0; }
+    if (x + w > img->w) w = img->w - x;
+    if (y + h > img->h) h = img->h - y;
+    if (stride > 0 && (int64_t)(x + w) * 4 > stride) w = stride / 4 - x; /* never read past a row */
+    if (w <= 0 || h <= 0) return;
+    for (int r = y; r < y + h; r++)
+        memcpy((uint8_t *)img->map + img->offset + (size_t)r * img->row_pitch + (size_t)x * 4,
+               (const uint8_t *)data + (size_t)r * stride + (size_t)x * 4, (size_t)w * 4);
+}
+
 int vkp_image_width(const struct vkp_image *img) { return img ? img->w : 0; }
 int vkp_image_height(const struct vkp_image *img) { return img ? img->h : 0; }
 
@@ -1397,7 +1474,7 @@ static int acquire_image(int k, int first, uint32_t *img, VkResult *ar_out) {
         const int64_t t_acq = perf_now();
         VkResult ar = g_vk.AcquireNextImageKHR(g_dev, g_swapchain, 1000000000ULL, g_acqs[k], VK_NULL_HANDLE, img);
         perf_add(&g_perf.acquire_ns, &g_perf.acquire_max_ns, &g_perf.acquires, perf_now() - t_acq);
-        if (ar == VK_SUCCESS || ar == VK_SUBOPTIMAL_KHR) { *ar_out = ar; return 0; }
+        if (ar == VK_SUCCESS || ar == VK_SUBOPTIMAL_KHR) { g_acq_stalls = 0; *ar_out = ar; return 0; }
         if (ar == VK_ERROR_DEVICE_LOST) { device_lost("acquire"); return -1; }
         if (ar == VK_ERROR_OUT_OF_DATE_KHR || ar == VK_ERROR_SURFACE_LOST_KHR) {
             droiddeck_log("gpu", "screen surface %s on acquire: rebuilding the swapchain", vk_result_name(ar));
@@ -1406,7 +1483,16 @@ static int acquire_image(int k, int first, uint32_t *img, VkResult *ar_out) {
             return -1;
         }
         droiddeck_log("error", "present: acquire %d failed (%s %d)", k, vk_result_name(ar), (int)ar);
-        if (ar == VK_TIMEOUT || ar == VK_NOT_READY) return -1;
+        if (ar == VK_TIMEOUT || ar == VK_NOT_READY) {
+            /* A swapchain whose images never come back (the surface was re-parented, a display mode
+             * switch dropped its buffers) answered every frame with a timeout and was never rebuilt:
+             * a black screen for good. Two in a row and it is rebuilt. */
+            if (first && ++g_acq_stalls >= 2) {
+                droiddeck_log("gpu", "screen swapchain gave no image for %d acquires in a row: rebuilding it", g_acq_stalls);
+                destroy_swapchain();
+            }
+            return -1;
+        }
         destroy_swapchain(); /* anything else: start over next frame */
         return -1;
     }
@@ -1534,6 +1620,7 @@ static int render_impl(int scene_w, int scene_h, const struct vkp_draw *draws, i
     check_surface_changed(); /* a rotation or a fold the rebind did not cover: rebuild at the new size */
     if (g_dev_state == -2) return -1;
     if (dev_init() != 0 || !g_window || scene_w <= 0 || scene_h <= 0) return -1;
+    if (!gpu_idle()) return -1; /* an earlier submit still owns g_fence / g_cmds[0] */
 
     /* Frame generation queues several presents per scene frame and needs swapchain images for
      * them: rebuild when that changes (armed, disarmed, another multiplier). */
@@ -1907,6 +1994,7 @@ int vkp_blit_image(struct vkp_image *src, struct vkp_image *dst, int wait_fd) {
         if (wait_fd >= 0) close(wait_fd);
         return -1;
     }
+    if (!gpu_idle()) { if (wait_fd >= 0) close(wait_fd); return -1; }
     const int gpu_wait = take_wait_fd(wait_fd); /* the display's release of dst, before the copy writes it */
     if (gpu_wait < 0) return -1;
     VkImageSubresourceRange range = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
@@ -1962,7 +2050,7 @@ int vkp_blit_image(struct vkp_image *src, struct vkp_image *dst, int wait_fd) {
         else LOGE("layer: blit submit failed (%d)", (int)qr);
         return -1;
     }
-    VkResult fr = timed_wait(g_fence, 1000000000ULL);
+    VkResult fr = wait_gpu_fence("layer blit");
     if (fr == VK_ERROR_DEVICE_LOST) { device_lost("layer blit"); return -1; }
     if (fr != VK_SUCCESS) { LOGE("layer: blit fence wait -> %s", vk_result_name(fr)); return -1; }
     return 0;
@@ -1977,7 +2065,7 @@ static struct vkp_image *g_rb;  /* the readback image, kept for the next shape *
 
 int vkp_image_readback(struct vkp_image *src, uint32_t *out, int max_px) {
     if (!src || !out || src->w <= 0 || src->h <= 0 || src->w * src->h > max_px ||
-        g_dev_state == -2 || dev_init() != 0)
+        g_dev_state == -2 || dev_init() != 0 || !gpu_idle())
         return -1;
     if (g_rb && (g_rb->w != src->w || g_rb->h != src->h)) { vkp_image_destroy(g_rb); g_rb = NULL; }
     if (!g_rb) {
@@ -2057,7 +2145,7 @@ int vkp_image_readback(struct vkp_image *src, uint32_t *out, int max_px) {
         if (qr == VK_ERROR_DEVICE_LOST) device_lost("cursor readback");
         return -1;
     }
-    VkResult fr = timed_wait(g_fence, 1000000000ULL);
+    VkResult fr = wait_gpu_fence("cursor readback");
     if (fr == VK_ERROR_DEVICE_LOST) { device_lost("cursor readback"); return -1; }
     if (fr != VK_SUCCESS) return -1;
     for (int y = 0; y < src->h; y++)
@@ -2115,6 +2203,7 @@ static int pass_begin_impl(int scene_w, int scene_h, const struct vkp_draw *draw
                            const struct vkp_hdr_frame *hf, int *rw, int *rh) {
     if (g_pass.active) vkp_pass_abort();
     if (g_dev_state == -2 || dev_init() != 0 || !g_window || scene_w <= 0 || scene_h <= 0) return -1;
+    if (!gpu_idle()) return -1; /* an earlier submit still owns g_fence / g_cmds[0] */
     check_surface_changed(); /* as in render_impl: the effects pass maps onto the output's size */
     if (!g_swapchain && swap_init() != 0) return -1; /* the mapping is in output pixels */
     update_map(scene_w, scene_h);
@@ -2258,7 +2347,7 @@ int vkp_pass_copy_to(struct vkp_image *dst, int wait_fd) {
         else LOGE("layer: effects pass submit failed (%d)", (int)qr);
         return -1;
     }
-    VkResult fr = timed_wait(g_fence, 1000000000ULL);
+    VkResult fr = wait_gpu_fence("layer pass");
     if (fr == VK_ERROR_DEVICE_LOST) { device_lost("layer pass"); return -1; }
     if (fr != VK_SUCCESS) { LOGE("layer: effects pass fence wait -> %s", vk_result_name(fr)); return -1; }
     return 0;

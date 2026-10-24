@@ -68,6 +68,10 @@ int vkp_image_is_dmabuf(const struct vkp_image *img);
 // Create a host-visible image and copy BGRA/XRGB8888 pixels into it. NULL on failure.
 struct vkp_image *vkp_image_create_shm(int w, int h);
 void vkp_image_upload_shm(struct vkp_image *img, const void *data, int stride);
+/* Only the rectangle x,y,w,h (pixels) of a wl_shm buffer: what the client damaged. */
+void vkp_image_upload_shm_rect(struct vkp_image *img, const void *data, int stride, int x, int y, int w, int h);
+/* Screen swapchains built this session (the 60 s health line). */
+unsigned vkp_swapchain_builds(void);
 
 int vkp_image_width(const struct vkp_image *img);
 int vkp_image_height(const struct vkp_image *img);

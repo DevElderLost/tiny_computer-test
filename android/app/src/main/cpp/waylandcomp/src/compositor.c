@@ -32,6 +32,7 @@
 #include <errno.h>
 #include <poll.h>
 #include <sys/timerfd.h>
+#include <dirent.h>
 #include <sys/syscall.h>
 #include <sys/sysmacros.h>
 #include <android/log.h>
@@ -263,6 +264,9 @@ struct surface {
 
     /* Current content. */
     struct vkp_image *shm_img;              /* our copy of the last wl_shm buffer */
+    int dmg_have, dmg_full;                 /* damage sent since the last commit: a rectangle / "cannot be mapped" */
+    int dmg_x0, dmg_y0, dmg_x1, dmg_y1;     /* its union, in buffer pixels (valid while dmg_have) */
+    int buf_transform;                      /* wl_surface.set_buffer_transform, as last set */
     struct wl_resource *dmabuf;             /* current dmabuf wl_buffer (NULL once the client destroyed it) */
     struct dmabuf_buffer *dmabuf_buf;       /* its imported image, kept until replaced or the surface goes */
     struct wl_listener dmabuf_destroy;
@@ -804,10 +808,20 @@ static void take_shm(struct surface *s, struct wl_shm_buffer *shm, struct wl_res
         vkp_image_destroy(s->shm_img);
         s->shm_img = NULL;
     }
+    /* Our copy still holds the previous buffer's pixels, and a client's damage is relative to exactly
+     * that, so only the damaged rectangle needs copying. A desktop (Xwayland over wl_shm) commits
+     * constantly and used to have the whole frame - 8 MB at 1080p - copied row by row every time. A new
+     * image, or damage that cannot be mapped to buffer pixels (a scaled, cropped or transformed
+     * surface), or no damage at all: the whole buffer, as before. */
+    const int partial = s->shm_img && s->dmg_have && !s->dmg_full;
     if (!s->shm_img) s->shm_img = vkp_image_create_shm(w, h);
     if (s->shm_img) {
         wl_shm_buffer_begin_access(shm);
-        vkp_image_upload_shm(s->shm_img, wl_shm_buffer_get_data(shm), stride);
+        if (partial)
+            vkp_image_upload_shm_rect(s->shm_img, wl_shm_buffer_get_data(shm), stride, s->dmg_x0, s->dmg_y0,
+                                      s->dmg_x1 - s->dmg_x0, s->dmg_y1 - s->dmg_y0);
+        else
+            vkp_image_upload_shm(s->shm_img, wl_shm_buffer_get_data(shm), stride);
         wl_shm_buffer_end_access(shm);
     }
     wl_buffer_send_release(buffer);
@@ -989,8 +1003,39 @@ static void surface_attach(struct wl_client *c, struct wl_resource *r,
         wl_resource_add_destroy_listener(buffer, &s->pending_buffer_destroy);
     }
 }
+/* Add a rectangle (buffer pixels) to the damage this commit carries; take_shm() copies only that. */
+static void surface_note_damage(struct surface *s, int64_t x, int64_t y, int64_t w, int64_t h) {
+    if (s->dmg_full || w <= 0 || h <= 0) return;
+    int64_t x1 = x + w, y1 = y + h;
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+    if (x1 > INT32_MAX) x1 = INT32_MAX;
+    if (y1 > INT32_MAX) y1 = INT32_MAX;
+    if (x1 <= x || y1 <= y) return;
+    if (!s->dmg_have) {
+        s->dmg_x0 = (int)x; s->dmg_y0 = (int)y; s->dmg_x1 = (int)x1; s->dmg_y1 = (int)y1;
+        s->dmg_have = 1;
+        return;
+    }
+    if (x < s->dmg_x0) s->dmg_x0 = (int)x;
+    if (y < s->dmg_y0) s->dmg_y0 = (int)y;
+    if (x1 > s->dmg_x1) s->dmg_x1 = (int)x1;
+    if (y1 > s->dmg_y1) s->dmg_y1 = (int)y1;
+}
+
+/* wl_surface.damage is in surface coordinates: the same pixels as the buffer's only while nothing
+ * scales, crops or rotates between the two. Otherwise the commit is uploaded whole. */
 static void surface_damage(struct wl_client *c, struct wl_resource *r,
-                           int32_t x, int32_t y, int32_t w, int32_t h) {}
+                           int32_t x, int32_t y, int32_t w, int32_t h) {
+    struct surface *s = wl_resource_get_user_data(r);
+    if (!s) return;
+    if (s->buf_scale > 1 || s->pending_buf_scale > 1 || s->buf_transform != 0 ||
+        s->src_set || s->pending_src_set || s->dst_set || s->pending_dst_set) {
+        s->dmg_full = 1;
+        return;
+    }
+    surface_note_damage(s, x, y, w, h);
+}
 static void frame_callback_destroy(struct wl_resource *r) {
     wl_list_remove(wl_resource_get_link(r));
 }
@@ -1246,6 +1291,8 @@ static void surface_commit(struct wl_client *c, struct wl_resource *r) {
         }
     }
 
+    s->dmg_have = s->dmg_full = 0; /* damage is per commit */
+
     /* Subsurface positions are applied when the parent commits. */
     wl_list_for_each(child, &s->children, child_link) {
         if (child->sub_pending) {
@@ -1273,7 +1320,10 @@ static void surface_commit(struct wl_client *c, struct wl_resource *r) {
     if (s->role == ROLE_LAYER) layer_surface_commit(s);
     schedule_render();
 }
-static void surface_set_buffer_transform(struct wl_client *c, struct wl_resource *r, int32_t t) {}
+static void surface_set_buffer_transform(struct wl_client *c, struct wl_resource *r, int32_t t) {
+    struct surface *s = wl_resource_get_user_data(r);
+    if (s) s->buf_transform = t; /* not applied by this compositor; only keeps surface_damage() honest */
+}
 static void surface_set_buffer_scale(struct wl_client *c, struct wl_resource *r, int32_t scale) {
     struct surface *s = wl_resource_get_user_data(r);
     if (!s) return;
@@ -1284,7 +1334,10 @@ static void surface_set_buffer_scale(struct wl_client *c, struct wl_resource *r,
     s->pending_buf_scale = scale;  /* double-buffered: applied on commit */
 }
 static void surface_damage_buffer(struct wl_client *c, struct wl_resource *r,
-                                  int32_t x, int32_t y, int32_t w, int32_t h) {}
+                                  int32_t x, int32_t y, int32_t w, int32_t h) {
+    struct surface *s = wl_resource_get_user_data(r);
+    if (s) surface_note_damage(s, x, y, w, h); /* already in buffer pixels */
+}
 static void surface_offset(struct wl_client *c, struct wl_resource *r, int32_t x, int32_t y) {}
 
 static const struct wl_surface_interface surface_impl = {
@@ -4245,6 +4298,11 @@ static void close_all_toplevels(void) {
 /* wl event-loop callback: drain queued input events written by the Android UI thread. */
 static int on_input_readable(int fd, uint32_t mask, void *data) {
     struct input_msg m;
+    /* Choreographer ticks are coalesced: after a stall (a swapchain rebuild, a slow present) the pipe holds
+     * a tick for every refresh that went by, and handling each one drew the scene again and again in a
+     * burst. Only the newest matters; it is handled once, after the input that arrived with it. */
+    int have_tick = 0;
+    int64_t last_tick = 0;
     while (read(fd, &m, sizeof(m)) == (ssize_t)sizeof(m)) {
         switch (m.type) {
         case 1: deliver_key(&m); break;
@@ -4252,7 +4310,7 @@ static int on_input_readable(int fd, uint32_t mask, void *data) {
         case 3: pointer_button(m.p1, m.p2); break;               /* button at pointer */
         case 4: scroll_event(m.p1); break;
         case 9: scroll_smooth(m.p1, m.p2); break;                /* smooth wheel: axis, 1/120 notch */
-        case 5: on_vsync(((int64_t)m.p1 << 32) | (uint32_t)m.p2); break;
+        case 5: last_tick = ((int64_t)m.p1 << 32) | (uint32_t)m.p2; have_tick = 1; break;
         case 6: pointer_delta(m.p1 / 256.0, m.p2 / 256.0); break; /* relative motion, 1/256 px */
         case 7: deliver_touch(&m); break;
         case 8: output_resized(); break;
@@ -4260,6 +4318,7 @@ static int on_input_readable(int fd, uint32_t mask, void *data) {
         default: deliver_pointer(&m); break;
         }
     }
+    if (have_tick) on_vsync(last_tick);
     return 0;
 }
 
@@ -4358,9 +4417,37 @@ static struct wl_event_source *g_stats_timer;
 /* The last window's zero-copy count, kept for the app (WaylandCompositor.nativeZeroCopyFrames). */
 volatile unsigned g_zero_copy_last;
 
+/* One line a minute for a desktop left running for hours: open file descriptors, resident memory and the
+ * object counts that would grow if something leaked (surfaces, queued buffer releases, swapchains built).
+ * A number that climbs between lines is the leak. */
+static void log_health(void) {
+    int fds = 0, surfaces = 0, releases = 0;
+    long rss_pages = 0, total_pages = 0;
+    DIR *d = opendir("/proc/self/fd");
+    if (d) {
+        while (readdir(d)) fds++;
+        closedir(d);
+        fds -= 3; /* ".", ".." and the descriptor opendir itself holds */
+    }
+    FILE *f = fopen("/proc/self/statm", "r");
+    if (f) {
+        if (fscanf(f, "%ld %ld", &total_pages, &rss_pages) != 2) rss_pages = 0;
+        fclose(f);
+    }
+    struct surface *s;
+    struct pending_release *pr;
+    wl_list_for_each(s, &g_surfaces, link) surfaces++;
+    wl_list_for_each(pr, &g_pending_releases, link) releases++;
+    droiddeck_log("health", "%d open fds | %.0f MB resident | %d surfaces | %d buffer releases queued | %u swapchains built",
+               fds, (double)rss_pages * (double)sysconf(_SC_PAGESIZE) / 1048576.0, surfaces, releases,
+               vkp_swapchain_builds());
+}
+
 static int on_stats_timer(void *data) {
     int windows = 0;
     struct surface *s;
+    static unsigned health_tick;
+    if (++health_tick % 6 == 0) log_health();
     wl_list_for_each(s, &g_toplevels, toplevel_link) windows++;
     unsigned zero_copy = ahb_swapchain_stats_take();
     unsigned layer_frames = sc_layer_frames_take();
