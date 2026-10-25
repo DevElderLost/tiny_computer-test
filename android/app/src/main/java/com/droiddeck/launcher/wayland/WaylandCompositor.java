@@ -484,6 +484,13 @@ public final class WaylandCompositor {
      *  back to the game, like the X11 IdleNotify pacer, so the game itself slows to the cap. */
     public static native void nativeSetFpsLimit(int fps);
 
+    /** Present mode of the screen swapchain: 0 auto (FIFO), 1 FIFO, 2 FIFO relaxed, 3 mailbox, 4 immediate.
+     *  A mode the surface does not offer falls back to FIFO; takes effect by rebuilding the swapchain. */
+    public static native void nativeSetPresentMode(int mode);
+
+    /** Images of the screen swapchain: 0 auto, 2 double, 3 triple, 4 quad buffering. Rebuilds the swapchain. */
+    public static native void nativeSetBuffering(int buffers);
+
     /** KGSL power control off (true: the GPU held at its top clock) or back on. Device-wide and
      *  outlives the process; see {@code GpuClockPin}. A no-op without /dev/kgsl-3d0. */
     public static native void nativeSetGpuTurbo(boolean on);

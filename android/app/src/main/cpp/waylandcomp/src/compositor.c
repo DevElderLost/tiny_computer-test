@@ -2979,15 +2979,19 @@ static int on_fallback_timer(void *data) {
 static void schedule_render(void) {
     g_dirty = 1;
     if (!g_display) return;
-    /* With vsync ticks flowing the next tick renders; otherwise render on a timer. */
-    if (g_last_vsync_ns && now_ns() - g_last_vsync_ns < 100000000LL) return;
+    /* With vsync ticks flowing the next tick renders; otherwise render on a timer. A swapchain that does not wait
+     * for the vblank (mailbox, immediate) renders as soon as a client committed, without waiting for the next tick:
+     * lower latency, and mailbox keeps showing only the newest frame. Not with frame generation: its presents are
+     * spaced onto the vblanks. */
+    const int uncapped = vkp_present_uncapped() && !vkp_framegen_active();
+    if (!uncapped && g_last_vsync_ns && now_ns() - g_last_vsync_ns < 100000000LL) return;
     if (g_fallback_armed) return;
     if (!g_fallback_timer)
         g_fallback_timer = wl_event_loop_add_timer(wl_display_get_event_loop(g_display),
                                                    on_fallback_timer, NULL);
     if (!g_fallback_timer) return;
     g_fallback_armed = 1;
-    wl_event_source_timer_update(g_fallback_timer, 8);
+    wl_event_source_timer_update(g_fallback_timer, uncapped ? 1 : 8);
 }
 
 /* With frame generation on, every scene is the engine's next source frame, so one drawn for

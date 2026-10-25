@@ -23,6 +23,7 @@ import com.example.tiny_computer.core.LaunchLog
 import com.example.tiny_computer.core.Launcher
 import com.example.tiny_computer.core.SoundControl
 import com.example.tiny_computer.core.TinyEnv
+import com.example.tiny_computer.display.ScreenFx
 
 // (lebar, tinggi); 0 x 0 = otomatis
 private val RESOLUTIONS = listOf(0 to 0, 1024 to 576, 1280 to 720, 1600 to 900, 1920 to 1080, 2560 to 1440)
@@ -71,6 +72,29 @@ fun SettingsScreen() {
                 (FPS_PRESETS + fps).distinct().sorted().map { it to (if (it == 0) stringResource(R.string.tc_opt_panel_rate) else "$it FPS") },
                 fps,
             ) { fps = it; Cfg.fpsLimit = it }
+            var pm by remember { mutableStateOf(Cfg.presentMode) }
+            DeckChoiceRow(
+                stringResource(R.string.tc_disp_vsync), stringResource(R.string.tc_disp_vsync_hint),
+                listOf(
+                    0 to stringResource(R.string.tc_vsync_auto),
+                    1 to stringResource(R.string.tc_vsync_fifo),
+                    2 to stringResource(R.string.tc_vsync_fifo_relaxed),
+                    3 to stringResource(R.string.tc_vsync_mailbox),
+                    4 to stringResource(R.string.tc_vsync_immediate),
+                ),
+                pm,
+            ) { pm = it; Cfg.presentMode = it; ScreenFx.applyPresentationIfRunning() }
+            var buf by remember { mutableStateOf(Cfg.swapBuffers) }
+            DeckChoiceRow(
+                stringResource(R.string.tc_disp_buffering), stringResource(R.string.tc_disp_buffering_hint),
+                listOf(
+                    0 to stringResource(R.string.tc_vsync_auto),
+                    2 to stringResource(R.string.tc_buffering_double),
+                    3 to stringResource(R.string.tc_buffering_triple),
+                    4 to stringResource(R.string.tc_buffering_quad),
+                ),
+                buf,
+            ) { buf = it; Cfg.swapBuffers = it; ScreenFx.applyPresentationIfRunning() }
             var up by remember { mutableStateOf(Cfg.upscaler) }
             DeckChoiceRow(stringResource(R.string.tc_disp_upscaler), null, UPSCALERS.mapIndexed { i, n -> i to n }, up) { up = it; Cfg.upscaler = it }
             // HDR10 diputuskan saat compositor dinyalakan, jadi hanya bisa diubah di sini (efek lain ada di menu sesi > Effect)
@@ -84,11 +108,7 @@ fun SettingsScreen() {
 
         DriverGroup()
 
-        HangoverGroup()
-
         FlathubGroup()
-
-        DxvkGroup()
 
         DeckGroup(stringResource(R.string.tc_group_terminal)) {
             DeckTextRow(stringResource(R.string.tc_ui_terminal_max_lines), Cfg.termMaxLines.toString(), number = true) { it.toIntOrNull()?.let { v -> Cfg.termMaxLines = v.coerceIn(100, 50000) } }

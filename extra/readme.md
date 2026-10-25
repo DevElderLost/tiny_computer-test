@@ -25,14 +25,6 @@ linux在需要数据时，使用socket通知位于安卓的getifaddrs_bridge_ser
 
 源码和编译信息在getifaddrs_bridge文件夹查看。
 
-#### extra/install-hangover, extra/install-hangover-stable:
-
-这些是用于Windows应用支持的Hangover安装脚本。
-
-#### extra/chn_fonts.reg:
-
-修复wine显示方块字的注册表文件。
-
 #### extra/libvulkan_freedreno.so, extra/freedreno_icd.aarch64.json:
 
 Turnip驱动。根据[这里](https://github.com/xDoge26/proot-setup/issues/26#issuecomment-1712404849)和[这里](https://github.com/MastaG/mesa-turnip-ppa)编译

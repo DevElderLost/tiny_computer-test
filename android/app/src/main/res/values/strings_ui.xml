@@ -71,12 +71,6 @@
     <string name="tc_ui_fake_drm_hint">Gives Xwayland glamor a userspace DRM render node (libfakedrm.so). Needs DRI3 and Turnip. Applies on next desktop start; if glamor cannot start, DRI3 without DRM keeps working.</string>
     <string name="tc_ui_dri3_requirement">DRI3 requires Turnip, and Termux:X11 or the bundled DRM-less Xwayland (patch.tzst)</string>
     <string name="tc_ui_windows_app_support">Windows App Support</string>
-    <string name="tc_ui_hangover_description">Run Windows apps using Hangover (running cross-arch apps on native Wine)!\n\nRunning Windows programs requires two layers of emulation (arch + system) - don\'t expect good performance!\n\nFor better speed, try enabling Graphics Acceleration. Crashes or failures are normal.\n\nRecommend moving Windows programs to desktop before running.\n\nBe patient. Even if GUI shows nothing. Check terminal - is it still running or stopped with error?\n\nOr check if the Windows app has official Linux arm64 version.</string>
-    <string name="tc_ui_install_hangover_stable">Install Hangover</string>
-    <string name="tc_ui_install_hangover_latest">Install Hangover Latest (may fail)</string>
-    <string name="tc_ui_uninstall_hangover">Uninstall Hangover</string>
-    <string name="tc_ui_clear_wine_data">Clear Wine Data</string>
-    <string name="tc_ui_wine_commands_hint">Common Wine commands. Click to launch GUI and wait patiently.\n\nTypical launch times:\nTiger T7510 6GB: over 1 minute\nSnapdragon 870 12GB: ~10 seconds</string>
     <string name="tc_ui_switch_to_japanese">Switch System to Japanese</string>
     <string name="tc_ui_user_manual">User Manual</string>
     <string name="tc_ui_open_source_licenses">Open Source Licenses</string>
@@ -161,6 +155,18 @@
     <string name="tc_disp_size">Output resolution (0 = automatic)</string>
     <string name="tc_disp_fps">FPS limit (0 = panel rate)</string>
     <string name="tc_disp_upscaler">Upscaler (0-8)</string>
+    <string name="tc_disp_vsync">VSync / present mode</string>
+    <string name="tc_disp_vsync_hint">How the compositor hands frames to the screen. FIFO waits for the vblank (no tearing, most latency). Relaxed FIFO tears only when a frame is late. Mailbox keeps only the newest frame (no tearing, low latency, needs three buffers). Immediate never waits and may tear. A mode the screen does not offer falls back to FIFO. Applies at once by rebuilding the screen swapchain; the zero-copy display layer is paced by Android itself.</string>
+    <string name="tc_vsync_auto">Auto</string>
+    <string name="tc_vsync_fifo">FIFO (VSync)</string>
+    <string name="tc_vsync_fifo_relaxed">FIFO relaxed</string>
+    <string name="tc_vsync_mailbox">Mailbox</string>
+    <string name="tc_vsync_immediate">Immediate (no VSync)</string>
+    <string name="tc_disp_buffering">Screen buffering</string>
+    <string name="tc_disp_buffering_hint">Images in the screen swapchain. Double buffering has the least latency but stalls when a frame is late; triple buffering smooths it out; quad uses more memory. Auto keeps the driver default. Frame generation adds its own images on top.</string>
+    <string name="tc_buffering_double">Double (2)</string>
+    <string name="tc_buffering_triple">Triple (3)</string>
+    <string name="tc_buffering_quad">Quad (4)</string>
     <string name="tc_disp_driver">Turnip driver id (empty = automatic)</string>
     <string name="tc_disp_restart">Resolution and driver apply after the app restarts.</string>
     <string name="tc_theme_graphite">Graphite</string>
@@ -358,7 +364,7 @@
     <string name="tc_sc_added">Added %1$s. Tap to run with Wine, long-press to rename or change its settings.</string>
     <string name="tc_sc_add_not_exe">Only .exe or .AppImage files can be added.</string>
     <string name="tc_sc_add_bad_location">Cannot use this location. Pick the file from the device storage (not Recent or a cloud drive), so Wine can reach the files next to it.</string>
-    <string name="tc_sc_add_need_wine">Wine is not set up yet. Install Wine in Settings first.</string>
+    <string name="tc_sc_add_need_wine">Wine is not installed in the container. Install it from the Terminal first, then add the .exe again.</string>
     <string name="tc_sc_add_failed">Could not add the shortcut: %1$s</string>
     <string name="tc_sc_remove">Remove this shortcut</string>
     <string name="tc_sc_ai_checking">Checking the AppImage and copying it into the Linux system…</string>
@@ -369,7 +375,6 @@
     <string name="tc_sc_ai_bad_type">Installation cancelled: only type 2 AppImages are supported (this one is type %1$d).</string>
     <string name="tc_sc_ai_no_system">The Linux system is not installed yet. Install it first with Open desktop.</string>
     <string name="tc_sc_ai_no_space">Not enough free storage. About %1$d MB is needed to install this AppImage.</string>
-    <string name="tc_wine_failed">Failed: %1$s</string>
     <!-- Pengaturan bergaya DroidDeck -->
     <string name="tc_btn_import">Import</string>
     <string name="tc_btn_download">Download</string>
@@ -387,37 +392,8 @@
     <string name="tc_group_logs">Logs</string>
     <string name="tc_ui_launch_log">Launch log (.txt)</string>
     <string name="tc_ui_launch_log_hint">Writes a new log file for every proot session to Download/Wayland-logs (launch-*.log, next to the Wayland session logs): apps and .exe files started from Shortcut or Open desktop, and Flathub Store setup, installs, removals and updates (launch-*-flatpak-*.log), with their output. Applies from the next container start.</string>
-    <string name="tc_wine_display">Wine display driver</string>
-    <string name="tc_wine_display_hint">Wayland draws straight to the compositor so Vulkan and DXVK work with Turnip; X11 is the fallback when the compositor is not running.</string>
-    <string name="tc_wine_display_unsupported">This Wine build has no winewayland driver, so X11 (Xwayland) is used.</string>
-    <string name="tc_wine_display_wayland">Wayland (Turnip / Vulkan)</string>
-    <string name="tc_wine_display_x11">X11 (Xwayland)</string>
     <string name="tc_btn_apply">Apply</string>
     <string name="tc_btn_install">Install</string>
-    <string name="tc_hangover_title">Hangover (apt)</string>
-    <string name="tc_dxvk_title">DXVK config</string>
-    <string name="tc_dxvk_hint">Options of dxvk.conf for the DXVK that Hangover installs. They are sent as DXVK_CONFIG (DXVK 2.4 or newer) and apply the next time the container starts or a Shortcut is launched. A per-Shortcut DXVK_CONFIG in its Env settings replaces this value.</string>
-    <string name="tc_d3d_dxvk">Use DXVK (Direct3D to Vulkan)</string>
-    <string name="tc_d3d_dxvk_hint">Off = WineD3D (Direct3D to OpenGL). Writes the DllOverrides of d3d8, d3d9, d3d10core, d3d11 and dxgi in the Wine prefix as native (DXVK) or builtin (WineD3D), like the Enable/Disable DXVK commands. DXVK must be installed in the prefix (the Hangover script does that). If the container is not running, the prefix is updated the next time a Shortcut launches.</string>
-    <string name="tc_dxvk_apply">Send DXVK_CONFIG</string>
-    <string name="tc_dxvk_apply_hint">Turn off to leave DXVK completely at its own defaults.</string>
-    <string name="tc_dxvk_tune">Memory-saving defaults</string>
-    <string name="tc_dxvk_tune_hint">Low device/shared memory, one compiler thread, no pipeline library and no state cache. Fixes black screens on small-memory GPUs such as Adreno 610. Your own values below override it.</string>
-    <string name="tc_dxvk_present">Present mode</string>
-    <string name="tc_dxvk_present_hint">Sets dxgi.syncInterval, d3d9.presentInterval and dxvk.tearFree together: FIFO, relaxed FIFO, mailbox or immediate.</string>
-    <string name="tc_dxvk_preview">DXVK_CONFIG=%1$s</string>
-    <string name="tc_dxvk_preview_none">Nothing is sent: DXVK runs with its own defaults.</string>
-    <string name="tc_dxvk_reset">Reset all DXVK options</string>
-    <string name="tc_dxvk_reset_hint">Clears every value you changed, including present mode and HUD.</string>
-    <string name="tc_dxvk_reset_section">Reset this section</string>
-    <string name="tc_dxvk_changed">%1$d changed</string>
-    <string name="tc_dxvk_all_default">All default</string>
-    <string name="tc_dxvk_show">Show</string>
-    <string name="tc_dxvk_hide">Hide</string>
-    <string name="tc_dxvk_hud_title">DXVK HUD</string>
-    <string name="tc_dxvk_hud_hint">dxvk.hud: overlay with FPS and other statistics, same as DXVK_HUD.</string>
-    <string name="tc_dxvk_hud_full">All elements</string>
-    <string name="tc_hangover_sent">Started in the container terminal. Open the Terminal tab to follow the progress.</string>
     <string name="tc_ctrl_motion_group">Gyro &amp; trackpad</string>
     <string name="tc_ctrl_gyro">Gyro</string>
     <string name="tc_ctrl_gyro_hint">Sends this device\'s gyro to the Steam Deck (hidraw) controller and, if mapped, to a joystick. Takes effect immediately.</string>

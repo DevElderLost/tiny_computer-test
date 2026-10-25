@@ -15,8 +15,8 @@ import java.security.MessageDigest
  * `Exec=wine "<path .exe>"` dan `Path=<folder .exe>`. Karena itu entri ini diperlakukan persis seperti
  * aplikasi Linux lain: tampil di grid Shortcut, dijalankan di sesi proot BARU oleh [ShortcutRunner]
  * (Xwayland + window manager ringan, tanpa membuka desktop), dan punya pengaturan per aplikasi
- * ([ShortcutPrefs]) lewat tekan lama. Perintah `wine` berasal dari Hangover yang dipasang lewat apt
- * ([HangoverSetup]).
+ * ([ShortcutPrefs]) lewat tekan lama. Perintah `wine` harus sudah dipasang pengguna di kontainer (mis. lewat Terminal);
+ * aplikasi ini tidak lagi memasang atau mengatur Wine.
  *
  * Ikon diambil dari resource .exe-nya ([ExeIconExtractor], logika Winlator) dan disimpan sebagai PNG di
  * tema ikon pengguna (`~/.local/share/icons/hicolor/256x256/apps/<id>.png`, `Icon=<id>`), sehingga ikon
@@ -36,8 +36,14 @@ object ExeShortcuts {
 
     fun isExeShortcut(id: String) = id.startsWith(ID_PREFIX)
 
-    /** Wine sudah terpasang di kontainer (Hangover lewat apt, [HangoverSetup]). */
-    fun wineReady(): Boolean = WineSystem.installed()
+    /** Perintah `wine` sudah ada di kontainer: berkas/symlink `/usr/bin/wine` atau folder `/usr/lib/wine` di rootfs. */
+    fun wineReady(): Boolean = inRootfs("/usr/bin/wine") || inRootfs("/usr/lib/wine")
+
+    /** File/symlink ada di rootfs. Symlink absolut ke /etc/alternatives tidak ter-resolve dari sisi Android, jadi cek linknya juga. */
+    private fun inRootfs(guestPath: String): Boolean {
+        val f = File(TinyEnv.containerDir(), guestPath.removePrefix("/"))
+        return f.exists() || runCatching { java.nio.file.Files.isSymbolicLink(f.toPath()) }.getOrDefault(false)
+    }
 
     private fun appsDir() = File(TinyEnv.containerDir(), "home/tiny/.local/share/applications")
 

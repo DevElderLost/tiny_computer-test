@@ -26,6 +26,13 @@ object ScreenFx {
         ReshadeShaders.apply() // shader ReShade FX terpilih (Pengaturan > Display / menu sesi > Effect)
     }
 
+    /** Present mode dan buffering swapchain layar: berlaku langsung bila compositor hidup (swapchain dibangun ulang). */
+    fun applyPresentationIfRunning() {
+        if (!CompositorHost.isStarted) return
+        WaylandCompositor.nativeSetPresentMode(Cfg.presentMode)
+        WaylandCompositor.nativeSetBuffering(Cfg.swapBuffers)
+    }
+
     fun applyUpscalerIfRunning() {
         if (CompositorHost.isStarted) WaylandCompositor.nativeSetUpscaler(Cfg.upscaler)
     }

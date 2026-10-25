@@ -334,6 +334,8 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
 
         WaylandCompositor.nativeSetScaleMode(SCALE_FIT, ALIGN_CENTER)
         WaylandCompositor.nativeSetUpscaler(Cfg.upscaler)
+        WaylandCompositor.nativeSetPresentMode(Cfg.presentMode)
+        WaylandCompositor.nativeSetBuffering(Cfg.swapBuffers)
         if (!CompositorHost.isStarted) {
             // Gerbang HDR compositor memakai laporan Display ini; HDR hanya menyala bila diminta (Pengaturan)
             // DAN panel mendukung HDR10. HDR memakai display layer, jadi zero-copy ikut dinyalakan.

@@ -24,11 +24,10 @@ import java.io.File
  *
  * Per aplikasi dapat diatur dengan env Shortcut `TINY_FLATPAK_DISPLAY=`:
  *  - `auto` (bawaan): X11/Xwayland bila Turnip aktif DAN Xwayland DRI3 hasil patch terpasang, selain itu Wayland;
- *  - `wayland`: paksa Wayland dulu; `x11`: paksa X11 (Java, Tk, Wine); `off`: tidak mengubah apa pun.
+ *  - `wayland`: paksa Wayland dulu; `x11`: paksa X11 (Java, Tk); `off`: tidak mengubah apa pun.
  *
  * Kenapa `auto` tidak lagi selalu Wayland: platform EGL Wayland di Mesa tidak bisa memuat Zink tanpa node DRM
- * sungguhan, lalu diam-diam jatuh ke llvmpipe (OpenGL software; lihat [WineSystem.x11Preferred], log Wine:
- * GL_RENDERER "llvmpipe"). Aplikasi OpenGL Flathub (Qt/GTK/SDL, mis. emulator) yang dipaksa `wayland;xcb` /
+ * sungguhan, lalu diam-diam jatuh ke llvmpipe (OpenGL software; log: GL_RENDERER "llvmpipe"). Aplikasi OpenGL Flathub (Qt/GTK/SDL, mis. emulator) yang dipaksa `wayland;xcb` /
  * `wayland,x11` karena itu jalan di CPU, sedangkan AppImage di sesi yang sama memakai X11 (`GDK_BACKEND=x11`,
  * `QT_QPA_PLATFORM=xcb`) dengan Zink + Kopper di Turnip (GPU). Sejak Xwayland punya DRI3 (extra/xwayland-dri3-nodrm),
  * Vulkan lewat xcb juga jalan (vkcube --wsi xcb), jadi jalur X11 tidak lagi mengorbankan aplikasi Vulkan.

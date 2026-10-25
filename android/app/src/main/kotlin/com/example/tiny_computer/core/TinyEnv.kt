@@ -85,9 +85,6 @@ object TinyEnv {
             .put(JSONObject().put("name", "Clear").put("command", "clear"))
             .put(JSONObject().put("name", "Interrupt").put("command", "\u0003"))
 
-    val wineCommands: JSONArray
-        get() = defaults.getJSONArray(if (isChineseLocale) "wineCommands" else "wineCommands4En")
-
     fun containerDir(index: Int = currentContainer) = File(dataPath, "containers/$index")
 
     /** Tempat soket Wayland: `/tmp` di dalam kontainer (XDG_RUNTIME_DIR guest = /tmp). */

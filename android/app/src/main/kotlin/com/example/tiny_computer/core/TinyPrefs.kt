@@ -129,10 +129,6 @@ object Cfg {
     var launchLog: Boolean
         get() = TinyPrefs.getBool("launchLog", false)
         set(v) = TinyPrefs.setBool("launchLog", v)
-    /** Driver tampilan Wine: "wayland" (Wayland dulu, X11 sebagai cadangan) atau "x11". */
-    var wineDisplay: String
-        get() = TinyPrefs.getString("wineDisplay", "wayland")
-        set(v) = TinyPrefs.setString("wineDisplay", v)
     var wakelock: Boolean
         get() = TinyPrefs.getBool("wakelock", false)
         set(v) = TinyPrefs.setBool("wakelock", v)
@@ -170,6 +166,14 @@ object Cfg {
     var fpsLimit: Int
         get() = TinyPrefs.getInt("fpsLimit", 0)
         set(v) = TinyPrefs.setInt("fpsLimit", v)
+    /** Present mode swapchain layar compositor: 0 auto (FIFO), 1 FIFO, 2 FIFO relaxed, 3 Mailbox, 4 Immediate. */
+    var presentMode: Int
+        get() = TinyPrefs.getInt("presentMode", 0)
+        set(v) = TinyPrefs.setInt("presentMode", v)
+    /** Jumlah buffer swapchain layar: 0 otomatis, 2 double, 3 triple, 4 quad buffering. */
+    var swapBuffers: Int
+        get() = TinyPrefs.getInt("swapBuffers", 0)
+        set(v) = TinyPrefs.setInt("swapBuffers", v)
     /** Shader ReShade FX (.fx, jalur relatif terhadap folder Shaders) yang aktif di compositor; kosong = mati. */
     var reshadeShader: String
         get() = TinyPrefs.getString("reshadeShader", "")
@@ -182,35 +186,13 @@ object Cfg {
     var linuxDriver: String
         get() = TinyPrefs.getString("linuxDriver", "")
         set(v) = TinyPrefs.setString("linuxDriver", v)
-    /**
-     * Mode Direct3D Wine: "dxvk", "wined3d", atau kosong (belum dipilih lewat Pengaturan: registri prefix dibiarkan apa
-     * adanya, mis. hasil perintah cepat Enable/Disable DXVK). Lihat WineSystem.applyD3dModeAsync.
-     */
-    var d3dMode: String
-        get() = TinyPrefs.getString("d3dMode", "")
-        set(v) = TinyPrefs.setString("d3dMode", v)
-    /** Kirim DXVK_CONFIG (lihat DxvkConfig) ke kontainer dan peluncuran Shortcut; bawaan AKTIF. */
-    var dxvkConfigOn: Boolean
-        get() = TinyPrefs.getBool("dxvkConfigOn", true)
-        set(v) = TinyPrefs.setBool("dxvkConfigOn", v)
-    /**
-     * Dasar DXVK hemat memori (DxvkConfig.TUNE), bawaan AKTIF. Tanpa ini DXVK di Turnip Adreno 610 gagal membuat pipeline
-     * internal (VK_ERROR_OUT_OF_HOST_MEMORY) dan layar hitam. Nilai buatan pengguna menimpanya.
-     */
-    var dxvkTune: Boolean
-        get() = TinyPrefs.getBool("dxvkTune", true)
-        set(v) = TinyPrefs.setBool("dxvkTune", v)
-    /** Nilai DXVK_CONFIG buatan pengguna: baris `kunci=nilai` (lihat DxvkConfig). */
-    var dxvkConfig: String
-        get() = TinyPrefs.getString("dxvkConfig", "")
-        set(v) = TinyPrefs.setString("dxvkConfig", v)
     /** 0 None 1 Linear 2 Nearest 3 SGSR 4 FSR 5 FSR Fit 6 Sharpen 7 NIS 8 SGSR HQ */
     var upscaler: Int
         get() = TinyPrefs.getInt("upscaler", 1)
         set(v) = TinyPrefs.setInt("upscaler", v)
 
     // ---- Efek layar compositor dan HDR (lihat display/ScreenFx) ----
-    /** HDR10 sungguhan: gerbang HDR compositor + DXVK_HDR=1 untuk Wine. Berlaku saat compositor dinyalakan. */
+    /** HDR10 sungguhan: gerbang HDR compositor. Berlaku saat compositor dinyalakan. */
     /** Tab Flathub Store (Flatpak + Flathub di kontainer Debian trixie) tampil bila true. */
     var flathubStore: Boolean
         get() = TinyPrefs.getBool("flathubStore", false)

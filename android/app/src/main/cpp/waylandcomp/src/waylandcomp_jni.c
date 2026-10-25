@@ -694,6 +694,20 @@ Java_com_droiddeck_launcher_wayland_WaylandCompositor_nativeSetFpsLimit(JNIEnv *
     __android_log_print(ANDROID_LOG_INFO, TAG, "fps limit %d", fps);
 }
 
+/* Screen swapchain present mode: 0 auto (FIFO), 1 FIFO, 2 FIFO relaxed, 3 mailbox, 4 immediate. */
+JNIEXPORT void JNICALL
+Java_com_droiddeck_launcher_wayland_WaylandCompositor_nativeSetPresentMode(JNIEnv *env, jclass clazz, jint mode) {
+    vkp_set_present_mode(mode);
+    __android_log_print(ANDROID_LOG_INFO, TAG, "present mode %d", mode);
+}
+
+/* Screen swapchain buffering: 0 auto, 2 double, 3 triple, 4 quad. */
+JNIEXPORT void JNICALL
+Java_com_droiddeck_launcher_wayland_WaylandCompositor_nativeSetBuffering(JNIEnv *env, jclass clazz, jint buffers) {
+    vkp_set_buffering(buffers);
+    __android_log_print(ANDROID_LOG_INFO, TAG, "buffering %d", buffers);
+}
+
 /* Swap/clear the output window (e.g. SurfaceView recreated/destroyed). */
 JNIEXPORT void JNICALL
 Java_com_droiddeck_launcher_wayland_WaylandCompositor_nativeSetSurface(

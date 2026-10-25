@@ -71,12 +71,6 @@
     <string name="tc_ui_fake_drm_hint">為 Xwayland glamor 提供使用者空間 DRM 渲染節點(libfakedrm.so)。需要 DRI3 與 Turnip,下次啟動桌面時生效。</string>
     <string name="tc_ui_dri3_requirement">DRI3 必須配合 Termux:X11 與 Turnip 使用</string>
     <string name="tc_ui_windows_app_support">Windows 應用支援</string>
-    <string name="tc_ui_hangover_description">使用 Hangover（於原生 Wine 執行跨架構應用）來執行 Windows 應用！\n\n執行 Windows 程式需經過架構與系統雙層模擬，請勿對速度抱太大期望。</string>
-    <string name="tc_ui_install_hangover_stable">安裝 Hangover</string>
-    <string name="tc_ui_install_hangover_latest">安裝 Hangover 最新版（可能有錯誤）</string>
-    <string name="tc_ui_uninstall_hangover">解除安裝 Hangover</string>
-    <string name="tc_ui_clear_wine_data">清除 Wine 資料</string>
-    <string name="tc_ui_wine_commands_hint">Wine 常用指令。點擊後進入圖形介面，請耐心等候。\n\n不同裝置啟動程式參考時間：\n虎賁 T7510 6GB 超過一分鐘\n驍龍 870 12GB 約 10 秒\n</string>
     <string name="tc_ui_switch_to_japanese">切換系統為日語</string>
     <string name="tc_ui_user_manual">使用說明</string>
     <string name="tc_ui_open_source_licenses">開源授權</string>

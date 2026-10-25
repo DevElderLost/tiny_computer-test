@@ -73,6 +73,16 @@ void vkp_image_upload_shm_rect(struct vkp_image *img, const void *data, int stri
 /* Screen swapchains built this session (the 60 s health line). */
 unsigned vkp_swapchain_builds(void);
 
+/* Presentation of the screen swapchain (Settings > Display), applied on the next frame by rebuilding the swapchain.
+ *  mode:    0 auto (FIFO), 1 FIFO (vsync), 2 FIFO_RELAXED (vsync, tears when late), 3 MAILBOX (no tearing, newest
+ *           frame replaces the queued one), 4 IMMEDIATE (no vsync). A mode the surface does not list falls back to FIFO.
+ *  buffers: 0 auto (driver minimum + 1), 2 double, 3 triple, 4 quad buffering (frame generation adds its own images). */
+void vkp_set_present_mode(int mode);
+void vkp_set_buffering(int buffers);
+/* 1 while the swapchain in use does not wait for the vblank (MAILBOX / IMMEDIATE): the compositor may then draw
+ * the scene as soon as a client commits instead of once per Choreographer tick. */
+int vkp_present_uncapped(void);
+
 int vkp_image_width(const struct vkp_image *img);
 int vkp_image_height(const struct vkp_image *img);
 void vkp_image_destroy(struct vkp_image *img);

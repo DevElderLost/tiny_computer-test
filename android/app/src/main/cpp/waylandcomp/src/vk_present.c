@@ -57,6 +57,17 @@ static VkFence g_fence;
 /* Extra swapchain images this swapchain was built with (frame generation: one per generated
  * frame, so all presents of a scene frame queue without waiting for a vblank). */
 static int g_swap_extra;
+/* Presentation chosen in Settings (vkp_set_present_mode / vkp_set_buffering), read when a swapchain is built.
+ * g_swap_*_built remember what the swapchain in use was built for, so a change rebuilds it exactly once. */
+static volatile int g_pref_present_mode;  /* 0 auto, 1 FIFO, 2 FIFO_RELAXED, 3 MAILBOX, 4 IMMEDIATE */
+static volatile int g_pref_buffers;       /* 0 auto, 2 double, 3 triple, 4 quad */
+static int g_swap_mode_built = -1, g_swap_buf_built = -1;
+static volatile int g_swap_uncapped;      /* the swapchain in use does not wait for the vblank */
+
+void vkp_set_present_mode(int mode) { g_pref_present_mode = (mode >= 0 && mode <= 4) ? mode : 0; }
+void vkp_set_buffering(int buffers) { g_pref_buffers = (buffers >= 2 && buffers <= 4) ? buffers : 0; }
+int vkp_present_uncapped(void) { return g_swap_uncapped; }
+
 /* Format of the compositor pass's images (the scene image below, the effects chain's targets and
  * the frame-generation ring): a blit converts every client format into it, the chains read RGBA. */
 #define SCENE_FMT VK_FORMAT_R8G8B8A8_UNORM
@@ -277,6 +288,7 @@ static int g_acq_stalls; /* consecutive acquires that returned no image (see acq
 static void destroy_swapchain(void) {
     g_base_black = 0; /* a new swapchain starts with nothing on it */
     g_acq_stalls = 0;
+    g_swap_uncapped = 0;
     if (g_dev_state != 1) return;
     g_vk.DeviceWaitIdle(g_dev);
     reset_sync();
@@ -722,6 +734,39 @@ static void log_surface_formats(const VkSurfaceFormatKHR *f, uint32_t n) {
                hdr_n ? hdr : "none", hdr_cut ? " (+more)" : "");
 }
 
+static VkPresentModeKHR present_mode_for(int pref) {
+    switch (pref) {
+    case 2: return VK_PRESENT_MODE_FIFO_RELAXED_KHR;
+    case 3: return VK_PRESENT_MODE_MAILBOX_KHR;
+    case 4: return VK_PRESENT_MODE_IMMEDIATE_KHR;
+    default: return VK_PRESENT_MODE_FIFO_KHR;
+    }
+}
+
+static const char *present_mode_name(VkPresentModeKHR m) {
+    switch (m) {
+    case VK_PRESENT_MODE_FIFO_RELAXED_KHR: return "FIFO relaxed (vsync, tears when late)";
+    case VK_PRESENT_MODE_MAILBOX_KHR: return "mailbox (no tearing, newest frame wins)";
+    case VK_PRESENT_MODE_IMMEDIATE_KHR: return "immediate (no vsync)";
+    default: return "FIFO (vsync)";
+    }
+}
+
+/* Does the surface list this present mode? FIFO is always there (the spec requires it). */
+static int surface_has_present_mode(VkPresentModeKHR want) {
+    if (want == VK_PRESENT_MODE_FIFO_KHR) return 1;
+    if (!g_vk.GetPhysicalDeviceSurfacePresentModesKHR) return 0;
+    uint32_t n = 0;
+    if (g_vk.GetPhysicalDeviceSurfacePresentModesKHR(g_pd, g_surface, &n, NULL) != VK_SUCCESS || !n) return 0;
+    VkPresentModeKHR *m = calloc(n, sizeof(*m));
+    if (!m) return 0;
+    int found = 0;
+    if (g_vk.GetPhysicalDeviceSurfacePresentModesKHR(g_pd, g_surface, &n, m) >= 0)
+        for (uint32_t i = 0; i < n; i++) if (m[i] == want) { found = 1; break; }
+    free(m);
+    return found;
+}
+
 static int swap_init_locked(void) {
 
     VkAndroidSurfaceCreateInfoKHR aci = {
@@ -801,7 +846,19 @@ static int swap_init_locked(void) {
     /* + one image per generated frame while frame generation is armed: every present of a scene
      * frame can then be queued at once and FIFO spaces them onto consecutive vblanks. */
     g_swap_extra = vkp_framegen_extra_images();
-    uint32_t want = caps.minImageCount + 1 + (uint32_t)g_swap_extra;
+    const int pref_mode = g_pref_present_mode, pref_buf = g_pref_buffers;
+    VkPresentModeKHR pmode = present_mode_for(pref_mode);
+    if (!surface_has_present_mode(pmode)) {
+        droiddeck_log("gpu", "the screen surface does not offer present mode %s: using FIFO (vsync) instead",
+                   present_mode_name(pmode));
+        pmode = VK_PRESENT_MODE_FIFO_KHR;
+    }
+    /* Buffering: auto = the driver's minimum + 1 (as before); 2 = double, 3 = triple, 4 = quad buffering. Never below
+     * the driver's minimum. Mailbox needs a spare image to swap in, so it gets at least three. */
+    uint32_t want = pref_buf ? (uint32_t)pref_buf : caps.minImageCount + 1;
+    if (pmode == VK_PRESENT_MODE_MAILBOX_KHR && want < 3) want = 3;
+    want += (uint32_t)g_swap_extra;
+    if (want < caps.minImageCount) want = caps.minImageCount;
     if (caps.maxImageCount && want > caps.maxImageCount) want = caps.maxImageCount;
 
     /* Use IDENTITY preTransform when the surface supports it. Setting preTransform =
@@ -820,7 +877,7 @@ static int swap_init_locked(void) {
         .imageUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
         .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE, .preTransform = pretrans,
         .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
-        .presentMode = VK_PRESENT_MODE_FIFO_KHR, .clipped = VK_TRUE};
+        .presentMode = pmode, .clipped = VK_TRUE};
     VkResult cr = g_vk.CreateSwapchainKHR(g_dev, &sci, NULL, &g_swapchain);
     if (cr != VK_SUCCESS && g_swap_is_hdr) {
         /* The surface listed the HDR10 pair but refused the swapchain: say so, never ask again this
@@ -835,17 +892,31 @@ static int swap_init_locked(void) {
         g_swap_fmt = sdr_choice.format;
         cr = g_vk.CreateSwapchainKHR(g_dev, &sci, NULL, &g_swapchain);
     }
+    if (cr != VK_SUCCESS && pmode != VK_PRESENT_MODE_FIFO_KHR) {
+        /* The surface listed the mode but the driver refused it with this image count: FIFO always works. */
+        droiddeck_log("gpu", "the driver refused present mode %s (%s): using FIFO (vsync) instead",
+                   present_mode_name(pmode), vk_result_name(cr));
+        pmode = VK_PRESENT_MODE_FIFO_KHR;
+        sci.presentMode = pmode;
+        g_swapchain = VK_NULL_HANDLE;
+        cr = g_vk.CreateSwapchainKHR(g_dev, &sci, NULL, &g_swapchain);
+    }
     if (cr != VK_SUCCESS) {
         g_swapchain = VK_NULL_HANDLE;
         SWLOGE("present: vkCreateSwapchainKHR failed (%d)", (int)cr);
         return -1;
     }
+    g_swap_mode_built = pref_mode;
+    g_swap_buf_built = pref_buf;
+    g_swap_uncapped = (pmode == VK_PRESENT_MODE_MAILBOX_KHR || pmode == VK_PRESENT_MODE_IMMEDIATE_KHR);
     g_vk.GetSwapchainImagesKHR(g_dev, g_swapchain, &g_nimg, NULL);
     g_images = calloc(g_nimg, sizeof(VkImage));
     g_vk.GetSwapchainImagesKHR(g_dev, g_swapchain, &g_nimg, g_images);
 
-    droiddeck_log("gpu", "screen output %ux%u, %u buffers, vsync%s", g_extent.width, g_extent.height, g_nimg,
-               g_swap_extra ? " (frame generation: several presents per frame)" : "");
+    droiddeck_log("gpu", "screen output %ux%u, %u buffers (%s), present mode %s%s", g_extent.width, g_extent.height, g_nimg,
+               pref_buf == 2 ? "double buffering" : pref_buf == 3 ? "triple buffering" : pref_buf == 4 ? "quad buffering"
+                                                                                                       : "automatic",
+               present_mode_name(pmode), g_swap_extra ? " (frame generation: several presents per frame)" : "");
     return 0;
 }
 
@@ -1627,6 +1698,11 @@ static int render_impl(int scene_w, int scene_h, const struct vkp_draw *draws, i
     if (g_swapchain && vkp_framegen_extra_images() != g_swap_extra) {
         droiddeck_log("gpu", "frame generation now wants %d present%s per frame: rebuilding the swapchain",
                    1 + vkp_framegen_extra_images(), vkp_framegen_extra_images() ? "s" : "");
+        destroy_swapchain();
+    }
+    /* Present mode or buffering changed in Settings: rebuild the swapchain for them. */
+    if (g_swapchain && (g_pref_present_mode != g_swap_mode_built || g_pref_buffers != g_swap_buf_built)) {
+        droiddeck_log("gpu", "present mode or buffering changed: rebuilding the screen swapchain");
         destroy_swapchain();
     }
     /* HDR frames presented here (frame generation with an HDR game) want an HDR10 swapchain - unless the

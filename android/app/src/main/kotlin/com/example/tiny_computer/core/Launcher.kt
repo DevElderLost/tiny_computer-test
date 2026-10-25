@@ -705,9 +705,6 @@ $data/bin/virgl_test_server ${Cfg.defaultVirglCommand}""".trimIndent(),
             extraOpt.append("LIBGL_KOPPER_DRI2=true ")
             if (!Cfg.dri3) extraOpt.append("MESA_VK_WSI_DEBUG=sw ")
         }
-        // DXVK_CONFIG (pengaturan DXVK untuk Wine Hangover, lihat DxvkConfig). Berlaku untuk shell kontainer (saat kontainer
-        // dinyalakan) dan tiap peluncuran Shortcut. Env Shortcut buatan pengguna bisa menimpa DXVK_CONFIG seluruhnya.
-        DxvkConfig.envOpt()?.let { extraOpt.append(it).append(' ') }
         // GTK4 (mis. pavucontrol "Volume Control" di Debian 13) memakai renderer GL secara bawaan; di
         // Xwayland/proot tanpa EGL yang sehat jendelanya tampil kosong. Paksa renderer cairo (perangkat lunak).
         if (!extraOpt.contains("GSK_RENDERER=")) extraOpt.append("GSK_RENDERER=cairo ")
