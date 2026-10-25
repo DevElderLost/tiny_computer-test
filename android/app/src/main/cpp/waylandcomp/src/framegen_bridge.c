@@ -1,5 +1,6 @@
 /* Frame generation on the Wayland backend - see framegen_bridge.h. */
 #define _POSIX_C_SOURCE 200809L
+#include "vk_membudget.h"
 #include "framegen_bridge.h"
 #include "framegen_engine.h"
 #include "vk_loader.h"
@@ -209,7 +210,7 @@ static void destroy_ring(void) {
     for (uint32_t i = 0; i < g_ring_n; i++) {
         if (g_ring[i].view) vk.DestroyImageView(g_dev, g_ring[i].view, NULL);
         if (g_ring[i].img) vk.DestroyImage(g_dev, g_ring[i].img, NULL);
-        if (g_ring[i].mem) vk.FreeMemory(g_dev, g_ring[i].mem, NULL);
+        if (g_ring[i].mem) vkmb_free(g_dev, g_ring[i].mem);
         memset(&g_ring[i], 0, sizeof(g_ring[i]));
     }
     g_ring_n = 0;
@@ -244,7 +245,7 @@ static int ensure_ring(uint32_t w, uint32_t h, VkFormat fmt, uint32_t n) {
         int idx = memory_type(req.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
         VkMemoryAllocateInfo mai = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
                                     .allocationSize = req.size, .memoryTypeIndex = (uint32_t)idx};
-        if (idx < 0 || vk.AllocateMemory(g_dev, &mai, NULL, &r->mem) != VK_SUCCESS) { destroy_ring(); return 0; }
+        if (idx < 0 || vkmb_allocate(g_dev, &mai, &r->mem) != VK_SUCCESS) { destroy_ring(); return 0; }
         vk.BindImageMemory(g_dev, r->img, r->mem, 0);
         VkImageViewCreateInfo vci = {
             .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = r->img,

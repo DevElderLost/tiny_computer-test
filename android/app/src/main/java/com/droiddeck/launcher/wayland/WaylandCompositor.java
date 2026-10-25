@@ -488,6 +488,10 @@ public final class WaylandCompositor {
      *  A mode the surface does not offer falls back to FIFO; takes effect by rebuilding the swapchain. */
     public static native void nativeSetPresentMode(int mode);
 
+    /** Memory budget of the compositor's own Vulkan allocations (images of the scene, effects, frame generation) in
+     *  MiB; 0 = unlimited. An allocation above it is refused like any failed allocation. Takes effect at once. */
+    public static native void nativeSetMemoryLimit(int mb);
+
     /** Images of the screen swapchain: 0 auto, 2 double, 3 triple, 4 quad buffering. Rebuilds the swapchain. */
     public static native void nativeSetBuffering(int buffers);
 

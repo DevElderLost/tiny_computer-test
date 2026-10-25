@@ -53,6 +53,7 @@ object Rootfs {
         // meng-gunzip-nya dan membuang akhiran. Pemasangan ulang paket boot juga memulihkan berkas yang sudah ada.
         extractPatch(ctx, overwrite = true)
         ensureFakeInput(ctx)
+        ensureVkLayer(ctx)
     }
 
     /** Membuat symlink `applib` -> nativeLibraryDir (proot, busybox, dll. dipaketkan sebagai .so). */
@@ -205,6 +206,24 @@ object Rootfs {
     }
 
     /**
+     * Lapisan Vulkan VK_LAYER_TINY_memlimit (extra/vkmemlimit) dari assets/vkmemlimit disalin ke
+     * `tiny/extra/vkmemlimit`, folder yang dimount ke guest. Tanpa asset (CI gagal membangunnya) tidak ada yang
+     * disalin dan [VkMemLimit.available] bernilai false.
+     */
+    fun ensureVkLayer(ctx: Context) {
+        val dir = File(TinyEnv.dataPath, "tiny/extra/vkmemlimit")
+        runCatching {
+            dir.mkdirs()
+            for (name in listOf("libVkLayer_tiny_memlimit.so", "VkLayer_tiny_memlimit.json")) {
+                val dst = File(dir, name)
+                copyAsset(ctx, "vkmemlimit/$name", dst)
+                dst.setReadable(true, false)
+                dst.setExecutable(true, false)
+            }
+        }.onFailure { Log.i(TAG, "lapisan Vulkan memlimit tidak ada di assets (${it.message})") }
+    }
+
+    /**
      * Mengekstrak rootfs (`xa*`, arsip tar.xz yang dipecah) ke containers/0. Dulu `cat xa* | tar` di
      * dalam skrip shell, sehingga tahap "Installing System Files" tidak punya persen. Sekarang bagian
      * xa* dialirkan dari Kotlin ke stdin tar: pipa hanya menampung 64 KB, jadi byte yang sudah
@@ -352,6 +371,7 @@ object Rootfs {
             Cfg.reinstallBootstrap = false
         }
         ensureFakeInput(ctx)
+        ensureVkLayer(ctx)
         ensurePatch(ctx)
         return first
     }

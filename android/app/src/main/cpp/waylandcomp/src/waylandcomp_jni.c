@@ -16,6 +16,7 @@
 #include <android/log.h>
 #include <android/native_window_jni.h>
 #include "vk_present.h"
+#include "vk_membudget.h"
 #include "droiddeck_ext.h"
 #include "ahb_swapchain.h"
 #include "sc_layer.h"
@@ -692,6 +693,12 @@ JNIEXPORT void JNICALL
 Java_com_droiddeck_launcher_wayland_WaylandCompositor_nativeSetFpsLimit(JNIEnv *env, jclass clazz, jint fps) {
     g_fps_limit = fps > 0 ? fps : 0;
     __android_log_print(ANDROID_LOG_INFO, TAG, "fps limit %d", fps);
+}
+
+/* Memory budget of the compositor's own Vulkan allocations in MiB, 0 = unlimited (see vk_membudget.h). */
+JNIEXPORT void JNICALL
+Java_com_droiddeck_launcher_wayland_WaylandCompositor_nativeSetMemoryLimit(JNIEnv *env, jclass clazz, jint mb) {
+    vkmb_set_limit_mb(mb);
 }
 
 /* Screen swapchain present mode: 0 auto (FIFO), 1 FIFO, 2 FIFO relaxed, 3 mailbox, 4 immediate. */

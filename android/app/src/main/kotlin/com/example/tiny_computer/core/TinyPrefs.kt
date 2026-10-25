@@ -197,6 +197,14 @@ object Cfg {
     var flathubStore: Boolean
         get() = TinyPrefs.getBool("flathubStore", false)
         set(v) = TinyPrefs.setBool("flathubStore", v)
+    /** Batas memori Vulkan milik compositor (MiB); 0 = tanpa batas. Berlaku langsung. */
+    var compositorMemMb: Int
+        get() = TinyPrefs.getInt("compositorMemMb", 0)
+        set(v) = TinyPrefs.setInt("compositorMemMb", v)
+    /** Batas memori Vulkan per aplikasi guest (MiB); 0 = tanpa batas. Berlaku saat kontainer/Shortcut dijalankan berikutnya. */
+    var vulkanMemMb: Int
+        get() = TinyPrefs.getInt("vulkanMemMb", 0)
+        set(v) = TinyPrefs.setInt("vulkanMemMb", v)
     var hdrOutput: Boolean
         get() = TinyPrefs.getBool("hdrOutput", false)
         set(v) = TinyPrefs.setBool("hdrOutput", v)

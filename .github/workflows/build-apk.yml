@@ -80,6 +80,19 @@ jobs:
           mkdir -p android/app/src/main/assets
           extra/fakeinput/build.sh android/app/src/main/assets
 
+      # ---- Lapisan Vulkan VK_LAYER_TINY_memlimit (extra/vkmemlimit): batas memori Vulkan untuk aplikasi guest ----
+      # Hanya butuh header Vulkan (libvulkan-dev) + cross compiler aarch64. Masuk assets/vkmemlimit; bila gagal, APK
+      # tetap dibuat dan Pengaturan menyatakan lapisan tidak tersedia.
+      - name: Build VkLayer_tiny_memlimit (aarch64 glibc)
+        continue-on-error: true
+        run: |
+          sudo apt-get install -y gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu libvulkan-dev
+          mkdir -p android/app/src/main/assets/vkmemlimit
+          sh extra/vkmemlimit/build.sh android/app/src/main/assets/vkmemlimit || {
+            rm -rf android/app/src/main/assets/vkmemlimit
+            echo "::warning::Build lapisan Vulkan memlimit gagal; batas memori Vulkan guest tidak tersedia di APK ini."
+          }
+
       # ---- Ambil jniLibs.zip & patch.tar.gz dari Releases (rootfs SENGAJA TIDAK didownload di sini) ----
       # CATATAN: upstream sudah rename Cateners/tiny_computer -> Cateners/tiny_container,
       # dan release "latest" mereka (v4.0.0+) SUDAH TIDAK menyertakan patch.tar.gz lagi.

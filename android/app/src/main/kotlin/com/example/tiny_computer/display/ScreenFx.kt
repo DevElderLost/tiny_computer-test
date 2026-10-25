@@ -33,6 +33,12 @@ object ScreenFx {
         WaylandCompositor.nativeSetBuffering(Cfg.swapBuffers)
     }
 
+    /** Batas memori Vulkan compositor: berlaku langsung (alokasi baru di atas batas ditolak). */
+    fun applyMemoryLimitIfRunning() {
+        if (!CompositorHost.isStarted) return
+        WaylandCompositor.nativeSetMemoryLimit(Cfg.compositorMemMb)
+    }
+
     fun applyUpscalerIfRunning() {
         if (CompositorHost.isStarted) WaylandCompositor.nativeSetUpscaler(Cfg.upscaler)
     }

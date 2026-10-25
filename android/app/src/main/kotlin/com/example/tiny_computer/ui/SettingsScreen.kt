@@ -23,6 +23,7 @@ import com.example.tiny_computer.core.LaunchLog
 import com.example.tiny_computer.core.Launcher
 import com.example.tiny_computer.core.SoundControl
 import com.example.tiny_computer.core.TinyEnv
+import com.example.tiny_computer.core.VkMemLimit
 import com.example.tiny_computer.display.ScreenFx
 
 // (lebar, tinggi); 0 x 0 = otomatis
@@ -102,6 +103,28 @@ fun SettingsScreen() {
             DeckTextRow(stringResource(R.string.tc_disp_driver), Cfg.androidDriver) { Cfg.androidDriver = it.trim() }
             DeckSwitchRow(stringResource(R.string.tc_ui_hidpi_support), stringResource(R.string.tc_ui_apply_on_next_launch), Cfg.isHidpiEnabled) { Cfg.isHidpiEnabled = it }
             DeckTextRow(stringResource(R.string.tc_ui_hidpi_env_var), Cfg.defaultHidpiOpt) { Cfg.defaultHidpiOpt = it }
+        }
+
+        DeckGroup(stringResource(R.string.tc_mem_title), help = stringResource(R.string.tc_mem_help)) {
+            val steps = VkMemLimit.STEPS
+            @Composable
+            fun label(mb: Int): String = when {
+                mb <= 0 -> stringResource(R.string.tc_mem_unlimited)
+                mb < 1024 -> stringResource(R.string.tc_mem_mb, mb)
+                else -> stringResource(R.string.tc_mem_gb, mb / 1024)
+            }
+            var cm by remember { mutableStateOf(Cfg.compositorMemMb) }
+            DeckChoiceRow(
+                stringResource(R.string.tc_mem_compositor), stringResource(R.string.tc_mem_compositor_hint),
+                steps.map { it to label(it) }, cm,
+            ) { cm = it; Cfg.compositorMemMb = it; ScreenFx.applyMemoryLimitIfRunning() }
+            var vm by remember { mutableStateOf(Cfg.vulkanMemMb) }
+            DeckChoiceRow(
+                stringResource(R.string.tc_mem_vulkan),
+                stringResource(R.string.tc_mem_vulkan_hint) +
+                    if (VkMemLimit.available()) "" else "\n" + stringResource(R.string.tc_mem_vulkan_missing),
+                steps.map { it to label(it) }, vm,
+            ) { vm = it; Cfg.vulkanMemMb = it }
         }
 
         ReshadeGroup()

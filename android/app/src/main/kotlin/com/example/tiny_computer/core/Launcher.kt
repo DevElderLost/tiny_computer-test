@@ -708,6 +708,8 @@ $data/bin/virgl_test_server ${Cfg.defaultVirglCommand}""".trimIndent(),
         // GTK4 (mis. pavucontrol "Volume Control" di Debian 13) memakai renderer GL secara bawaan; di
         // Xwayland/proot tanpa EGL yang sehat jendelanya tampil kosong. Paksa renderer cairo (perangkat lunak).
         if (!extraOpt.contains("GSK_RENDERER=")) extraOpt.append("GSK_RENDERER=cairo ")
+        // Batas memori Vulkan per aplikasi (lapisan VK_LAYER_TINY_memlimit); berlaku untuk shell kontainer dan Shortcut.
+        VkMemLimit.envOpt()?.let { extraOpt.append(it).append(' ') }
         if (Cfg.isJpEnabled) extraOpt.append("LANG=ja_JP.UTF-8 ")
         extraMount += "--mount=\$DATA_DIR/tiny/font:/usr/share/fonts/tiny "
         extraMount += "--mount=\$DATA_DIR/tiny/extra/cmatrix:/home/tiny/.local/bin/cmatrix "

@@ -1,5 +1,6 @@
 /* Screen-effect chain - see effects_chain.h. Compositor thread unless noted. */
 #define _POSIX_C_SOURCE 200809L
+#include "vk_membudget.h"
 #include "effects_chain.h"
 #include "vk_loader.h"
 #include "vk_present.h" /* droiddeck_log */
@@ -250,7 +251,7 @@ static void target_destroy(struct fx_target *t) {
     if (t->fb) g_vk.DestroyFramebuffer(g_dev, t->fb, NULL);
     if (t->view) g_vk.DestroyImageView(g_dev, t->view, NULL);
     if (t->img) g_vk.DestroyImage(g_dev, t->img, NULL);
-    if (t->mem) g_vk.FreeMemory(g_dev, t->mem, NULL);
+    if (t->mem) vkmb_free(g_dev, t->mem);
     memset(t, 0, sizeof(*t));
 }
 
@@ -275,7 +276,7 @@ static int target_ensure(struct fx_target *t, int w, int h, const char *what) {
     if (idx < 0) idx = memtype(req.memoryTypeBits, 0);
     VkMemoryAllocateInfo mai = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = req.size,
                                 .memoryTypeIndex = (uint32_t)(idx < 0 ? 0 : idx)};
-    r = g_vk.AllocateMemory(g_dev, &mai, NULL, &t->mem);
+    r = vkmb_allocate(g_dev, &mai, &t->mem);
     if (r != VK_SUCCESS) {
         droiddeck_log("error", "effects: %s image %dx%d (%llu bytes): vkAllocateMemory %d", what, w, h,
                    (unsigned long long)req.size, (int)r);

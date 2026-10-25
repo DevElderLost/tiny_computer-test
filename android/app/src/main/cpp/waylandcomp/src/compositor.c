@@ -43,6 +43,7 @@
 #include "linux-dmabuf-v1-server-protocol.h"
 #include "sc_layer.h"
 #include "ahb_swapchain.h"
+#include "vk_membudget.h"
 #include "viewporter-server-protocol.h"
 #include "banner-desktop-v1-server-protocol.h"
 #include "presentation-time-server-protocol.h"
@@ -4442,8 +4443,13 @@ static void log_health(void) {
     struct pending_release *pr;
     wl_list_for_each(s, &g_surfaces, link) surfaces++;
     wl_list_for_each(pr, &g_pending_releases, link) releases++;
-    droiddeck_log("health", "%d open fds | %.0f MB resident | %d surfaces | %d buffer releases queued | %u swapchains built",
-               fds, (double)rss_pages * (double)sysconf(_SC_PAGESIZE) / 1048576.0, surfaces, releases,
+    char vkmem[96];
+    if (vkmb_limit_mb() > 0)
+        snprintf(vkmem, sizeof(vkmem), "%.0f of %d MB", (double)vkmb_used_bytes() / 1048576.0, vkmb_limit_mb());
+    else
+        snprintf(vkmem, sizeof(vkmem), "%.0f MB, no limit", (double)vkmb_used_bytes() / 1048576.0);
+    droiddeck_log("health", "%d open fds | %.0f MB resident | %s Vulkan | %u refused | %d surfaces | %d buffer releases queued | %u swapchains built",
+               fds, (double)rss_pages * (double)sysconf(_SC_PAGESIZE) / 1048576.0, vkmem, vkmb_refused(), surfaces, releases,
                vkp_swapchain_builds());
 }
 

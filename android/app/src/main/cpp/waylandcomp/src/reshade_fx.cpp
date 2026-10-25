@@ -1,6 +1,7 @@
 /* ReShade FX effect for the screen-effect chain - see reshade_fx.h.
  * The pass/texture/sampler handling follows vkBasalt's ReshadeEffect (zlib), re-done on the
  * compositor's own Vulkan table (g_vk) and chain targets instead of a swapchain layer. */
+#include "vk_membudget.h"
 #include "reshade_fx.h"
 
 #include <algorithm>
@@ -296,7 +297,7 @@ bool make_image(Tex &t, VkImageUsageFlags usage, bool mut) {
     mi.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     mi.allocationSize = rq.size;
     mi.memoryTypeIndex = idx < 0 ? 0 : (uint32_t)idx;
-    if (g_vk.AllocateMemory(g_dev, &mi, nullptr, &t.mem) != VK_SUCCESS) return false;
+    if (vkmb_allocate(g_dev, &mi, &t.mem) != VK_SUCCESS) return false;
     g_vk.BindImageMemory(g_dev, t.img, t.mem, 0);
     return true;
 }
@@ -328,7 +329,7 @@ bool make_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer &b, VkDev
     mi.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     mi.allocationSize = rq.size;
     mi.memoryTypeIndex = (uint32_t)idx;
-    if (g_vk.AllocateMemory(g_dev, &mi, nullptr, &m) != VK_SUCCESS) return false;
+    if (vkmb_allocate(g_dev, &mi, &m) != VK_SUCCESS) return false;
     g_vk.BindBufferMemory(g_dev, b, m, 0);
     return true;
 }
@@ -351,22 +352,22 @@ void destroy_fx(Fx *f) {
     for (VkSampler s : f->samplers) g_vk.DestroySampler(g_dev, s, nullptr);
     if (f->ubomap) g_vk.UnmapMemory(g_dev, f->ubomem);
     if (f->ubo) g_vk.DestroyBuffer(g_dev, f->ubo, nullptr);
-    if (f->ubomem) g_vk.FreeMemory(g_dev, f->ubomem, nullptr);
+    if (f->ubomem) vkmb_free(g_dev, f->ubomem);
     for (auto &t : f->tex) {
         if (t.sview) g_vk.DestroyImageView(g_dev, t.sview, nullptr);
         if (t.rview && t.rview != t.view) g_vk.DestroyImageView(g_dev, t.rview, nullptr);
         if (t.view) g_vk.DestroyImageView(g_dev, t.view, nullptr);
         if (t.img) g_vk.DestroyImage(g_dev, t.img, nullptr);
-        if (t.mem) g_vk.FreeMemory(g_dev, t.mem, nullptr);
+        if (t.mem) vkmb_free(g_dev, t.mem);
     }
     for (int i = 0; i < 2; i++) {
         if (f->bbview[i]) g_vk.DestroyImageView(g_dev, f->bbview[i], nullptr);
         if (f->bbimg[i]) g_vk.DestroyImage(g_dev, f->bbimg[i], nullptr);
-        if (f->bbmem[i]) g_vk.FreeMemory(g_dev, f->bbmem[i], nullptr);
+        if (f->bbmem[i]) vkmb_free(g_dev, f->bbmem[i]);
     }
     for (auto &s : f->staging) {
         if (s.buf) g_vk.DestroyBuffer(g_dev, s.buf, nullptr);
-        if (s.mem) g_vk.FreeMemory(g_dev, s.mem, nullptr);
+        if (s.mem) vkmb_free(g_dev, s.mem);
     }
     if (f->sm) g_vk.DestroyShaderModule(g_dev, f->sm, nullptr);
     delete f;

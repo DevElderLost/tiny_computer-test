@@ -334,6 +334,7 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
 
         WaylandCompositor.nativeSetScaleMode(SCALE_FIT, ALIGN_CENTER)
         WaylandCompositor.nativeSetUpscaler(Cfg.upscaler)
+        WaylandCompositor.nativeSetMemoryLimit(Cfg.compositorMemMb)
         WaylandCompositor.nativeSetPresentMode(Cfg.presentMode)
         WaylandCompositor.nativeSetBuffering(Cfg.swapBuffers)
         if (!CompositorHost.isStarted) {

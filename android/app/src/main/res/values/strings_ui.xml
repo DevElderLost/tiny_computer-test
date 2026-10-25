@@ -155,6 +155,16 @@
     <string name="tc_disp_size">Output resolution (0 = automatic)</string>
     <string name="tc_disp_fps">FPS limit (0 = panel rate)</string>
     <string name="tc_disp_upscaler">Upscaler (0-8)</string>
+    <string name="tc_mem_title">Memory limit</string>
+    <string name="tc_mem_help">Caps GPU memory (Vulkan). Applications that read the heap size adapt to it; an allocation above the limit fails like running out of VRAM.</string>
+    <string name="tc_mem_unlimited">No limit</string>
+    <string name="tc_mem_mb">%d MB</string>
+    <string name="tc_mem_gb">%d GB</string>
+    <string name="tc_mem_compositor">Compositor</string>
+    <string name="tc_mem_compositor_hint">Vulkan memory used by the compositor itself (scene, effects, frame generation, shm uploads). Applies at once; what is already allocated stays, only new allocations above the limit are refused, so the effect or frame that needed them stays off. Dma-buf memory of apps is not counted. Too low a limit can switch effects off.</string>
+    <string name="tc_mem_vulkan">Vulkan apps in the container</string>
+    <string name="tc_mem_vulkan_hint">Per application: the memory heap it sees is cut to this size and allocations above it fail. Applies the next time the container or a Shortcut is started. Flatpak apps get the same limit.</string>
+    <string name="tc_mem_vulkan_missing">The Vulkan layer is not part of this build (CI could not build it), so this setting has no effect.</string>
     <string name="tc_disp_vsync">VSync / present mode</string>
     <string name="tc_disp_vsync_hint">How the compositor hands frames to the screen. FIFO waits for the vblank (no tearing, most latency). Relaxed FIFO tears only when a frame is late. Mailbox keeps only the newest frame (no tearing, low latency, needs three buffers). Immediate never waits and may tear. A mode the screen does not offer falls back to FIFO. Applies at once by rebuilding the screen swapchain; the zero-copy display layer is paced by Android itself.</string>
     <string name="tc_vsync_auto">Auto</string>

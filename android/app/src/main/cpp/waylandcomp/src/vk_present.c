@@ -1,6 +1,7 @@
 /* Android-surface render backend - see vk_present.h. Uses Turnip via vk_loader
  * (g_vk.*), not the process-default system Adreno driver. */
 #define _POSIX_C_SOURCE 200809L
+#include "vk_membudget.h"
 #include "vk_present.h"
 #include "vk_loader.h"
 #include "sc_layer.h"
@@ -945,7 +946,7 @@ static void init_black_image(void) {
     if (idx < 0) idx = memory_type(req.memoryTypeBits, 0);
     VkMemoryAllocateInfo mai = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = req.size,
                                 .memoryTypeIndex = (uint32_t)(idx < 0 ? 0 : idx)};
-    if (idx < 0 || g_vk.AllocateMemory(g_dev, &mai, NULL, &g_black_mem) != VK_SUCCESS) {
+    if (idx < 0 || vkmb_allocate(g_dev, &mai, &g_black_mem) != VK_SUCCESS) {
         g_vk.DestroyImage(g_dev, g_black_img, NULL);
         g_black_img = VK_NULL_HANDLE; g_black_mem = VK_NULL_HANDLE;
         return;
@@ -1149,7 +1150,7 @@ struct vkp_image *vkp_image_import_dmabuf(int fd, uint32_t drm_format, uint64_t 
                                          .pNext = &imp, .image = img->image};
     VkMemoryAllocateInfo mai = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .pNext = &ded,
                                 .allocationSize = req.size, .memoryTypeIndex = (uint32_t)idx};
-    VkResult mr = g_vk.AllocateMemory(g_dev, &mai, NULL, &img->mem);
+    VkResult mr = vkmb_allocate(g_dev, &mai, &img->mem);
     if (mr != VK_SUCCESS) {
         LOGE("%s: importing the %s dma-buf (%dx%d, %llu bytes) -> %s", as_blit_dst ? "layer" : "dmabuf",
              vkp_modifier_name(modifier), w, h, (unsigned long long)req.size, vk_result_name(mr));
@@ -1159,7 +1160,7 @@ struct vkp_image *vkp_image_import_dmabuf(int fd, uint32_t drm_format, uint64_t 
     if (br != VK_SUCCESS) {
         LOGE("%s: vkBindImageMemory(%s dma-buf) -> %s", as_blit_dst ? "layer" : "dmabuf",
              vkp_modifier_name(modifier), vk_result_name(br));
-        g_vk.FreeMemory(g_dev, img->mem, NULL); g_vk.DestroyImage(g_dev, img->image, NULL);
+        vkmb_free(g_dev, img->mem); g_vk.DestroyImage(g_dev, img->image, NULL);
         free(img); return NULL;
     }
     return img;
@@ -1203,7 +1204,7 @@ struct vkp_image *vkp_image_create_shm(int w, int h) {
                           VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
     VkMemoryAllocateInfo mai = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
                                 .allocationSize = req.size, .memoryTypeIndex = (uint32_t)idx};
-    if (idx < 0 || g_vk.AllocateMemory(g_dev, &mai, NULL, &img->mem) != VK_SUCCESS) {
+    if (idx < 0 || vkmb_allocate(g_dev, &mai, &img->mem) != VK_SUCCESS) {
         g_vk.DestroyImage(g_dev, img->image, NULL); free(img); return NULL;
     }
     g_vk.BindImageMemory(g_dev, img->image, img->mem, 0);
@@ -1252,7 +1253,7 @@ void vkp_image_destroy(struct vkp_image *img) {
         blendp_forget_image(img->image);
         if (img->map) g_vk.UnmapMemory(g_dev, img->mem);
         if (img->image) g_vk.DestroyImage(g_dev, img->image, NULL);
-        if (img->mem) g_vk.FreeMemory(g_dev, img->mem, NULL);
+        if (img->mem) vkmb_free(g_dev, img->mem);
     }
     free(img);
 }
@@ -1316,7 +1317,7 @@ static void destroy_scene_image(void) {
     if (g_scene.img) hdrc_forget_image(g_scene.img); /* the HDR pass may have drawn into it */
     if (g_scene.img) blendp_forget_image(g_scene.img);
     if (g_scene.img) g_vk.DestroyImage(g_dev, g_scene.img, NULL);
-    if (g_scene.mem) g_vk.FreeMemory(g_dev, g_scene.mem, NULL);
+    if (g_scene.mem) vkmb_free(g_dev, g_scene.mem);
     memset(&g_scene, 0, sizeof(g_scene));
 }
 
@@ -1340,7 +1341,7 @@ static int ensure_scene_image(int w, int h) {
     if (idx < 0) idx = memory_type(req.memoryTypeBits, 0);
     VkMemoryAllocateInfo mai = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = req.size,
                                 .memoryTypeIndex = (uint32_t)(idx < 0 ? 0 : idx)};
-    r = g_vk.AllocateMemory(g_dev, &mai, NULL, &g_scene.mem);
+    r = vkmb_allocate(g_dev, &mai, &g_scene.mem);
     if (r != VK_SUCCESS) { LOGE("effects: scene image %dx%d: vkAllocateMemory %s", w, h, vk_result_name(r)); destroy_scene_image(); return -1; }
     g_vk.BindImageMemory(g_dev, g_scene.img, g_scene.mem, 0);
     g_scene.w = w; g_scene.h = h;
@@ -1355,7 +1356,7 @@ static int ensure_img(struct vkp_img_slot *s, int w, int h, VkFormat fmt, VkImag
     if (s->img) hdrc_forget_image(s->img);
     if (s->img) blendp_forget_image(s->img);
     if (s->img) g_vk.DestroyImage(g_dev, s->img, NULL);
-    if (s->mem) g_vk.FreeMemory(g_dev, s->mem, NULL);
+    if (s->mem) vkmb_free(g_dev, s->mem);
     memset(s, 0, sizeof(*s));
     VkImageCreateInfo ici = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .imageType = VK_IMAGE_TYPE_2D, .format = fmt,
@@ -1370,7 +1371,7 @@ static int ensure_img(struct vkp_img_slot *s, int w, int h, VkFormat fmt, VkImag
     if (idx < 0) idx = memory_type(req.memoryTypeBits, 0);
     VkMemoryAllocateInfo mai = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = req.size,
                                 .memoryTypeIndex = (uint32_t)(idx < 0 ? 0 : idx)};
-    r = g_vk.AllocateMemory(g_dev, &mai, NULL, &s->mem);
+    r = vkmb_allocate(g_dev, &mai, &s->mem);
     if (r != VK_SUCCESS) {
         LOGE("color: %s image %dx%d: vkAllocateMemory %s", what, w, h, vk_result_name(r));
         g_vk.DestroyImage(g_dev, s->img, NULL);
@@ -2161,7 +2162,7 @@ int vkp_image_readback(struct vkp_image *src, uint32_t *out, int max_px) {
                               VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         VkMemoryAllocateInfo mai = {.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
                                     .allocationSize = req.size, .memoryTypeIndex = (uint32_t)idx};
-        if (idx < 0 || g_vk.AllocateMemory(g_dev, &mai, NULL, &img->mem) != VK_SUCCESS) {
+        if (idx < 0 || vkmb_allocate(g_dev, &mai, &img->mem) != VK_SUCCESS) {
             g_vk.DestroyImage(g_dev, img->image, NULL); free(img); return -1;
         }
         g_vk.BindImageMemory(g_dev, img->image, img->mem, 0);

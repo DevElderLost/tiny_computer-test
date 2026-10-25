@@ -171,6 +171,11 @@ object FlatpakWayland {
                 pad = "controller virtual aktif"
             }
         }
+        // Batas memori Vulkan (lapisan di folder extra): `flatpak run` membersihkan lingkungan, jadi lewat `--env`.
+        VkMemLimit.envList()?.let { env ->
+            opts += "--filesystem=$GUEST_TINY/extra:ro"
+            for (e in env) opts += "--env=$e"
+        }
         val audio = directAudio(opts)
         opts.distinct().let { opts.clear(); opts.addAll(it) }
         val command = prog + " run " + opts.joinToString(" ") { q(it) } + rest
