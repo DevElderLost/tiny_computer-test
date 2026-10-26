@@ -133,8 +133,6 @@ fun SettingsScreen() {
 
         FlathubGroup()
 
-        SnapGroup()
-
         DeckGroup(stringResource(R.string.tc_group_terminal)) {
             DeckTextRow(stringResource(R.string.tc_ui_terminal_max_lines), Cfg.termMaxLines.toString(), number = true) { it.toIntOrNull()?.let { v -> Cfg.termMaxLines = v.coerceIn(100, 50000) } }
             DeckSwitchRow(stringResource(R.string.tc_ui_enable_terminal_editing), null, Cfg.isTerminalWriteEnabled) { Cfg.isTerminalWriteEnabled = it }
