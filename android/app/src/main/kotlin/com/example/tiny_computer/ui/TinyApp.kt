@@ -483,19 +483,17 @@ private fun SettingsCog(onClick: () -> Unit) {
     }
 }
 
-/** Tombol Import di kanan roda gigi: tinggi 48 dp, ikon + teks, gaya sama dengan [SettingsCog]. */
+/** Tombol Import di kanan roda gigi: kotak 48 dp berisi ikon saja (tanpa teks), gaya sama dengan [SettingsCog]. */
 @Composable
 private fun ImportButton(onClick: () -> Unit) {
     val pal = LocalPalette.current
     val shape = RoundedCornerShape(12.dp)
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        modifier = Modifier.height(48.dp).clip(shape).background(Color.White.copy(alpha = 0.03f)).border(1.dp, pal.line2, shape)
-            .clickable(onClick = onClick).padding(horizontal = 14.dp),
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier.size(48.dp).clip(shape).background(Color.White.copy(alpha = 0.03f)).border(1.dp, pal.line2, shape)
+            .clickable(onClick = onClick),
     ) {
-        Icon(Icons.Filled.FileDownload, null, tint = pal.onBackground, modifier = Modifier.size(20.dp))
-        Text(stringResource(R.string.tc_import_button), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = pal.onBackground)
+        Icon(Icons.Filled.FileDownload, stringResource(R.string.tc_import_button), tint = pal.onBackground, modifier = Modifier.size(20.dp))
     }
 }
 
@@ -535,15 +533,17 @@ private fun TerminalGate() {
             stringResource(if (noSystem) R.string.tc_start_terminal_hint_nosystem else R.string.tc_start_terminal_hint),
         )
         StartupNotice()
-        Group {
+        // tombol kecil di kiri atas (seperti Open desktop di Beranda), bukan lagi selebar layar
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically,
+        ) {
             if (!noSystem) {
-                DeckButton(stringResource(R.string.tc_start_container_button), Modifier.fillMaxWidth().padding(14.dp)) {
-                    Startup.begin(ctx, openDesktop = false)
-                }
+                DeckButton(stringResource(R.string.tc_start_container_button)) { Startup.begin(ctx, openDesktop = false) }
             }
             DeckButton(
                 stringResource(if (noSystem) R.string.tc_start_terminal_button else R.string.tc_start_terminal_host_button),
-                Modifier.fillMaxWidth().padding(14.dp), primary = noSystem,
+                Modifier.weight(1f, fill = false), primary = noSystem,
             ) { Startup.beginHostTerminal(ctx) }
         }
     }

@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
@@ -28,12 +29,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -174,35 +177,43 @@ fun ShortcutScreen(onLaunch: (String) -> Unit, onShowTerminal: () -> Unit = {}) 
                 CircularProgressIndicator(color = pal.signal)
             }
             else -> {
-                SearchBar(
-                    query, { query = it }, onRefresh = { refresh++ },
-                    onAdd = { exePicker.launch(arrayOf("*/*")) },
-                )
-                if (hiddenCount > 0) {
-                    Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
-                        KeyChip(
-                            if (showHidden) stringResource(R.string.tc_sc_hide_hidden) else stringResource(R.string.tc_sc_show_hidden, hiddenCount),
-                            selected = showHidden,
-                        ) { showHidden = !showHidden }
+                // Seperti etalase Flathub: kolom cari, chip "Show hidden" dan petunjuk ikut bergulir bersama ikon.
+                // Semuanya item satu baris penuh di dalam grid yang sama, jadi tampil lagi saat digulir ke atas dan tidak
+                // hilang walau hasil pencarian kosong (kolom cari tetap bisa diubah).
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = 88.dp),
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    item(key = "search", span = { GridItemSpan(maxLineSpan) }) {
+                        SearchBar(
+                            query, { query = it }, onRefresh = { refresh++ },
+                            onAdd = { exePicker.launch(arrayOf("*/*")) },
+                        )
                     }
-                }
-                if (visible.isEmpty()) {
-                    HintText(stringResource(if (list.none { !it.system }) R.string.tc_sc_empty else R.string.tc_sc_no_match))
-                } else {
-                    LazyVerticalGrid(
-                        columns = GridCells.Adaptive(minSize = 88.dp),
-                        modifier = Modifier.fillMaxWidth().weight(1f),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        items(visible, key = { it.id }) { app ->
-                            val s = settings[app.id]
-                            AppTile(
-                                app = app, label = s?.name?.ifBlank { null } ?: app.name, dimmed = isHidden(app),
-                                onClick = { onLaunch(app.id) }, onLongClick = { editing = app },
-                            )
+                    if (hiddenCount > 0) {
+                        item(key = "hidden-chip", span = { GridItemSpan(maxLineSpan) }) {
+                            Row(Modifier.padding(horizontal = 4.dp, vertical = 4.dp)) {
+                                KeyChip(
+                                    if (showHidden) stringResource(R.string.tc_sc_hide_hidden) else stringResource(R.string.tc_sc_show_hidden, hiddenCount),
+                                    selected = showHidden,
+                                ) { showHidden = !showHidden }
+                            }
                         }
+                    }
+                    if (visible.isEmpty()) {
+                        item(key = "empty", span = { GridItemSpan(maxLineSpan) }) {
+                            HintText(stringResource(if (list.none { !it.system }) R.string.tc_sc_empty else R.string.tc_sc_no_match))
+                        }
+                    }
+                    items(visible, key = { it.id }) { app ->
+                        val s = settings[app.id]
+                        AppTile(
+                            app = app, label = s?.name?.ifBlank { null } ?: app.name, dimmed = isHidden(app),
+                            onClick = { onLaunch(app.id) }, onLongClick = { editing = app },
+                        )
                     }
                 }
             }
@@ -219,7 +230,7 @@ private fun SearchBar(query: String, onQuery: (String) -> Unit, onRefresh: () ->
     val pal = LocalPalette.current
     val shape = RoundedCornerShape(12.dp)
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+        Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         OutlinedTextField(
@@ -313,6 +324,7 @@ private fun AppSettingsDialog(app: DesktopApps.App, onRemoved: () -> Unit, onSho
     val pal = LocalPalette.current
     val ctx = LocalContext.current
     var s by remember(app.id) { mutableStateOf(ShortcutPrefs.get(app.id)) }
+    var confirmRemove by remember(app.id) { mutableStateOf(false) }
     fun update(n: ShortcutPrefs.Settings) { s = n; ShortcutPrefs.save(app.id, n) }
 
     val def = stringResource(R.string.tc_sc_opt_default)
@@ -428,10 +440,14 @@ private fun AppSettingsDialog(app: DesktopApps.App, onRemoved: () -> Unit, onSho
                     }
                     DeckButton(stringResource(R.string.tc_close), Modifier.weight(1f), onClick = onDismiss)
                 }
-                // hanya shortcut .exe / AppImage buatan pengguna yang bisa dihapus; aplikasi Linux tidak disentuh
-                if (ExeShortcuts.isExeShortcut(app.id) || AppImageInstaller.isAppImageShortcut(app.id)) {
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp)) {
-                        DeckButton(stringResource(R.string.tc_sc_remove), Modifier.weight(1f), primary = false) {
+                // .exe / AppImage buatan pengguna dihapus beserta berkasnya; aplikasi Linux lain: hanya entri .desktop-nya
+                // yang dihapus (setelah konfirmasi), programnya tetap terpasang
+                val userMade = ExeShortcuts.isExeShortcut(app.id) || AppImageInstaller.isAppImageShortcut(app.id)
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp)) {
+                    DeckButton(stringResource(R.string.tc_sc_remove), Modifier.weight(1f), primary = false) {
+                        if (!userMade) {
+                            confirmRemove = true
+                        } else {
                             if (AppImageInstaller.isAppImageShortcut(app.id)) {
                                 // uninstall AppImage = kebalikan pasang: skrip dijalankan di terminal kontainer
                                 // (langkahnya terlihat di tab Terminal); tanpa sistem terpasang, hapus langsung
@@ -455,6 +471,24 @@ private fun AppSettingsDialog(app: DesktopApps.App, onRemoved: () -> Unit, onSho
                             onRemoved()
                         }
                     }
+                }
+                if (confirmRemove) {
+                    AlertDialog(
+                        onDismissRequest = { confirmRemove = false },
+                        title = { Text(stringResource(R.string.tc_sc_remove_confirm_title)) },
+                        text = { Text(stringResource(R.string.tc_sc_remove_confirm_body, app.id)) },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                confirmRemove = false
+                                val ok = DesktopApps.removeShortcut(app.id)
+                                Toast.makeText(
+                                    ctx, ctx.getString(if (ok) R.string.tc_sc_removed else R.string.tc_sc_remove_failed, app.name), Toast.LENGTH_LONG,
+                                ).show()
+                                onRemoved()
+                            }) { Text(stringResource(R.string.tc_sc_remove_confirm)) }
+                        },
+                        dismissButton = { TextButton(onClick = { confirmRemove = false }) { Text(stringResource(R.string.tc_ui_cancel)) } },
+                    )
                 }
             }
         }

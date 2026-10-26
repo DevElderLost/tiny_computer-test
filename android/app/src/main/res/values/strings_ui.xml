@@ -554,4 +554,9 @@
     <string name="tc_drawer_sound">Sound</string>
     <string name="tc_sound_title">Sound</string>
     <string name="tc_sound_mic_need_pulse">The microphone only works in PulseAudio mode. Turn off Direct audio in Settings > Audio to use it.</string>
+    <string name="tc_sc_remove_confirm_title">Remove this shortcut?</string>
+    <string name="tc_sc_remove_confirm_body">This deletes the launcher entry (%1$s.desktop) from the system. The program itself is not uninstalled, and the entry comes back if its package is reinstalled.</string>
+    <string name="tc_sc_remove_confirm">Remove</string>
+    <string name="tc_sc_removed">Shortcut removed: %1$s</string>
+    <string name="tc_sc_remove_failed">Could not remove the shortcut: %1$s</string>
 </resources>

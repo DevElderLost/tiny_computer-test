@@ -128,6 +128,26 @@ object DesktopApps {
         return out.sortedBy { it.name.lowercase() }
     }
 
+    /**
+     * Menghapus shortcut = berkas `<id>.desktop` dari semua folder aplikasi (termasuk salinan sistem yang tertimpa
+     * entri pengguna, supaya tidak muncul kembali), beserta pengaturan dan cache ikonnya. Programnya sendiri TIDAK
+     * di-uninstall. Symlink dihapus sebagai link-nya, targetnya tidak disentuh. Mengembalikan true bila ada berkas terhapus.
+     */
+    fun removeShortcut(id: String, root: File = TinyEnv.containerDir()): Boolean {
+        var removed = false
+        for (dir in APP_DIRS) {
+            val base = File(root, dir)
+            val candidates = listOf(File(base, "$id.desktop")) +
+                base.listFiles().orEmpty().filter { it.isDirectory && !Files.isSymbolicLink(it.toPath()) }.map { File(it, "$id.desktop") }
+            for (f in candidates) {
+                if (runCatching { Files.deleteIfExists(f.toPath()) }.getOrDefault(false)) removed = true
+            }
+        }
+        forgetIcon(id)
+        ShortcutPrefs.reset(id)
+        return removed
+    }
+
     /** Satu aplikasi menurut id-nya tanpa memindai semuanya (dipanggil dari thread utama saat peluncuran). */
     fun find(id: String, root: File = TinyEnv.containerDir()): App? {
         for (dir in APP_DIRS) {
