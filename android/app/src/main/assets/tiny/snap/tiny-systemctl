@@ -1,0 +1,83 @@
+#!/bin/bash
+# systemctl palsu untuk kontainer proot (tidak ada systemd sebagai init). Perintah yang mengubah keadaan hanya dicatat
+# di /var/lib/tiny-fake-systemd supaya is-active / is-enabled konsisten; tidak ada unit yang benar-benar dijalankan.
+# Dipasang oleh tiny-snap-setup (menggantikan /usr/bin/systemctl lewat dpkg-divert bila systemd terpasang).
+STATE="${TINY_FAKE_SYSTEMD_DIR:-/var/lib/tiny-fake-systemd}"
+mkdir -p "$STATE/active" "$STATE/enabled" "$STATE/masked" 2>/dev/null
+quiet=0; cmd=""; units=(); props=()
+while [ $# -gt 0 ]; do
+	case "$1" in
+		-q|--quiet) quiet=1 ;;
+		-p|--property) shift; props+=("${1:-}") ;;
+		--property=*) props+=("${1#*=}") ;;
+		-t|--type|-n|--lines|-o|--output|-s|--signal|--kill-whom|--kill-who|-H|--host|-M|--machine|--root|--state|--job-mode|--check-inhibitors|-T) shift ;;
+		-*) ;;
+		*) if [ -z "$cmd" ]; then cmd="$1"; else units+=("$1"); fi ;;
+	esac
+	shift
+done
+key() { local k="${1//\//_}"; echo "${k%.service}"; }
+say() { [ "$quiet" = 1 ] || echo "$@"; }
+snapd_alive() { [ -S /run/snapd.socket ] || [ -S "${TINY_SNAPD_SOCKET:-$HOME/.local/share/tiny/snap/snapd.socket}" ]; }
+is_active() {
+	case "$(key "$1")" in snapd|snapd.socket) snapd_alive && return 0 ;; esac
+	[ -e "$STATE/active/$(key "$1")" ]
+}
+case "$cmd" in
+	""|daemon-reload|daemon-reexec|reset-failed|set-default|set-environment|unset-environment|import-environment|preset|preset-all|link|revert|edit|kill|freeze|thaw|isolate|reboot|poweroff|halt|suspend|hibernate|kexec|exit|switch-root|cancel|service-log-level)
+		exit 0 ;;
+	start|restart|reload|try-restart|reload-or-restart|try-reload-or-restart)
+		for u in "${units[@]}"; do touch "$STATE/active/$(key "$u")" 2>/dev/null; done; exit 0 ;;
+	stop)
+		for u in "${units[@]}"; do rm -f "$STATE/active/$(key "$u")" 2>/dev/null; done; exit 0 ;;
+	enable|reenable)
+		for u in "${units[@]}"; do touch "$STATE/enabled/$(key "$u")" 2>/dev/null; rm -f "$STATE/masked/$(key "$u")"; done; exit 0 ;;
+	disable)
+		for u in "${units[@]}"; do rm -f "$STATE/enabled/$(key "$u")" 2>/dev/null; done; exit 0 ;;
+	mask)
+		for u in "${units[@]}"; do touch "$STATE/masked/$(key "$u")" 2>/dev/null; rm -f "$STATE/enabled/$(key "$u")"; done; exit 0 ;;
+	unmask)
+		for u in "${units[@]}"; do rm -f "$STATE/masked/$(key "$u")" 2>/dev/null; done; exit 0 ;;
+	is-active)
+		rc=0
+		for u in "${units[@]}"; do
+			if is_active "$u"; then say active; else say inactive; rc=3; fi
+		done
+		exit $rc ;;
+	is-enabled)
+		rc=0
+		for u in "${units[@]}"; do
+			k="$(key "$u")"
+			if [ -e "$STATE/masked/$k" ]; then say masked; rc=1
+			elif [ -e "$STATE/enabled/$k" ]; then say enabled
+			else say disabled; rc=1; fi
+		done
+		exit $rc ;;
+	is-failed) for u in "${units[@]}"; do say active; done; exit 1 ;;
+	is-system-running) say running; exit 0 ;;
+	get-default) say multi-user.target; exit 0 ;;
+	status)
+		rc=0
+		for u in "${units[@]}"; do
+			if is_active "$u"; then say "● $u - fake systemd (proot)"; say "     Active: active (running)"
+			else say "○ $u - fake systemd (proot)"; say "     Active: inactive (dead)"; rc=3; fi
+		done
+		exit $rc ;;
+	show)
+		for u in "${units[@]}"; do
+			if is_active "$u"; then st=active; sub=running; else st=inactive; sub=dead; fi
+			if [ ${#props[@]} -eq 0 ]; then echo "Id=$u"; echo "LoadState=loaded"; echo "ActiveState=$st"; echo "SubState=$sub"
+			else for p in "${props[@]}"; do for one in ${p//,/ }; do
+				case "$one" in
+					ActiveState) echo "ActiveState=$st" ;; SubState) echo "SubState=$sub" ;;
+					LoadState) echo "LoadState=loaded" ;; Id) echo "Id=$u" ;; MainPID) echo "MainPID=0" ;;
+					*) echo "$one=" ;;
+				esac
+			done; done; fi
+			echo
+		done
+		exit 0 ;;
+	list-units|list-unit-files|list-sockets|list-timers|list-jobs|list-dependencies|list-machines|cat|show-environment)
+		exit 0 ;;
+	*) exit 0 ;;
+esac

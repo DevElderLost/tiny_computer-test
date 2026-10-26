@@ -1,0 +1,52 @@
+#!/bin/bash
+# mount / umount / mountpoint palsu untuk squashfs di proot (tidak ada syscall mount, tidak ada loop device).
+# `mount -t squashfs X.snap DIR` (atau `-o loop`, atau berkas ber-magic squashfs) mengekstrak X.snap ke DIR dengan
+# unsquashfs dan menaruh penanda DIR/.tiny-fake-squashfs; `umount DIR` menghapus isi DIR yang bertanda itu.
+# Semua pemanggilan lain diteruskan ke util-linux asli. Dipasang sebagai symlink mount/umount/mountpoint ke berkas ini.
+prog="$(basename "$0")"
+real="/usr/bin/$prog"; [ -x "$real" ] || real="/bin/$prog"
+MARK=".tiny-fake-squashfs"
+is_squash_file() { [ -f "$1" ] && [ "$(head -c4 "$1" 2>/dev/null)" = "hsqs" ]; }
+sq_extract() { # $1 sumber, $2 tujuan
+	command -v unsquashfs >/dev/null 2>&1 || { echo "mount (palsu): unsquashfs tidak ada; jalankan: sudo apt install squashfs-tools" >&2; return 32; }
+	mkdir -p "$2" 2>/dev/null || sudo mkdir -p "$2" || return 32
+	[ -w "$2" ] || sudo chown "$(id -u):$(id -g)" "$2" 2>/dev/null
+	unsquashfs -no-xattrs -f -d "$2" "$1" >/dev/null 2>&1 || { echo "mount (palsu): unsquashfs gagal untuk $1" >&2; return 32; }
+	chmod -R u+rwX "$2" 2>/dev/null
+	printf '%s\n' "$1" > "$2/$MARK"
+}
+case "$prog" in
+	mount)
+		type=""; opts=""; pos=(); i=0; args=("$@")
+		while [ $i -lt ${#args[@]} ]; do
+			a="${args[$i]}"
+			case "$a" in
+				-t) i=$((i+1)); type="${args[$i]}" ;;
+				-t*) type="${a#-t}" ;;
+				--types=*) type="${a#*=}" ;;
+				-o) i=$((i+1)); opts="${args[$i]}" ;;
+				-o*) opts="${a#-o}" ;;
+				--options=*) opts="${a#*=}" ;;
+				-*) ;;
+				*) pos+=("$a") ;;
+			esac
+			i=$((i+1))
+		done
+		if [ ${#pos[@]} -eq 2 ] && { [ "$type" = squashfs ] || [ "$type" = fuse.squashfuse ] || is_squash_file "${pos[0]}"; }; then
+			sq_extract "${pos[0]}" "${pos[1]}"; exit $?
+		fi
+		exec "$real" "$@" ;;
+	umount)
+		rest=(); fake=0
+		for a in "$@"; do
+			case "$a" in -*) rest+=("$a") ;; *) if [ -f "$a/$MARK" ]; then fake=1
+				find "$a" -mindepth 1 -delete 2>/dev/null || rm -rf "$a"/* "$a"/.[!.]* 2>/dev/null
+				else rest+=("$a"); fi ;; esac
+		done
+		[ ${#rest[@]} -gt 0 ] && [ $fake = 0 ] && exec "$real" "$@"
+		exit 0 ;;
+	mountpoint)
+		for a in "$@"; do case "$a" in -*) ;; *) [ -f "$a/$MARK" ] && { [[ " $* " == *" -q "* ]] || echo "$a is a mountpoint"; exit 0; } ;; esac; done
+		exec "$real" "$@" ;;
+	*) exec "$real" "$@" ;;
+esac

@@ -554,4 +554,9 @@
     <string name="tc_drawer_sound">Sound</string>
     <string name="tc_sound_title">Sound</string>
     <string name="tc_sound_mic_need_pulse">The microphone only works in PulseAudio mode. Turn off Direct audio in Settings > Audio to use it.</string>
+    <string name="tc_snap_group">Snap / App Center (beta)</string>
+    <string name="tc_snap_hint">Installs a fake systemd, fake squashfs (mount = extract), a snapd replacement and Ubuntu App Center into the container, so Snap apps run inside proot without real snapd. Runs in the Terminal tab; App Center is a large download.</string>
+    <string name="tc_snap_status">Snap runtime</string>
+    <string name="tc_snap_appcenter">App Center</string>
+    <string name="tc_snap_install">Install or repair Snap</string>
 </resources>

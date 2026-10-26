@@ -325,7 +325,7 @@ object Launcher {
     // proses pendukung yang sering menetap setelah aplikasinya keluar; tidak dihitung sebagai "aplikasi masih jalan"
     private val HELPER_PREFIXES = listOf(
         "dbus", "at-spi", "dconf", "gvfs", "fcitx", "ibus", "pulseaudio", "pipewire", "wireplumber",
-        "xdg-", "xfce4-notifyd", "notify", "gnome-keyring", "chrome_crashpad", "crashpad", "proot",
+        "xdg-", "xfce4-notifyd", "notify", "gnome-keyring", "chrome_crashpad", "crashpad", "proot", "tiny-snapd",
     )
 
     private fun isHelper(comm: String) = HELPER_PREFIXES.any { comm.startsWith(it) }
