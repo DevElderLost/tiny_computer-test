@@ -486,7 +486,7 @@ def snap_env(name, rec, y, app_cfg):
         "SNAP_EUID": str(os.geteuid()), "SNAP_LIBRARY_PATH": "/var/lib/snapd/lib/gl:/var/lib/snapd/lib/gl32:/var/lib/snapd/void",
         "SNAP_CONTEXT": "", "SNAP_COOKIE": "", "HOME": user_data,
     })
-    e["PATH"] = ":".join([f"{d}/usr/sbin", f"{d}/usr/bin", f"{d}/sbin", f"{d}/bin", e.get("PATH", "/usr/local/bin:/usr/bin:/bin"), f"{SNAP_ROOT}/bin"])
+    e["PATH"] = ":".join([f"{d}/usr/sbin", f"{d}/usr/bin", f"{d}/sbin", f"{d}/bin", e.get("PATH", "/usr/local/bin:/usr/bin:/bin"), f"{SNAP_ROOT}/bin", ensure_snapctl_wrapper()])
     for src in (y.get("environment"), app_cfg.get("environment")):
         for k, v in (src or {}).items():
             e[k] = expand(str(v), e)
@@ -541,6 +541,58 @@ def run_snap(spec, args):
         os.execve(argv[0], argv, env)
     except OSError as e:
         raise SnapError(f"tidak bisa menjalankan {argv[0]}: {e}", "exec-error", 500)
+
+
+# ---------------------------------------------------------------------------------------------- snapctl
+def declared_plugs(y):
+    out = dict(y.get("plugs") or {})
+    for cfg in (y.get("apps") or {}).values():
+        for p in ((cfg or {}).get("plugs") or []):
+            if isinstance(p, str):
+                out.setdefault(p, None)
+    return out
+
+
+def snapctl(args):
+    """snapctl palsu: skrip desktop-launch milik extension gnome memanggil `snapctl is-connected <plug>` dan berhenti
+    bila gagal. Plug content dianggap tersambung bila symlink-nya ke content snap ada; plug lain dianggap tersambung."""
+    pos = [a for a in args if not a.startswith("-")]
+    if not pos:
+        return 0
+    if pos[0] != "is-connected":
+        return 0  # get/set/services/start/stop/...: tidak ada yang perlu dilakukan tanpa snapd sungguhan
+    plug = pos[-1] if len(pos) > 1 else ""
+    name = os.environ.get("SNAP_NAME", "")
+    rec = load_state()["snaps"].get(name)
+    if not rec:
+        return 1
+    try:
+        y = read_yaml(f"{snap_dir(name, rec['revision'])}/meta/snap.yaml")
+    except SnapError:
+        return 1
+    plugs = declared_plugs(y)
+    if plug not in plugs:
+        return 1
+    cfg = plugs[plug]
+    if isinstance(cfg, dict) and cfg.get("interface") == "content" and cfg.get("target"):
+        target = expand(str(cfg["target"]), {"SNAP": snap_dir(name, rec["revision"])})
+        return 0 if os.path.exists(target) else 1
+    return 0
+
+
+def ensure_snapctl_wrapper():
+    d = f"{BASE}/bin"
+    os.makedirs(d, exist_ok=True)
+    w = f"{d}/snapctl"
+    body = f'#!/bin/sh\nexec "{sys.executable}" "{os.path.abspath(__file__)}" snapctl "$@"\n'
+    try:
+        if not os.path.exists(w) or open(w).read() != body:
+            with open(w, "w") as f:
+                f.write(body)
+            os.chmod(w, 0o755)
+    except OSError:
+        pass
+    return d
 
 
 # ---------------------------------------------------------------------------------------------- daemon REST
@@ -841,6 +893,8 @@ def main(argv):
             if not args:
                 raise SnapError("snap run: nama snap diperlukan", "bad-request", 400)
             run_snap(args[0], args[1:])
+        elif cmd == "snapctl":
+            return snapctl(rest)
         elif cmd == "install":
             for n in names:
                 print(install(n, channel, cli_progress()))
