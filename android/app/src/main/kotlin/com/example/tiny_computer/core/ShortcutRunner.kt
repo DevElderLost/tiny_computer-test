@@ -238,6 +238,8 @@ fi
             // tercatat di log shortcut: tempat konfigurasi aplikasi ini dan apakah bisa ditulis
             sb.append("mkdir -p \"\$HOME/.config\" \"\$HOME/.local/share\" \"\$HOME/.cache\" 2>/dev/null\n")
             sb.append("echo \"[tiny] AppImage: HOME=\$HOME cwd=\$(pwd) ~/.config bisa ditulis: \$([ -w \"\$HOME/.config\" ] && echo ya || echo TIDAK)\"\n")
+            // dialog berkas (Import shader/mod dst.) memanggil zenity/kdialog: catat apa yang tersedia untuk diagnosis
+            sb.append("echo \"[tiny] dialog berkas: zenity=\$(command -v zenity || echo TIDAK ADA) kdialog=\$(command -v kdialog || echo TIDAK ADA) DISPLAY=\$DISPLAY WAYLAND_DISPLAY=\$WAYLAND_DISPLAY GDK_BACKEND=\$GDK_BACKEND SDL_VIDEODRIVER=\$SDL_VIDEODRIVER\"\n")
         }
 
         // bus sesi D-Bus: pakai milik desktop bila sedang berjalan (cari di /proc), kalau tidak, buat sendiri
