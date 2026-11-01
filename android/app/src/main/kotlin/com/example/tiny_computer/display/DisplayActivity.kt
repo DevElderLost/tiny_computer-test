@@ -29,6 +29,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import android.content.SharedPreferences
 import com.droiddeck.launcher.input.ControllerPrefs
 import com.droiddeck.launcher.input.EvdevKeys
+import com.droiddeck.launcher.input.OnScreenControls
 import com.droiddeck.launcher.input.PadMotion
 import com.droiddeck.launcher.input.RumbleReceiver
 import com.droiddeck.launcher.input.PadBridge
@@ -172,12 +173,21 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
                 }
             }
         }
+        // tombol controller layar: View biasa di antara layar compositor dan ComposeView (bukan AndroidView di dalam Compose),
+        // supaya sentuhan di luar tombol sampai ke layar compositor dan kursor tetap bisa digerakkan (identitas Xbox 360)
+        val controls = OnScreenControls(this, p, onKeyboard = { ui.pcKeyboard = !ui.pcKeyboard }).apply {
+            swallowEmptyTouches = ui.padIdentity == "deck"
+            visibility = if (ui.padOverlay) android.view.View.VISIBLE else android.view.View.GONE
+            // inset poni/cutout: dikirim ulang setelah terpasang di jendela
+            post { rootWindowInsets?.let { onApplyWindowInsets(it) } }
+        }
         val overlay = ComposeView(this).apply {
             setContent {
                 TinyTheme {
                     DisplayOverlay(
                         state = ui,
                         pad = p,
+                        controls = controls,
                         sendKey = { code, down -> WaylandCompositor.nativeSendKey(code, if (down) 1 else 0) },
                         // Back to terminal: tutup layar desktop dan minta TinyApp membuka tab Terminal
                         onClose = { NavRequest.terminal = true; finish() },
@@ -202,6 +212,7 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
             addView(surfaceView, FrameLayout.LayoutParams(-1, -1))
             // kursor rootfs: di atas compositor, di bawah menu; tidak menerima sentuhan
             addView(CursorView(this@DisplayActivity, ui) { currentScene() }, FrameLayout.LayoutParams(-1, -1))
+            addView(controls, FrameLayout.LayoutParams(-1, -1))
             addView(overlay, FrameLayout.LayoutParams(-1, -1))
         })
     }

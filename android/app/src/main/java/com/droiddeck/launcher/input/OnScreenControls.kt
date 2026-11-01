@@ -95,6 +95,13 @@ class OnScreenControls(
     /** Titik tengah (piksel) grip dan trackpad Deck di mode edit, per [DeckLayout.Spec.id]: [x, y]. */
     private val extraPos = HashMap<String, FloatArray>()
 
+    /**
+     * Sentuhan yang jatuh di luar semua tombol: false (bawaan) = tidak diambil, sehingga diteruskan ke view di bawahnya
+     * (layar compositor: kursor / klik / mode touchpad). true = ditelan seperti dulu; dipakai identitas Steam Deck yang
+     * sudah punya trackpad sendiri untuk menggerakkan kursor.
+     */
+    var swallowEmptyTouches = false
+
     private var buttonsOnly = false
     private var quickHidden = false
     private var quickPressedBy = -1
@@ -570,8 +577,8 @@ class OnScreenControls(
                     return true
                 }
                 if (quickPressedBy != -1) return true
-                if (quickHidden) return false
-                val control = controlAt(x, y) ?: adaptiveStickAt(x, y) ?: return false
+                if (quickHidden) return swallowEmptyTouches
+                val control = controlAt(x, y) ?: adaptiveStickAt(x, y) ?: return swallowEmptyTouches
                 if (control.pressedBy != -1) return true
                 control.pressedBy = event.getPointerId(index)
                 if (control.stick >= 0) {

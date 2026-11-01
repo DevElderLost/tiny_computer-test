@@ -2,6 +2,7 @@ package com.example.tiny_computer.controller
 
 import androidx.compose.foundation.background
 import android.os.SystemClock
+import android.view.View
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -15,6 +16,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -32,7 +35,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import com.droiddeck.launcher.input.ControllerPrefs
 import com.droiddeck.launcher.input.DeckControls
 import com.droiddeck.launcher.input.DeckLayout
@@ -57,21 +59,25 @@ import kotlin.math.roundToInt
  */
 @Composable
 fun ControllerOverlay(
-    pad: PadBridge, deck: Boolean, modifier: Modifier = Modifier, onKeyboard: (() -> Unit)? = null,
+    controls: OnScreenControls, pad: PadBridge, deck: Boolean, modifier: Modifier = Modifier,
     reloadKey: Int = 0, sceneSize: Pair<Int, Int> = 1280 to 720,
 ) {
+    // [controls] hidup sebagai View biasa di FrameLayout DisplayActivity (di atas layar compositor, di bawah ComposeView
+    // ini), bukan di dalam AndroidView. Di dalam Compose, AndroidView menjadi target sentuhan seluas layar, sehingga
+    // ComposeView menelan SEMUA sentuhan walau tombolnya tidak kena; kursor tidak bisa digerakkan di identitas Xbox 360
+    // (tanpa trackpad Deck). Sebagai View saudara, sentuhan di luar tombol jatuh ke layar compositor seperti biasa.
+    DisposableEffect(controls) {
+        controls.visibility = View.VISIBLE
+        onDispose {
+            controls.releaseAll()
+            controls.visibility = View.GONE
+        }
+    }
+    // identitas Deck punya trackpad untuk kursor: sentuhan kosong tetap ditelan seperti dulu; Xbox 360 meneruskannya
+    SideEffect { controls.swallowEmptyTouches = deck }
+    // kembali dari editor tata letak: baca ulang pengaturan dan posisi
+    LaunchedEffect(reloadKey) { if (reloadKey > 0) controls.reload() }
     Box(modifier.fillMaxSize()) {
-        AndroidView(
-            factory = { ctx ->
-                OnScreenControls(ctx, pad, onKeyboard = onKeyboard).also { v ->
-                    // inset poni/cutout: AndroidView di dalam Compose tidak selalu menerimanya sendiri
-                    v.post { v.rootWindowInsets?.let { v.onApplyWindowInsets(it) } }
-                }
-            },
-            // kembali dari editor tata letak: baca ulang pengaturan dan posisi
-            update = { v -> if (reloadKey > 0) v.reload() },
-            modifier = Modifier.fillMaxSize(),
-        )
         if (deck) DeckExtras(pad, reloadKey, sceneSize)
     }
 }

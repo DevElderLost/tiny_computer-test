@@ -17,6 +17,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
+import com.droiddeck.launcher.input.OnScreenControls
 import com.droiddeck.launcher.input.PadBridge
 import com.example.tiny_computer.controller.ControllerOverlay
 import com.example.tiny_computer.core.Cfg
@@ -31,14 +32,14 @@ import kotlin.math.abs
  */
 @Composable
 fun DisplayOverlay(
-    state: DisplayUiState, pad: PadBridge, sendKey: (Int, Boolean) -> Unit, onClose: () -> Unit,
+    state: DisplayUiState, pad: PadBridge, controls: OnScreenControls, sendKey: (Int, Boolean) -> Unit, onClose: () -> Unit,
     onShutdown: () -> Unit = {},
     onPadOverlayChange: (Boolean) -> Unit = { Cfg.padOverlay = it },
 ) {
     Box(Modifier.fillMaxSize()) {
         if (state.padOverlay) {
             ControllerOverlay(
-                pad = pad, deck = state.padIdentity == "deck", onKeyboard = { state.pcKeyboard = !state.pcKeyboard },
+                controls = controls, pad = pad, deck = state.padIdentity == "deck",
                 reloadKey = state.padLayoutRev, sceneSize = state.sceneW to state.sceneH,
             )
         }
@@ -50,8 +51,8 @@ fun DisplayOverlay(
                     .background(Color.White.copy(alpha = 0.22f)),
             )
         }
-        // controller layar (OnScreenControls) memakan semua sentuhan di atas SurfaceView, jadi handler geser tepi di
-        // DisplayActivity tidak pernah menerimanya. Selama controller aktif, pita tepi kiri ini mengambil alih:
+        // identitas Deck: controller layar menelan sentuhan kosong, jadi handler geser tepi di DisplayActivity tidak
+        // menerimanya. Selama controller aktif, pita tepi kiri ini mengambil alih:
         // geser ke kanan dari tepi = buka menu, sama seperti saat controller mati.
         if (state.padOverlay && !state.menuOpen) {
             Box(
