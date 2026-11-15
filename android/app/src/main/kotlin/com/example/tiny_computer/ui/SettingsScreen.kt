@@ -164,6 +164,7 @@ fun SettingsScreen() {
             DeckSwitchRow(stringResource(R.string.tc_ui_enable_d_r_i3), null, Cfg.dri3) { Cfg.dri3 = it }
             DeckSwitchRow(stringResource(R.string.tc_ui_fake_drm), stringResource(R.string.tc_ui_fake_drm_hint), Cfg.fakeDrm) { Cfg.fakeDrm = it }
             DeckSwitchRow(stringResource(R.string.tc_ui_desktop_wayland), stringResource(R.string.tc_ui_desktop_wayland_hint), Cfg.desktopWayland) { Cfg.desktopWayland = it }
+            DeckSwitchRow(stringResource(R.string.tc_ui_xfce_compositor), stringResource(R.string.tc_ui_xfce_compositor_hint), Cfg.xfceCompositor) { Cfg.xfceCompositor = it }
         }
 
         DeckGroup(stringResource(R.string.tc_group_logs)) {

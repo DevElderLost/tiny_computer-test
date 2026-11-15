@@ -125,6 +125,14 @@ object Cfg {
     var desktopWayland: Boolean
         get() = TinyPrefs.getBool("desktopWayland", true)
         set(v) = TinyPrefs.setBool("desktopWayland", v)
+    /**
+     * Compositor xfwm4 (blur/transparansi) dibiarkan menyala sesuai setelan XFCE saat Open desktop dimulai. Bawaan mati:
+     * compositing dimatikan di awal sesi. Apa pun pilihannya, vblank_mode xfwm4 dipaksa off (lihat assets/tiny/xsession.sh):
+     * jalur vblank-lah yang membuat layar hitam di Xwayland tanpa DRM.
+     */
+    var xfceCompositor: Boolean
+        get() = TinyPrefs.getBool("xfceCompositor", false)
+        set(v) = TinyPrefs.setBool("xfceCompositor", v)
     /** Catat peluncuran aplikasi/.exe (Shortcut + Open desktop) ke Download/Wayland-logs, satu berkas per sesi proot. */
     var launchLog: Boolean
         get() = TinyPrefs.getBool("launchLog", false)
