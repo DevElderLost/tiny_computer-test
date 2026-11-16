@@ -74,8 +74,9 @@ void XClient::ProcCompat() {
         auto* w = GetResourceAs<Window>(r->window); if (!w) throw BadWindowError(r->window);
         auto* d = w->GetDrawable(); if (!d) return;
         static_cast<NativeScreen&>(server.GetScreen()).MutateDrawable(d, [&] {
-            d->FillRect(r->x, r->y, r->width ? r->width : w->GetWidth() - r->x,
-                    r->height ? r->height : w->GetHeight() - r->y, w->GetAttributes().back_pixel);
+            // Latar bisa berupa warna, tile pixmap (CWBackPixmap), atau ParentRelative.
+            w->PaintBackground(r->x, r->y, r->width ? r->width : w->GetWidth() - r->x,
+                               r->height ? r->height : w->GetHeight() - r->y);
         });
         if (r->exposures) w->MakeExposure(); return;
     }

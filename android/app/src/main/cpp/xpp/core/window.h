@@ -25,6 +25,10 @@ struct WindowAttributes {
     bool save_under{};
     bool override_redirect{};
     u32 back_pixel{};
+    // CWBackPixmap: pixmap latar yang di-tile dari pojok kiri atas window, atau ParentRelative (latar milik leluhur terdekat).
+    // Server ini memegang isi tiap window di drawable-nya sendiri, jadi latar dicat langsung (lihat Window::PaintBackground).
+    sp<Drawable> back_tile;
+    bool back_parent_relative{};
     u32 backing_pixel{};
     u32 backing_planes{1};
     u32 bit_gravity{CenterGravity};
@@ -71,6 +75,12 @@ public:
 
     Drawable* GetDrawable() const { return drawable.get(); }
     const sp<Drawable>& SharedDrawable() const { return drawable; }
+
+    // Mengecat latar window (warna, tile pixmap, atau ParentRelative) pada persegi (x, y, w, h) koordinat window.
+    // Dipakai oleh CWBackPixel/CWBackPixmap, ClearArea, dan setelah drawable dibuat ulang karena resize.
+    void PaintBackground(s32 x, s32 y, s32 w, s32 h);
+    // Mengecat ulang seluruh anak (rekursif) yang latarnya ParentRelative setelah latar window ini berubah.
+    void RepaintRelativeChildren();
 
     const std::list<Window*>& GetChildren() const { return children; }
 

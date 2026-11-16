@@ -1,9 +1,12 @@
+#include <algorithm>
 #include <stack>
+#include <vector>
 #include <X11/X.h>
 #include <X11/Xproto.h>
 #include "base/log.h"
 #include "core/cursor.h"
 #include "core/exceptions.h"
+#include "core/pixmap.h"
 #include "core/drawable.h"
 #include "core/window.h"
 #include "core/window_manager.h"
@@ -20,11 +23,36 @@ bool WindowAttributes::Update(Window* window, u32 mask, const u32* values, XClie
         const u32 index = 1 << std::countr_zero(mask);
         const u32 value = *values++;
         switch (index) {
+            case CWBackPixmap: {
+                // None (0): tanpa latar, isi window dibiarkan. ParentRelative (1): latar leluhur. Selain itu: tile pixmap.
+                // Pixmap ditahan lewat drawable bersama; isinya diperlakukan seperti saat pengaturan (tanpa salinan).
+                sp<Drawable> tile;
+                bool relative = false;
+                if (value == ParentRelative) {
+                    relative = true;
+                } else if (value != None) {
+                    const auto* pixmap = client->GetResourceAs<Pixmap>(value);
+                    if (!pixmap) throw BadPixmapError(value);
+                    tile = pixmap->SharedDrawable();
+                }
+                back_tile = std::move(tile);
+                back_parent_relative = relative;
+                if (back_tile || back_parent_relative) {
+                    window->PaintBackground(0, 0, window->GetWidth(), window->GetHeight());
+                    window->RepaintRelativeChildren();
+                    redraw = true;
+                }
+                break;
+            }
             case CWBackPixel: {
-                if (back_pixel != value) {
+                // Warna latar menggantikan pixmap latar.
+                const bool had_pixmap = back_tile || back_parent_relative;
+                back_tile = nullptr;
+                back_parent_relative = false;
+                if (back_pixel != value || had_pixmap) {
                     back_pixel = value;
-                    const auto drawable = window->GetDrawable();
-                    drawable->FillRect(0, 0, drawable->GetWidth(), drawable->GetHeight(), value);
+                    window->PaintBackground(0, 0, window->GetWidth(), window->GetHeight());
+                    window->RepaintRelativeChildren();
                     redraw = true;
                 }
                 break;
@@ -788,6 +816,54 @@ Window* Window::WindowAtPoint(s16 x, s16 y) {
 
 void Window::RecreateDrawable() {
     drawable = window_manager.GetScreen().CreateDrawable(width, height, depth);
+    // Window yang berubah ukuran berisi latar lagi (seperti X sungguhan sebelum Expose); tanpa ini isinya hitam.
+    if (attributes.back_pixel != 0 || attributes.back_tile || attributes.back_parent_relative) {
+        PaintBackground(0, 0, width, height);
+    }
+}
+
+void Window::PaintBackground(s32 x, s32 y, s32 w, s32 h) {
+    if (!drawable || is_input_only) return;
+    x = std::max<s32>(x, 0);
+    y = std::max<s32>(y, 0);
+    w = std::min<s32>(w, s32(width) - x);
+    h = std::min<s32>(h, s32(height) - y);
+    if (w <= 0 || h <= 0) return;
+
+    // Cari pemilik latar: ParentRelative naik ke leluhur; (ox, oy) = posisi window ini di dalam sistem koordinat pemilik.
+    const Window* owner = this;
+    s32 ox = 0, oy = 0;
+    while (owner->attributes.back_parent_relative && owner->parent) {
+        ox += owner->in_rect.left - owner->parent->in_rect.left;
+        oy += owner->in_rect.top - owner->parent->in_rect.top;
+        owner = owner->parent;
+    }
+    const auto& tile = owner->attributes.back_tile;
+    if (!tile || tile->GetWidth() == 0 || tile->GetHeight() == 0) {
+        drawable->FillRect(s16(x), s16(y), u16(w), u16(h), owner->attributes.back_pixel);
+        return;
+    }
+    const s32 tw = tile->GetWidth(), th = tile->GetHeight();
+    std::vector<u32> pixels(size_t(tw) * th);
+    tile->ReadPixels(reinterpret_cast<u8*>(pixels.data()), 0, 0, u16(tw), u16(th), u16(tw));
+    std::vector<u32> out(size_t(w) * h);
+    const u32 alpha = depth == 32 ? 0u : 0xff000000u;
+    for (s32 j = 0; j < h; ++j) {
+        const s32 ty = ((y + j + oy) % th + th) % th;
+        for (s32 i = 0; i < w; ++i) {
+            const s32 tx = ((x + i + ox) % tw + tw) % tw;
+            out[size_t(j) * w + i] = pixels[size_t(ty) * tw + tx] | alpha;
+        }
+    }
+    drawable->WritePixels(reinterpret_cast<const u8*>(out.data()), 0, 0, s16(x), s16(y), u16(w), u16(h), u16(w));
+}
+
+void Window::RepaintRelativeChildren() {
+    for (auto* child : children) {
+        if (!child->attributes.back_parent_relative) continue;
+        child->PaintBackground(0, 0, child->width, child->height);
+        child->RepaintRelativeChildren();
+    }
 }
 
 void Window::OnOwnerDies(XClient* owner) {
