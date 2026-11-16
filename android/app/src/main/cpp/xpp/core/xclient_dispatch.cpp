@@ -300,7 +300,8 @@ void XClient::ProcQueryExtension() {
             .sequenceNumber = sequence,
     };
     const bool hidden = (server.RendererConfig().disableShm && name == "MIT-SHM") ||
-                        (server.RendererConfig().disableDri3 && name == "DRI3");
+                        (server.RendererConfig().disableDri3 && name == "DRI3") ||
+                        (server.RendererConfig().disableRender && name == "RENDER");
     if (const auto extension = hidden ? nullptr : server.GetExtensionManager().FindExtension(name)) {
         reply.present = xTrue;
         reply.major_opcode = extension->base;

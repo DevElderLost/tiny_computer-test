@@ -14,6 +14,12 @@ struct NativeRendererConfig {
     // DRI3 tidak diiklankan: transport DRI3 server ini memakai AHardwareBuffer khas Winlator, bukan dmabuf, sehingga Mesa biasa
     // di guest tidak bisa memakainya. Tanpa DRI3 Mesa/Zink memakai jalur WSI software (GPU merender, hasilnya dikirim lewat PutImage).
     bool disableDri3{};
+    // RENDER tidak diiklankan: server ini hanya mengimplementasikan subset kursor (CreatePicture/CreateCursor/CreateAnimCursor);
+    // Composite, FillRectangles, SetPictureFilter, glyph, trapezoid, dan A8 tidak ada. cairo-xlib (GTK3: xfwm4, xfce4-panel,
+    // xfce4-terminal, xfdesktop) memilih jalur RENDER begitu ekstensi ada, lalu menerima BadImplementation yang membuat GDK
+    // memanggil exit(1). Tanpa window manager, panel, dan desktop layar tinggal hitam. Tanpa RENDER cairo jatuh ke compositor
+    // core (XFillRectangle/XPutImage/XCopyArea) yang didukung penuh; kursor ARGB libXcursor menjadi kursor core 1-bit.
+    bool disableRender{};
     std::string driverPath, libraryName, nativeLibDir;
     bool swapRB = false;
     int presentMode = 2; // VK_PRESENT_MODE_FIFO_KHR
