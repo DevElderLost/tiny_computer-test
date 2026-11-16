@@ -65,6 +65,9 @@ object TinyPrefs {
 
 /** Kunci dan nilai bawaan yang sama dengan `Util.getGlobal` di workflow.dart. */
 object Cfg {
+    const val DISPLAY_XWAYLAND = "xwayland"
+    const val DISPLAY_WAYLAND = "wayland"
+    const val DISPLAY_XPP = "xpp"
     var defaultContainer: Int
         get() = TinyPrefs.getInt("defaultContainer", 0)
         set(v) = TinyPrefs.setInt("defaultContainer", v)
@@ -125,6 +128,25 @@ object Cfg {
     var desktopWayland: Boolean
         get() = TinyPrefs.getBool("desktopWayland", true)
         set(v) = TinyPrefs.setBool("desktopWayland", v)
+    /**
+     * Display server untuk Open desktop: [DISPLAY_XWAYLAND] (Xwayland di atas compositor Wayland), [DISPLAY_WAYLAND]
+     * (Xwayland + aplikasi SDL/Vulkan langsung ke compositor, = [desktopWayland]) atau [DISPLAY_XPP] (X++ native X server dari
+     * Winlator Ludashi, tanpa Xwayland dan tanpa compositor Wayland). Tanpa nilai tersimpan, pilihan mengikuti [desktopWayland]
+     * supaya pengaturan lama tetap berlaku. Memilih Xwayland/Wayland juga menulis [desktopWayland] (dibaca ShortcutRunner).
+     */
+    var displayServer: String
+        get() = TinyPrefs.getString("displayServer", if (desktopWayland) DISPLAY_WAYLAND else DISPLAY_XWAYLAND)
+            .let { if (it == DISPLAY_XPP || it == DISPLAY_WAYLAND || it == DISPLAY_XWAYLAND) it else DISPLAY_XWAYLAND }
+        set(v) {
+            TinyPrefs.setString("displayServer", v)
+            if (v != DISPLAY_XPP) desktopWayland = v == DISPLAY_WAYLAND
+        }
+    /** True bila desktop memakai X++ (lihat [displayServer]). */
+    val desktopXpp: Boolean get() = displayServer == DISPLAY_XPP
+    /** Backend renderer X++: 1 = EGL (GLES, semua perangkat), 2 = DisplayX (ASurfaceControl, Android 10+). Berlaku saat server X++ dibuat. */
+    var xppBackend: Int
+        get() = TinyPrefs.getInt("xppBackend", 1).let { if (it == 2) 2 else 1 }
+        set(v) = TinyPrefs.setInt("xppBackend", if (v == 2) 2 else 1)
     /**
      * Compositor xfwm4 (blur/transparansi) dibiarkan menyala sesuai setelan XFCE saat Open desktop dimulai. Bawaan mati:
      * compositing dimatikan di awal sesi. Apa pun pilihannya, vblank_mode xfwm4 dipaksa off (lihat assets/tiny/xsession.sh):

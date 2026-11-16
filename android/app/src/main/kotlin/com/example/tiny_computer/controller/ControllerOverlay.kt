@@ -40,7 +40,6 @@ import com.droiddeck.launcher.input.DeckControls
 import com.droiddeck.launcher.input.DeckLayout
 import com.droiddeck.launcher.input.OnScreenControls
 import com.droiddeck.launcher.input.PadBridge
-import com.droiddeck.launcher.wayland.WaylandCompositor
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
@@ -233,7 +232,7 @@ private fun TrackPad(
                         val iy = fy.toInt()
                         remX = fx - ix
                         remY = fy - iy
-                        if (ix != 0 || iy != 0) WaylandCompositor.nativeSendSceneInput(SCENE_RELATIVE, ix, iy)
+                        if (ix != 0 || iy != 0) com.example.tiny_computer.display.SceneInput.send(SCENE_RELATIVE, ix, iy)
                     }
                     first.consume()
                     touching = true
@@ -298,4 +297,4 @@ private const val BTN_MIDDLE = 274
 private const val ACCEL_K = 0.4f
 private const val ACCEL_MAX = 1.2f
 
-private fun mouseButton(code: Int, down: Boolean) = WaylandCompositor.nativeSendSceneInput(SCENE_BUTTON, code, if (down) 1 else 0)
+private fun mouseButton(code: Int, down: Boolean) = com.example.tiny_computer.display.SceneInput.send(SCENE_BUTTON, code, if (down) 1 else 0)

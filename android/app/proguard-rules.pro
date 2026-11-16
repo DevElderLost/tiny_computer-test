@@ -28,3 +28,6 @@
 # androidsvg: ikon .svg aplikasi di menu Shortcut
 -keep class com.caverock.androidsvg.** { *; }
 -dontwarn com.caverock.androidsvg.**
+
+# X++ native X server (libxpp.so): kelas JNI-nya dicari native lewat nama.
+-keep class com.example.tiny_computer.xpp.** { *; }

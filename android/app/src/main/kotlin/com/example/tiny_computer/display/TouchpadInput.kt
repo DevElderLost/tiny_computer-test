@@ -3,7 +3,6 @@ package com.example.tiny_computer.display
 import android.os.Handler
 import android.os.Looper
 import android.view.MotionEvent
-import com.droiddeck.launcher.wayland.WaylandCompositor
 import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.max
@@ -183,7 +182,7 @@ class TouchpadInput(private val slopPx: Float, private val onDragStart: () -> Un
         val iy = fy.toInt()
         remX = fx - ix
         remY = fy - iy
-        if (ix != 0 || iy != 0) WaylandCompositor.nativeSendSceneInput(SCENE_RELATIVE, ix, iy)
+        if (ix != 0 || iy != 0) SceneInput.send(SCENE_RELATIVE, ix, iy)
     }
 
     private fun scroll(dx: Float, dy: Float, dt: Long) {
@@ -239,8 +238,8 @@ class TouchpadInput(private val slopPx: Float, private val onDragStart: () -> Un
         scrollRemH += h
         val iv = scrollRemV.toInt()
         val ih = scrollRemH.toInt()
-        if (iv != 0) { scrollRemV -= iv; WaylandCompositor.nativeSendSceneInput(SCENE_SMOOTH, 0, iv) }
-        if (ih != 0) { scrollRemH -= ih; WaylandCompositor.nativeSendSceneInput(SCENE_SMOOTH, 1, ih) }
+        if (iv != 0) { scrollRemV -= iv; SceneInput.send(SCENE_SMOOTH, 0, iv) }
+        if (ih != 0) { scrollRemH -= ih; SceneInput.send(SCENE_SMOOTH, 1, ih) }
     }
 
     private fun startFling() {
@@ -276,13 +275,13 @@ class TouchpadInput(private val slopPx: Float, private val onDragStart: () -> Un
     private fun ensureStart(sceneW: Int, sceneH: Int) {
         if (started) return
         started = true
-        if (WaylandCompositor.nativeCursorPosition(pos) >= 2 && pos[0] == 0 && pos[1] == 0) {
-            WaylandCompositor.nativeSendSceneInput(SCENE_MOTION, sceneW / 2, sceneH / 2)
+        if (SceneInput.cursorPosition(pos) >= 2 && pos[0] == 0 && pos[1] == 0) {
+            SceneInput.send(SCENE_MOTION, sceneW / 2, sceneH / 2)
         }
     }
 
     private fun button(code: Int, down: Boolean) =
-        WaylandCompositor.nativeSendSceneInput(SCENE_BUTTON, code, if (down) 1 else 0)
+        SceneInput.send(SCENE_BUTTON, code, if (down) 1 else 0)
 
     /** Titik tengah semua jari, tanpa jari [skip] (-1 = semua). */
     private fun centroidX(e: MotionEvent, skip: Int): Float {

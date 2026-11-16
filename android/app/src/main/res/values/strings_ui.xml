@@ -397,6 +397,13 @@
     <string name="tc_theme_label">Theme</string>
     <string name="tc_disp_resolution">Output resolution</string>
     <!-- Wayland untuk Vulkan (Turnip) di desktop dan Wine -->
+    <string name="tc_ui_display_server">Display server</string>
+    <string name="tc_ui_display_server_hint">Xwayland: X11 desktop on the Wayland compositor. Wayland: same, and SDL/Vulkan apps draw straight to the compositor. X++: native X server from Winlator Ludashi running inside the app, without Xwayland or the Wayland compositor (Turnip/Zink still render on the GPU; frames reach the screen through the software WSI copy path, since the server has no DRI3 usable by Mesa). Applies on next desktop start; Shortcut apps outside the desktop still use Wayland + Xwayland.</string>
+    <string name="tc_ui_display_xwayland">Xwayland (X11)</string>
+    <string name="tc_ui_display_wayland">Wayland (Xwayland + Wayland apps)</string>
+    <string name="tc_ui_display_xpp">X++ native X server</string>
+    <string name="tc_ui_xpp_backend">X++ renderer</string>
+    <string name="tc_ui_xpp_backend_hint">EGL (OpenGL ES) works on every device. DisplayX uses Android SurfaceControl (Android 10+) for lower latency. Applies on next desktop start.</string>
     <string name="tc_ui_desktop_wayland">Wayland for Vulkan apps in the desktop</string>
     <string name="tc_ui_xfce_compositor">Allow XFCE compositor (blur, transparency)</string>
     <string name="tc_ui_xfce_compositor_hint">Keeps the xfwm4 compositor on when the desktop starts. Its vertical sync (vblank) is always forced off, because the GLX/Zink or xpresent sync path never completes on Xwayland without DRM and leaves a black screen. Compositing itself runs on the CPU (XRender); xfwm4 has no Vulkan backend. When off, the compositor still starts disabled but can be switched on in Window Manager Tweaks. Applies on next desktop start.</string>

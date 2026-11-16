@@ -11,6 +11,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.example.tiny_computer.display.PadSetup
+import com.example.tiny_computer.xpp.XppHost
 import java.io.File
 import kotlin.math.max
 import kotlin.math.min
@@ -43,6 +44,16 @@ object Launcher {
 
     @Volatile private var audioProcess: Process? = null
     @Volatile private var started = false
+
+    /**
+     * True bila desktop yang sedang berjalan (atau baru dinyalakan lewat [launchGuiBackend]) memakai X++ native X server
+     * ([Cfg.desktopXpp] saat Open desktop ditekan). Hanya berarti selama [guiStarted]; mengubah pengaturan Display server
+     * saat desktop menyala baru berlaku pada desktop berikutnya.
+     */
+    @Volatile var desktopIsXpp = false
+
+    /** Desktop X++ sedang berjalan: tidak ada compositor Wayland (wayland-0) untuk aplikasi di dalamnya. */
+    val xppDesktopActive: Boolean get() = guiStarted && desktopIsXpp
 
     /** True setelah perintah Xwayland + Xsession dikirim ke kontainer yang sedang berjalan. */
     // state Compose (bukan @Volatile biasa) supaya tombol "kembali ke desktop" muncul/hilang mengikuti status desktop
@@ -703,7 +714,8 @@ $data/bin/virgl_test_server ${Cfg.defaultVirglCommand}""".trimIndent(),
             // (mis. OpenGL milik Wine) memanggil DRI3Open, yang sengaja ditolak server tanpa DRM, lalu Mesa diam-diam
             // jatuh ke llvmpipe. Variabel ini melewati DRI3Open (platform_x11.c) dan Kopper tetap memakai WSI DRI3.
             extraOpt.append("LIBGL_KOPPER_DRI2=true ")
-            if (!Cfg.dri3) extraOpt.append("MESA_VK_WSI_DEBUG=sw ")
+            // X++ (Display server) tidak punya DRI3 yang bisa dipakai Mesa biasa: selalu WSI software, GPU tetap merender
+            if (!Cfg.dri3 || Cfg.desktopXpp) extraOpt.append("MESA_VK_WSI_DEBUG=sw ")
         }
         // GTK4 (mis. pavucontrol "Volume Control" di Debian 13) memakai renderer GL secara bawaan; di
         // Xwayland/proot tanpa EGL yang sehat jendelanya tampil kosong. Paksa renderer cairo (perangkat lunak).
@@ -772,6 +784,7 @@ export PROOT_LOADER_32=${'$'}DATA_DIR/applib/libproot-loader32.so""".trimIndent(
      * Debian (`/etc/X11/xinit/Xsession`, tak berubah) dijalankan di DISPLAY=:4.
      */
     fun guiCommand(ctx: Context, replaceAppSession: Boolean = false): String {
+        if (desktopIsXpp) return guiCommandXpp(ctx)
         val (w, h) = displaySize(ctx)
         // Aplikasi Vulkan/SDL di dalam desktop memakai WSI Wayland langsung ke compositor: lewat Xwayland (xcb)
         // Turnip gagal ("demo_select_physical_device"), sedangkan `vkcube --wsi wayland` jalan. Variabel ini
@@ -811,6 +824,36 @@ ${WsiWayland.probeForDesktop(sessionEnv)}
     }
 
     /**
+     * Desktop di atas X++ native X server (Display server = X++). Server X sudah menyala di dalam proses aplikasi dan
+     * mendengarkan di /tmp/.X11-unix/X4 ([XppHost.ensureStarted]), jadi tidak ada Xwayland dan tidak menunggu soket Wayland.
+     * Soket X4 sengaja TIDAK dihapus di sini (itu soket server yang hidup, bukan sisa Xwayland lama). Sesi X11 Debian
+     * dijalankan seperti di jalur Xwayland, tanpa variabel Wayland: compositor Wayland tidak berjalan di mode ini.
+     */
+    private fun guiCommandXpp(ctx: Context): String {
+        val compEnv = if (Cfg.xfceCompositor) "TINY_XFCE_COMPOSITOR=1 " else ""
+        // Turnip/Zink: GPU merender, hasilnya sampai ke X++ lewat WSI software (PutImage) karena DRI3 tidak dipakai. Variabel
+        // diekspor lagi di sini supaya berlaku walau pengaturan diubah setelah shell kontainer menyala.
+        val gpuEnv = if (Cfg.turnip) "export ${turnipOpt(ctx)} LIBGL_KOPPER_DRI2=true MESA_VK_WSI_DEBUG=sw\n" else ""
+        runCatching {
+            val vnc = File(TinyEnv.containerDir(), "home/tiny/.vnc").apply { mkdirs() }
+            File(vnc, "tiny-session.sh").writeText(Rootfs.asset(ctx, "tiny/xsession.sh"))
+        }
+        return """
+mkdir -p "${'$'}HOME/.vnc"
+unset WAYLAND_DISPLAY
+export TINY_NO_WAYLAND=1
+${gpuEnv}rm -f /tmp/.X4-lock
+for i in ${'$'}(seq 1 150); do [ -S /tmp/.X11-unix/X4 ] && break; sleep 0.2; done
+[ -S /tmp/.X11-unix/X4 ] || echo "X++ socket /tmp/.X11-unix/X4 not found"
+if [ -n "${'$'}TINY_LAUNCH_LOG" ] && [ -w "${'$'}TINY_LAUNCH_LOG" ]; then
+(DISPLAY=:4 ${compEnv}bash "${'$'}HOME/.vnc/tiny-session.sh" xinit/Xsession 2>&1 | tee "${'$'}HOME/.vnc/x.log" >> "${'$'}TINY_LAUNCH_LOG") &
+else
+DISPLAY=:4 ${compEnv}bash "${'$'}HOME/.vnc/tiny-session.sh" xinit/Xsession &> "${'$'}HOME/.vnc/x.log" &
+fi
+""".trimIndent()
+    }
+
+    /**
      * Menulis [command] ke shell kontainer (terminal) supaya prosesnya terlihat di tab Terminal.
      * Kontainer harus sudah berjalan ([isStarted]); pemanggil menyalakannya lewat [Startup.beginForTerminal].
      */
@@ -844,8 +887,27 @@ ${WsiWayland.probeForDesktop(sessionEnv)}
         // Xwayland milik Shortcut ada di proot terpisah: matikan dari sisi Android (EXITKILL ikut
         // mematikan anak-anaknya); `pkill` di guiCommand hanya jaring pengaman + jeda.
         if (replace) stopAppSession()
+        // Display server dipilih sekali per desktop. X++ harus menyala SESUDAH sesi aplikasi Shortcut berhenti: keduanya
+        // memakai /tmp/.X11-unix/X4 dan server X++ tidak pernah menghapus soket yang masih terisi.
+        desktopIsXpp = Cfg.desktopXpp
+        if (desktopIsXpp) {
+            val (w, h) = displaySize(ctx)
+            if (!XppHost.ensureStarted(ctx, w, h)) {
+                val reason = XppHost.lastError ?: "unknown error"
+                LaunchLog.write(containerLog, "desktop", "X++ gagal dinyalakan: $reason")
+                desktopIsXpp = false
+                mainHandler.post {
+                    android.widget.Toast.makeText(ctx.applicationContext, "X++ failed to start: $reason", android.widget.Toast.LENGTH_LONG).show()
+                }
+                return
+            }
+        }
         guiStarted = true
-        LaunchLog.write(containerLog, "desktop", "Open desktop: Xwayland + Xsession dinyalakan" + if (replace) " (menggantikan sesi aplikasi Shortcut)" else "")
+        LaunchLog.write(
+            containerLog, "desktop",
+            (if (desktopIsXpp) "Open desktop: X++ native X server + Xsession dinyalakan" else "Open desktop: Xwayland + Xsession dinyalakan") +
+                if (replace) " (menggantikan sesi aplikasi Shortcut)" else "",
+        )
         // syarat ikon muncul di menu Shortcut: desktop pernah dibuka sekali
         Cfg.desktopOpenedOnce = true
         WsiWayland.install() // pembungkus vkcube/vkcubepp: --wsi wayland
@@ -1033,6 +1095,8 @@ ${WsiWayland.probeForDesktop(sessionEnv)}
                 killed += killContainerShell()
                 stopStage(3)
                 waitGone(killed, 3000)
+                // server X++ ikut dimatikan setelah kliennya (Xsession) hilang; desktop berikutnya membuatnya lagi
+                if (desktopIsXpp) XppHost.stop()
                 guiStarted = false
             }
             LaunchLog.write(containerLog, "desktop", "Shutdown: Xwayland + sesi X11 + shell kontainer dihentikan")

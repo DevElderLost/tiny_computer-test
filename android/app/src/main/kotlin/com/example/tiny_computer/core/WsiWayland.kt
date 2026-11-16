@@ -43,7 +43,7 @@ for a; do
 done
 rt=@@{XDG_RUNTIME_DIR:-/tmp}
 wl=@@{WAYLAND_DISPLAY:-wayland-0}
-if [ -S "@@rt/@@wl" ]; then
+if [ -z "@@TINY_NO_WAYLAND" ] && [ -S "@@rt/@@wl" ]; then
   export XDG_RUNTIME_DIR="@@rt" WAYLAND_DISPLAY="@@wl"
   # jalur WSI software hanya untuk X11 (Xwayland tanpa DRI3); di Wayland Turnip memakai dmabuf langsung
   unset MESA_VK_WSI_DEBUG

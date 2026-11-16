@@ -42,6 +42,7 @@ import com.example.tiny_computer.core.Launcher
 import com.example.tiny_computer.core.NavRequest
 import com.example.tiny_computer.core.ShortcutPrefs
 import com.example.tiny_computer.core.TinyEnv
+import com.example.tiny_computer.xpp.XppHost
 import com.example.tiny_computer.ui.TinyTheme
 import java.io.File
 import kotlin.math.abs
@@ -124,11 +125,22 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
     private var leftHeld = false
     private var scrollAcc = 0f
 
+    /**
+     * True bila layar ini menampilkan X++ native X server, bukan compositor Wayland: desktop dengan Display server = X++,
+     * atau aplikasi Shortcut yang berjalan di dalam desktop X++ itu. Ditentukan sekali saat layar dibuat.
+     */
+    private var useXpp = false
+
+    private fun decideXpp(): Boolean =
+        if (currentApp == null) (if (Launcher.guiStarted) Launcher.desktopIsXpp else Cfg.desktopXpp)
+        else Launcher.guiStarted && Launcher.desktopIsXpp
+
     @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         readLaunchIntent(intent)
+        useXpp = decideXpp()
         WindowCompat.setDecorFitsSystemWindows(window, false)
         WindowInsetsControllerCompat(window, window.decorView).apply {
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
@@ -188,7 +200,7 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
                         state = ui,
                         pad = p,
                         controls = controls,
-                        sendKey = { code, down -> WaylandCompositor.nativeSendKey(code, if (down) 1 else 0) },
+                        sendKey = { code, down -> SceneInput.key(code, down) },
                         // Back to terminal: tutup layar desktop dan minta TinyApp membuka tab Terminal
                         onClose = { NavRequest.terminal = true; finish() },
                         onShutdown = {
@@ -211,7 +223,8 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
             setBackgroundColor(0xFF000000.toInt())
             addView(surfaceView, FrameLayout.LayoutParams(-1, -1))
             // kursor rootfs: di atas compositor, di bawah menu; tidak menerima sentuhan
-            addView(CursorView(this@DisplayActivity, ui) { currentScene() }, FrameLayout.LayoutParams(-1, -1))
+            // X++ menggambar kursor X sendiri di dalam server, jadi CursorView (kursor wl_pointer) tidak dipasang
+            if (!useXpp) addView(CursorView(this@DisplayActivity, ui) { currentScene() }, FrameLayout.LayoutParams(-1, -1))
             addView(controls, FrameLayout.LayoutParams(-1, -1))
             addView(overlay, FrameLayout.LayoutParams(-1, -1))
         })
@@ -246,7 +259,7 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
         outH = size.second
         ui.sceneW = outW
         ui.sceneH = outH
-        if (surfaceReady) {
+        if (surfaceReady && !useXpp) {
             WaylandCompositor.nativeResizeOutput(outW, outH)
             lastOutput = outW to outH
         }
@@ -319,6 +332,7 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
     override fun onDestroy() {
         if (Launcher.onAppSessionEnded === onAppEnded) Launcher.onAppSessionEnded = null
         ControllerPrefs.prefs(this).unregisterOnSharedPreferenceChangeListener(controllerPrefsListener)
+        if (useXpp) XppHost.displayAttached = false
         stopMotion()
         RumbleReceiver.stop()
         pad?.stop()
@@ -329,6 +343,17 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
     // ------------------------------------------------------------------ Surface / compositor
 
     override fun surfaceCreated(holder: SurfaceHolder) {
+        if (useXpp) {
+            // X++: server X hidup di proses ini dan dibuat oleh Launcher.launchGuiBackend; di sini hanya Surface-nya dipasang
+            surfW = 0
+            surfH = 0
+            XppHost.displayAttached = true
+            XppHost.setSurface(holder.surface, this)
+            SessionState.running = true
+            surfaceReady = true
+            startRequestedSession()
+            return
+        }
         // ukuran Surface lama bukan pembanding untuk Surface baru: tanpa ini surfaceChanged pertama
         // dianggap "diubah ukurannya" dan memutus-pasang ulang swapchain tepat setelah dibuat
         surfW = 0
@@ -400,6 +425,12 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
     private var surfH = 0
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+        if (useXpp) {
+            surfW = width
+            surfH = height
+            XppHost.setSurface(holder.surface, this)
+            return
+        }
         val resized = surfW != 0 && (width != surfW || height != surfH)
         surfW = width
         surfH = height
@@ -407,6 +438,14 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
+        if (useXpp) {
+            XppHost.displayAttached = false
+            XppHost.setSurface(null)
+            surfaceReady = false
+            surfW = 0
+            surfH = 0
+            return
+        }
         surfaceReady = false
         surfW = 0
         surfH = 0
@@ -425,6 +464,13 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
      * pernah kena. Belum ada yang tergambar = ukuran sesi.
      */
     private fun currentScene(): Pair<Int, Int> {
+        if (useXpp) {
+            XppHost.size?.let { (w, h) ->
+                if (ui.sceneW != w) ui.sceneW = w
+                if (ui.sceneH != h) ui.sceneH = h
+                return w to h
+            }
+        }
         val w: Int
         val h: Int
         if (WaylandCompositor.nativeSceneSize(sceneBuf) >= 2 && sceneBuf[0] > 0 && sceneBuf[1] > 0) {
@@ -456,10 +502,10 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
     }
 
     private fun move(x: Float, y: Float) =
-        WaylandCompositor.nativeSendSceneInput(SCENE_MOTION, sceneX(x), sceneY(y))
+        SceneInput.send(SCENE_MOTION, sceneX(x), sceneY(y))
 
     private fun button(code: Int, down: Boolean) =
-        WaylandCompositor.nativeSendSceneInput(SCENE_BUTTON, code, if (down) 1 else 0)
+        SceneInput.send(SCENE_BUTTON, code, if (down) 1 else 0)
 
     /**
      * Menu sesi: jari turun di tepi kiri lalu digeser ke kanan membuka [SessionDrawer]. Sentuhan yang
@@ -531,7 +577,7 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
                     if (steps != 0) {
                         moved = true
                         scrollAcc -= steps * SCROLL_STEP_PX
-                        WaylandCompositor.nativeSendSceneInput(SCENE_WHEEL, steps, 0)
+                        SceneInput.send(SCENE_WHEEL, steps, 0)
                     }
                 } else {
                     move(e.x, e.y)
@@ -568,7 +614,7 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
         if (event.source and InputDevice.SOURCE_MOUSE == InputDevice.SOURCE_MOUSE) {
             if (event.actionMasked == MotionEvent.ACTION_SCROLL) {
                 val v = event.getAxisValue(MotionEvent.AXIS_VSCROLL)
-                WaylandCompositor.nativeSendSceneInput(SCENE_WHEEL, (-v).toInt().let { if (it == 0 && v != 0f) (if (v > 0) -1 else 1) else it }, 0)
+                SceneInput.send(SCENE_WHEEL, (-v).toInt().let { if (it == 0 && v != 0f) (if (v > 0) -1 else 1) else it }, 0)
                 return true
             }
             if (event.actionMasked == MotionEvent.ACTION_HOVER_MOVE || event.actionMasked == MotionEvent.ACTION_MOVE) {
@@ -595,7 +641,7 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
             // tekan-tahan: kirim ulang sebagai tombol baru (klien Xwayland mengulang sendiri)
             return true
         }
-        WaylandCompositor.nativeSendKey(evdev, if (down) 1 else 0)
+        SceneInput.key(evdev, down)
         return true
     }
 

@@ -29,3 +29,6 @@ add_subdirectory(waylandcomp)
 # Pagar memori (store fence) untuk ring input palsu (FakeInputWriter).
 add_library(sdnative SHARED sdnative/sdnative.c)
 target_link_libraries(sdnative log)
+
+# --- X++ native X server (dari Winlator Ludashi): pilihan Display server di Pengaturan Desktop ---
+add_subdirectory(xpp)

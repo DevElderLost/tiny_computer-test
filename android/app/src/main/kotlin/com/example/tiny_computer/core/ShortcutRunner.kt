@@ -185,7 +185,7 @@ fi
         // Bawaan: semua aplikasi Shortcut (Linux dan .exe Wine) mendapat XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0
         // seperti Open desktop (Cfg.desktopWayland, bawaan aktif). Hanya dua variabel itu; pengaturan GPU dan env
         // buatan pengguna di bawah tetap bisa menimpanya.
-        if (Cfg.desktopWayland) {
+        if (Cfg.desktopWayland && !Launcher.xppDesktopActive) {
             sb.append("if [ -S /tmp/wayland-0 ]; then export XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0; fi\n")
         }
         // grafis khusus aplikasi ini
@@ -199,7 +199,8 @@ fi
                 // lihat alasan di Launcher.guestSpec: Xwayland tanpa DRI3
                 // LIBGL_KOPPER_DRI2 selalu: EGL di atas X11 butuh ini agar tidak jatuh ke llvmpipe saat DRI3Open ditolak
                 sb.append("export LIBGL_KOPPER_DRI2=true\n")
-                if (!Cfg.dri3) sb.append("export MESA_VK_WSI_DEBUG=sw\n")
+                // X++ tidak punya DRI3 yang bisa dipakai Mesa biasa: WSI software (GPU merender, PutImage menampilkan)
+                if (!Cfg.dri3 || Launcher.xppDesktopActive) sb.append("export MESA_VK_WSI_DEBUG=sw\n")
             }
         }
         // Program Vulkan/SDL memakai WSI Wayland langsung ke compositor, bukan X11 lewat Xwayland (tanpa DRI3):
@@ -208,7 +209,7 @@ fi
         // dengan GPU default tetap lewat X11 dan Vulkan-nya gagal). Variabel ini hanya untuk proses aplikasi ini, tidak
         // diekspor ke seluruh guest (GTK/Qt/Firefox tetap X11 lewat GDK_BACKEND/QT_QPA_PLATFORM). vkcube/vkcubepp
         // mendapat `--wsi wayland` dari pembungkus [WsiWayland]. SDL_VIDEODRIVER tidak diatur untuk program .exe (Wine).
-        if (turnipOn) {
+        if (turnipOn && !Launcher.xppDesktopActive) {
             val sdl = if (isWine) "" else " SDL_VIDEODRIVER=wayland"
             sb.append("if [ -S /tmp/wayland-0 ]; then export XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0$sdl; fi\n")
         }

@@ -163,7 +163,24 @@ fun SettingsScreen() {
             DeckSwitchRow(stringResource(R.string.tc_ui_enable_turnip_zink), stringResource(R.string.tc_ui_apply_on_next_launch), Cfg.turnip) { Cfg.turnip = it }
             DeckSwitchRow(stringResource(R.string.tc_ui_enable_d_r_i3), null, Cfg.dri3) { Cfg.dri3 = it }
             DeckSwitchRow(stringResource(R.string.tc_ui_fake_drm), stringResource(R.string.tc_ui_fake_drm_hint), Cfg.fakeDrm) { Cfg.fakeDrm = it }
-            DeckSwitchRow(stringResource(R.string.tc_ui_desktop_wayland), stringResource(R.string.tc_ui_desktop_wayland_hint), Cfg.desktopWayland) { Cfg.desktopWayland = it }
+            var displayServer by remember { mutableStateOf(Cfg.displayServer) }
+            DeckChoiceRow(
+                stringResource(R.string.tc_ui_display_server), stringResource(R.string.tc_ui_display_server_hint),
+                listOf(
+                    Cfg.DISPLAY_XWAYLAND to stringResource(R.string.tc_ui_display_xwayland),
+                    Cfg.DISPLAY_WAYLAND to stringResource(R.string.tc_ui_display_wayland),
+                    Cfg.DISPLAY_XPP to stringResource(R.string.tc_ui_display_xpp),
+                ),
+                displayServer,
+            ) { displayServer = it; Cfg.displayServer = it }
+            if (displayServer == Cfg.DISPLAY_XPP) {
+                var xppBackend by remember { mutableStateOf(Cfg.xppBackend) }
+                DeckChoiceRow(
+                    stringResource(R.string.tc_ui_xpp_backend), stringResource(R.string.tc_ui_xpp_backend_hint),
+                    listOf(1 to "EGL (OpenGL ES)", 2 to "DisplayX (SurfaceControl)"),
+                    xppBackend,
+                ) { xppBackend = it; Cfg.xppBackend = it }
+            }
             DeckSwitchRow(stringResource(R.string.tc_ui_xfce_compositor), stringResource(R.string.tc_ui_xfce_compositor_hint), Cfg.xfceCompositor) { Cfg.xfceCompositor = it }
         }
 
