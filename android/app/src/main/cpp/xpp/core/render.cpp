@@ -3,6 +3,7 @@
 // NativeScreen::MutateDrawable sehingga layar dan Damage ikut diperbarui.
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 
 #include "core/xclient.h"
 #include "core/xclient_dispatch.h"
@@ -33,6 +34,12 @@ RenderSource Describe(RenderPicture& p, s32 ox, s32 oy) {
     RenderSource d;
     d.ox = ox; d.oy = oy; d.repeat = p.repeat; d.componentAlpha = p.componentAlpha;
     if (p.solid) { d.solid = true; d.color = p.solidColor; return d; }
+    if (p.gradient) {
+        d.gradient = p.gradient.get();
+        d.hasTransform = p.hasTransform;
+        std::copy(std::begin(p.transform), std::end(p.transform), d.m);
+        return d;
+    }
     Drawable* dr = p.image.get();
     d.surface.px = static_cast<const u32*>(dr->Map());
     d.surface.stride = s32(dr->GetStride() / 4);
@@ -175,6 +182,26 @@ void XClient::ProcRender() {
         RenderTarget t; t.drawable = dst.image.get(); t.depth = dst.depth; t.hasClip = dst.hasClip; t.clip = &dst.clip;
         return t;
     };
+    // Gradien: daftar posisi (Fixed, nStops buah) lalu warna (xRenderColor premultiplied, nStops buah) setelah header.
+    auto readStops = [&](RenderGradient& g, size_t headerSize, u32 n) {
+        if (n < 1 || n > 4096 || request_size != headerSize + size_t(n) * (sizeof(s32) + sizeof(xRenderColor)))
+            throw BadLengthError();
+        const u8* base = reinterpret_cast<const u8*>(GetRequestData<xReq>());
+        g.stops.reserve(n);
+        for (u32 i = 0; i < n; ++i) {
+            s32 pos; xRenderColor c;
+            std::memcpy(&pos, base + headerSize + size_t(i) * sizeof(s32), sizeof(pos));
+            std::memcpy(&c, base + headerSize + size_t(n) * sizeof(s32) + size_t(i) * sizeof(c), sizeof(c));
+            const float a = c.alpha / 65535.f;
+            g.stops.push_back({pos / 65536.0, a, std::min(c.red / 65535.f, a), std::min(c.green / 65535.f, a),
+                               std::min(c.blue / 65535.f, a)});
+        }
+    };
+    auto addGradient = [&](u32 pid, sp<RenderGradient> g) {
+        auto pic = std::make_shared<RenderPicture>(pid, nullptr, 32);
+        pic->gradient = std::move(g);
+        AddResource(pic);
+    };
     auto checkOp = [&](u8 op) { if (op > 13 && !(op >= 0x10 && op <= 0x2f)) throw renderError(BadPictOp, op); };
 
     // Mask A8 hasil rasterisasi trapezoid/segitiga di-gabung ke tujuan melalui sumber + mask.
@@ -295,6 +322,34 @@ void XClient::ProcRender() {
         auto pic = std::make_shared<RenderPicture>(r->pid, nullptr, 32);
         pic->solid = true; pic->solidColor = PremultColor(r->color); pic->repeat = 1;
         AddResource(pic); return;
+    }
+    case X_RenderCreateLinearGradient: {
+        CHECK_REQUEST_SIZE(xRenderCreateLinearGradientReq);
+        auto* r = GetRequestData<xRenderCreateLinearGradientReq>(); newID(r->pid);
+        auto g = std::make_shared<RenderGradient>();
+        g->kind = RenderGradient::Kind::Linear;
+        g->x1 = r->p1.x / 65536.0; g->y1 = r->p1.y / 65536.0; g->x2 = r->p2.x / 65536.0; g->y2 = r->p2.y / 65536.0;
+        readStops(*g, sizeof(*r), r->nStops);
+        addGradient(r->pid, std::move(g)); return;
+    }
+    case X_RenderCreateRadialGradient: {
+        CHECK_REQUEST_SIZE(xRenderCreateRadialGradientReq);
+        auto* r = GetRequestData<xRenderCreateRadialGradientReq>(); newID(r->pid);
+        auto g = std::make_shared<RenderGradient>();
+        g->kind = RenderGradient::Kind::Radial;
+        g->x1 = r->inner.x / 65536.0; g->y1 = r->inner.y / 65536.0; g->x2 = r->outer.x / 65536.0; g->y2 = r->outer.y / 65536.0;
+        g->r1 = r->inner_radius / 65536.0; g->r2 = r->outer_radius / 65536.0;
+        readStops(*g, sizeof(*r), r->nStops);
+        addGradient(r->pid, std::move(g)); return;
+    }
+    case X_RenderCreateConicalGradient: {
+        CHECK_REQUEST_SIZE(xRenderCreateConicalGradientReq);
+        auto* r = GetRequestData<xRenderCreateConicalGradientReq>(); newID(r->pid);
+        auto g = std::make_shared<RenderGradient>();
+        g->kind = RenderGradient::Kind::Conical;
+        g->x1 = r->center.x / 65536.0; g->y1 = r->center.y / 65536.0; g->angle = r->angle / 65536.0;
+        readStops(*g, sizeof(*r), r->nStops);
+        addGradient(r->pid, std::move(g)); return;
     }
     case X_RenderSetPictureTransform: {
         CHECK_REQUEST_SIZE_STRICT(xRenderSetPictureTransformReq);

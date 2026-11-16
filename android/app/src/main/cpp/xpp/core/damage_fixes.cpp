@@ -226,7 +226,13 @@ void XClient::ProcXFixes() {
         return;
     }
     case 20: return;  // SetGCClipRegion
-    case 21: region(a[4]); return;  // SetWindowShapeRegion: bentuk tidak dipakai
+    case 21: {  // SetWindowShapeRegion(dest, destKind+pad, xOff+yOff, region): bentuk tidak dipakai
+        // Layout: a[0]=window, a[1]=kind, a[2]=offset, a[3]=region. Region 0 (None) berarti hapus bentuk dan sah.
+        // Sebelumnya a[4] dibaca (di luar request) sehingga xfwm4 menerima BadRegion dan GDK memanggil exit(1).
+        if (words < 4) throw BadLengthError();
+        if (a[3]) region(a[3]);
+        return;
+    }
     case 22: {  // SetPictureClipRegion(picture, region, xorigin, yorigin)
         auto* res = GetResource(a[0]);
         if (!res || res->GetType() != XResourceType::RenderPicture) throw XRequestError(server.GetExtensionManager().FindExtension("RENDER")->error_base + BadPicture, a[0]);

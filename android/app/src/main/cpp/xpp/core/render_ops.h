@@ -37,6 +37,7 @@ struct RenderSurface {
 struct RenderSource {
     bool solid{};
     u32 color{};
+    const RenderGradient* gradient{};  // bila terisi: sumber gradien (surface tidak dipakai)
     RenderSurface surface;
     int repeat{};
     bool hasTransform{};

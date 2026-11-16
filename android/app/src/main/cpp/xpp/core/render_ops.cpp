@@ -77,8 +77,90 @@ u32 Lerp4(u32 a, u32 b, u32 c, u32 d, double fx, double fy) {
     return out;
 }
 
+u32 PackStop(float a, float r, float g, float b) {
+    const auto q = [](float v) { return u32(std::clamp(v, 0.f, 1.f) * 255.f + 0.5f); };
+    const u32 qa = q(a);
+    return (qa << 24) | (std::min(q(r), qa) << 16) | (std::min(q(g), qa) << 8) | std::min(q(b), qa);
+}
+
+// Warna gradien pada parameter t. repeat: 0 none (transparan di luar stop), 1 normal, 2 pad, 3 reflect.
+u32 GradientColor(const RenderGradient& g, double t, int repeat) {
+    const auto& st = g.stops;
+    if (st.empty() || !std::isfinite(t)) return 0;
+    const double first = st.front().pos, last = st.back().pos;
+    switch (repeat) {
+        case 1: t -= std::floor(t); break;
+        case 3: t = std::fmod(t, 2.0); if (t < 0) t += 2.0; if (t > 1.0) t = 2.0 - t; break;
+        case 2: break;  // pad: nilai di luar stop memakai stop terdekat (di bawah)
+        default: if (t < first || t > last) return 0; break;
+    }
+    if (t <= first) return PackStop(st.front().a, st.front().r, st.front().g, st.front().b);
+    if (t >= last) return PackStop(st.back().a, st.back().r, st.back().g, st.back().b);
+    size_t i = 1;
+    while (i < st.size() && st[i].pos < t) ++i;
+    const auto& lo = st[i - 1];
+    const auto& hi = st[i];
+    const double span = hi.pos - lo.pos;
+    const float f = span > 0 ? float((t - lo.pos) / span) : 1.f;
+    const auto mix = [f](float a, float b) { return a + (b - a) * f; };
+    return PackStop(mix(lo.a, hi.a), mix(lo.r, hi.r), mix(lo.g, hi.g), mix(lo.b, hi.b));
+}
+
+// Nilai gradien di titik sumber (px, py).
+u32 GradientAt(const RenderGradient& g, double px, double py, int repeat) {
+    switch (g.kind) {
+        case RenderGradient::Kind::Linear: {
+            const double dx = g.x2 - g.x1, dy = g.y2 - g.y1, len2 = dx * dx + dy * dy;
+            if (len2 <= 0) return 0;
+            return GradientColor(g, ((px - g.x1) * dx + (py - g.y1) * dy) / len2, repeat);
+        }
+        case RenderGradient::Kind::Radial: {
+            // Dua lingkaran: cari s terbesar dengan |p - c(s)| = r(s) dan r(s) >= 0.
+            const double cdx = g.x2 - g.x1, cdy = g.y2 - g.y1, dr = g.r2 - g.r1;
+            const double pdx = px - g.x1, pdy = py - g.y1;
+            const double a = cdx * cdx + cdy * cdy - dr * dr;
+            const double b = pdx * cdx + pdy * cdy + g.r1 * dr;
+            const double c = pdx * pdx + pdy * pdy - g.r1 * g.r1;
+            double s = 0;
+            if (std::fabs(a) < 1e-12) {
+                if (std::fabs(b) < 1e-12) return 0;
+                s = c / (2 * b);
+                if (g.r1 + s * dr < 0) return 0;
+            } else {
+                const double disc = b * b - a * c;
+                if (disc < 0) return 0;
+                const double root = std::sqrt(disc);
+                double s1 = (b + root) / a, s2 = (b - root) / a;
+                if (s1 < s2) std::swap(s1, s2);
+                if (g.r1 + s1 * dr >= 0) s = s1;
+                else if (g.r1 + s2 * dr >= 0) s = s2;
+                else return 0;
+            }
+            return GradientColor(g, s, repeat);
+        }
+        case RenderGradient::Kind::Conical: {
+            constexpr double kTwoPi = 6.283185307179586;
+            double t = (std::atan2(py - g.y1, px - g.x1) - g.angle * kTwoPi / 360.0) / kTwoPi;
+            t -= std::floor(t);
+            return GradientColor(g, t, 1);
+        }
+    }
+    return 0;
+}
+
 u32 Sample(const RenderSource& s, s32 x, s32 y) {
     if (s.solid) return s.color;
+    if (s.gradient) {
+        double px = x + s.ox + 0.5, py = y + s.oy + 0.5;
+        if (s.hasTransform) {
+            const double tx = (s.m[0] * px + s.m[1] * py) / 65536.0 + s.m[2] / 65536.0;
+            const double ty = (s.m[3] * px + s.m[4] * py) / 65536.0 + s.m[5] / 65536.0;
+            const double tw = (s.m[6] * px + s.m[7] * py) / 65536.0 + s.m[8] / 65536.0;
+            if (std::fabs(tw) < 1e-9) return 0;
+            px = tx / tw; py = ty / tw;
+        }
+        return GradientAt(*s.gradient, px, py, s.repeat);
+    }
     if (!s.hasTransform) return Fetch(s, x + s.ox, y + s.oy);
     const double px = x + s.ox + 0.5, py = y + s.oy + 0.5;
     const double tx = (s.m[0] * px + s.m[1] * py) / 65536.0 + s.m[2] / 65536.0;

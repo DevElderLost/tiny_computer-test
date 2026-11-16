@@ -24,7 +24,19 @@ RectList RegionSubtract(const RectList& a, const RectList& b);
 RectList RegionTranslate(RectList rects, s32 dx, s32 dy);
 RenderRect RegionExtents(const RectList& rects);
 
-// Picture RENDER. image kosong untuk solid fill.
+// Gradien RENDER (CreateLinearGradient/RadialGradient/ConicalGradient). Koordinat dalam piksel (double),
+// warna stop premultiplied (XRenderColor sudah premultiplied) dan diinterpolasi dalam ruang premultiplied.
+struct RenderGradient {
+    enum class Kind { Linear, Radial, Conical };
+    struct Stop { double pos; float a, r, g, b; };
+    Kind kind{Kind::Linear};
+    double x1{}, y1{}, x2{}, y2{};  // linear: p1 dan p2; radial: pusat lingkaran dalam dan luar; conical: pusat di (x1, y1)
+    double r1{}, r2{};              // radial: jari-jari dalam dan luar
+    double angle{};                 // conical: derajat
+    std::vector<Stop> stops;
+};
+
+// Picture RENDER. image kosong untuk solid fill dan gradien.
 struct RenderPicture final : XResource {
     RenderPicture(u32 id, sp<Drawable> image, u8 depth)
         : XResource(XResourceType::RenderPicture, id), image(std::move(image)), depth(depth) {}
@@ -34,6 +46,7 @@ struct RenderPicture final : XResource {
     u8 depth;
     bool solid{};
     u32 solidColor{};         // ARGB premultiplied
+    sp<RenderGradient> gradient;  // bila terisi, picture ini gradien (image kosong)
     int repeat{};             // 0 none, 1 normal, 2 pad, 3 reflect
     bool componentAlpha{};
     bool bilinear{};          // filter: false = nearest
