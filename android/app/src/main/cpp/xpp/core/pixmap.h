@@ -14,6 +14,9 @@ public:
 
     Pixmap(XScreen& screen, u32 id, u16 width, u16 height, AHardwareBuffer* buffer);
 
+    // Pixmap bernama (Composite NameWindowPixmap): memakai drawable milik jendela, tanpa salinan.
+    Pixmap(u32 id, u16 width, u16 height, u8 depth, sp<Drawable> shared);
+
     ~Pixmap() override;
 
     Drawable* GetDrawable() const { return drawable.get(); }

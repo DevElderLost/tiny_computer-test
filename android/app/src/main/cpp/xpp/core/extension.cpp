@@ -27,8 +27,10 @@ ExtensionManager::ExtensionManager() {
     AddExtension("GLX", [](XClient* c) { c->ProcGLX(); }, 0, 14);
     // Match public Ludashi's Composite 0.1 window-redirection subset.
     AddExtension("Composite", [](XClient* c) { c->ProcComposite(); }, 0, 0);
-    // RENDER cursor subset; Wine GDI is kept on its existing core path.
     AddExtension("RENDER", [](XClient* c) { c->ProcRender(); }, 0, 5);
+    AddExtension("DAMAGE", [](XClient* c) { c->ProcDamage(); }, 1, 1);
+    AddExtension("XFIXES", [](XClient* c) { c->ProcXFixes(); }, 2, 1);
+    AddExtension("SHAPE", [](XClient* c) { c->ProcShape(); }, 1, 0);
     AddExtension("XInputExtension", [](XClient* c) { c->ProcXInput(); }, 17, 5);
 }
 

@@ -21,6 +21,9 @@ enum class XResourceType {
     RenderPicture,
     SyncCounter,
     SyncAlarm,
+    Region,
+    GlyphSet,
+    Damage,
 };
 
 class XResource {

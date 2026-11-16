@@ -41,6 +41,7 @@ void XClient::ProcAuthenticateRequest() {
 
     const std::vector<PixmapFormat> supported_formats = {
             {1, 1, 32},
+            {8, 8, 32},
             {24, 32, 32},
             {32, 32, 32},
     };
@@ -301,7 +302,8 @@ void XClient::ProcQueryExtension() {
     };
     const bool hidden = (server.RendererConfig().disableShm && name == "MIT-SHM") ||
                         (server.RendererConfig().disableDri3 && name == "DRI3") ||
-                        (server.RendererConfig().disableRender && name == "RENDER");
+                        (server.RendererConfig().disableRender && name == "RENDER") ||
+                        (server.RendererConfig().disableComposite && name == "Composite");
     if (const auto extension = hidden ? nullptr : server.GetExtensionManager().FindExtension(name)) {
         reply.present = xTrue;
         reply.major_opcode = extension->base;
@@ -1057,6 +1059,15 @@ void XClient::ProcPutImage() {
                 ASSERT(req->width * req->height * 4 <= data_len);
                 drawable->WritePixels(
                         data, 0, 0, req->dstX, req->dstY, req->width, req->height, req->width);
+            } else if (depth == 8 && req->format == ZPixmap) {
+                // A8 (RENDER): 8 bit per piksel, baris dibulatkan ke 4 byte; di server disimpan sebagai nilai di byte rendah
+                const size_t rowBytes = (size_t(req->width) + 3) & ~size_t(3);
+                if (rowBytes * req->height > data_len) throw BadLengthError();
+                std::vector<u32> pixels(size_t(req->width) * req->height);
+                for (size_t y = 0; y < req->height; ++y)
+                    for (size_t x = 0; x < req->width; ++x) pixels[y * req->width + x] = data[y * rowBytes + x];
+                drawable->WritePixels(reinterpret_cast<const u8*>(pixels.data()), 0, 0, req->dstX, req->dstY,
+                                      req->width, req->height, req->width);
             } else if (depth == 1) {
                 if (size_t((req->width + 31) / 32) * 4 * req->height > data_len) throw BadLengthError();
                 drawable->WriteBinaryPixels(data, req->width, req->height,
@@ -1084,6 +1095,14 @@ void XClient::ProcGetImage() {
     const size_t data_size = req->width * req->height * 4;
     std::vector<u8> image(data_size);
     drawable->ReadPixels(image.data(), req->x, req->y, req->width, req->height, req->width);
+    if (drawable->GetDepth() == 8) {
+        // A8: satu byte per piksel, baris dibulatkan ke 4 byte
+        const size_t rowBytes = (size_t(req->width) + 3) & ~size_t(3);
+        std::vector<u8> packed(rowBytes * req->height);
+        for (size_t y = 0; y < req->height; ++y)
+            for (size_t x = 0; x < req->width; ++x) packed[y * rowBytes + x] = image[(y * req->width + x) * 4];
+        image = std::move(packed);
+    }
 
     const xGetImageReply reply{
             .type = X_Reply,

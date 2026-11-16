@@ -22,9 +22,8 @@ import kotlin.math.roundToInt
  * Batasan: DRI3/Present milik server ini memakai transport AHardwareBuffer khas Winlator, bukan dmabuf. Mesa biasa di Debian
  * tidak memakainya (jatuh ke software/XRender), jadi Vulkan/Turnip lewat X11 tidak berfungsi di mode ini.
  *
- * RENDER sengaja tidak diiklankan ([NativeX11.FLAG_NO_RENDER]): server hanya mengimplementasikan subset kursor RENDER, sedangkan
- * cairo/GTK3 (xfwm4, panel, terminal) yang melihat RENDER memakai Composite/FillRectangles/SetPictureFilter dan mati karena
- * BadImplementation. Hasilnya tidak ada window manager dan layar tetap hitam, baik di renderer EGL maupun DisplayX.
+ * RENDER (A1/A8/RGB24/ARGB32, Composite, FillRectangles, glyph, trapezoid), Composite (overlay = root), Damage, XFixes dan SHAPE
+ * diimplementasikan di server; compositor xfwm4 berjalan di atas server ini.
  */
 object XppHost {
     private const val TAG = "XppHost"
@@ -76,7 +75,7 @@ object XppHost {
             sock.parentFile?.mkdirs()
             // server tidak pernah menghapus soket yang masih ada; sisa soket dari proses sebelumnya dibuang di sini
             if (sock.exists()) sock.delete()
-            val flags = NativeX11.FLAG_NO_MIT_SHM or NativeX11.FLAG_NO_DRI3 or NativeX11.FLAG_NO_RENDER or
+            val flags = NativeX11.FLAG_NO_MIT_SHM or NativeX11.FLAG_NO_DRI3 or
                 if (wantBackend == NativeX11.BACKEND_DISPLAYX) NativeX11.FLAG_PERFORMANCE or NativeX11.FLAG_PRESENT_AT_REFRESH else 0
             val h0 = NativeX11.nativeCreate(
                 w, h, false, "", "", ctx.applicationInfo.nativeLibraryDir, 2, false, wantBackend, flags,

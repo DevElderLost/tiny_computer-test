@@ -23,11 +23,10 @@ public final class NativeX11 {
     public static final int FLAG_NO_MIT_SHM = 16;
     /** DRI3 tidak diiklankan (Mesa biasa tidak bisa memakai transport AHardwareBuffer); Zink/Turnip memakai WSI software. */
     public static final int FLAG_NO_DRI3 = 32;
-    /**
-     * RENDER tidak diiklankan. Server hanya punya subset kursor RENDER; cairo/GTK3 yang melihat RENDER memakai Composite,
-     * FillRectangles dan SetPictureFilter lalu mati karena BadImplementation (layar hitam). Tanpa RENDER, GTK memakai jalur core.
-     */
+    /** Tidak lagi dipakai oleh XppHost: RENDER sekarang diimplementasikan. Flag tetap ada untuk debugging. */
     public static final int FLAG_NO_RENDER = 64;
+    /** Tidak lagi dipakai oleh XppHost: Composite, Damage dan XFixes sekarang diimplementasikan. Flag tetap ada untuk debugging. */
+    public static final int FLAG_NO_COMPOSITE = 128;
 
     /** Jenis masukan untuk {@link #nativeInput}. */
     public static final int INPUT_MOVE_TO = 0;

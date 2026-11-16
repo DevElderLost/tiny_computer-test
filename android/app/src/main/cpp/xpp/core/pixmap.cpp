@@ -15,6 +15,11 @@ Pixmap::Pixmap(XScreen& screen, u32 id, u16 width, u16 height, AHardwareBuffer* 
     drawable = std::move(screen.CreateDrawable(width, height, buffer));
 }
 
+Pixmap::Pixmap(u32 id, u16 width, u16 height, u8 depth, sp<Drawable> shared)
+        : XResource(XResourceType::Pixmap, id), width(width), height(height), depth(depth) {
+    drawable = std::move(shared);
+}
+
 Pixmap::~Pixmap() {}
 
 }  // namespace xorg

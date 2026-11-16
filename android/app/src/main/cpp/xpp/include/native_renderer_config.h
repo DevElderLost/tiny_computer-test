@@ -20,6 +20,9 @@ struct NativeRendererConfig {
     // memanggil exit(1). Tanpa window manager, panel, dan desktop layar tinggal hitam. Tanpa RENDER cairo jatuh ke compositor
     // core (XFillRectangle/XPutImage/XCopyArea) yang didukung penuh; kursor ARGB libXcursor menjadi kursor core 1-bit.
     bool disableRender{};
+    // Composite tidak diiklankan: hanya sebagian kecil requestnya yang ada (RedirectSubwindows dan lainnya tidak), sedangkan
+    // compositor xfwm4 memanggilnya lalu mati dengan BadImplementation. Tanpa Composite xfwm4 berjalan tanpa compositing.
+    bool disableComposite{};
     std::string driverPath, libraryName, nativeLibDir;
     bool swapRB = false;
     int presentMode = 2; // VK_PRESENT_MODE_FIFO_KHR

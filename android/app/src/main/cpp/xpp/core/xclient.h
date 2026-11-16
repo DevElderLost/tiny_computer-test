@@ -73,6 +73,9 @@ private:
     void ProcGLX();
     void ProcComposite();
     void ProcRender();
+    void ProcDamage();
+    void ProcXFixes();
+    void ProcShape();
     void ProcDRI3();
     void FinishDRI3Import();
     struct BufferImport {

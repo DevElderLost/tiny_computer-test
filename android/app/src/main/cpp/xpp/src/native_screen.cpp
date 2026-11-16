@@ -1,4 +1,5 @@
 #include "native_screen.h"
+#include "core/damage.h"
 #include "native_displayx_visibility.h"
 #include "base/log.h"
 #include "core/window.h"
@@ -255,6 +256,7 @@ void NativeScreen::MutateDrawable(Drawable* drawable, const void* callback, void
     }
 }
 void NativeScreen::DrawableChanged(Drawable* drawable) {
+    NotifyDamage(server, drawable);
     // Called under XServer::Lock: pixels changed, but geometry/visibility did not.
     auto* image = static_cast<NativeDrawable*>(drawable);
     {
