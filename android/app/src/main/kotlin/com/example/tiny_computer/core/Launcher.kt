@@ -842,6 +842,7 @@ ${WsiWayland.probeForDesktop(sessionEnv)}
 mkdir -p "${'$'}HOME/.vnc"
 unset WAYLAND_DISPLAY
 export TINY_NO_WAYLAND=1
+export GDK_CORE_DEVICE_EVENTS=1 QT_XCB_NO_XI2=1
 ${gpuEnv}rm -f /tmp/.X4-lock
 for i in ${'$'}(seq 1 150); do [ -S /tmp/.X11-unix/X4 ] && break; sleep 0.2; done
 [ -S /tmp/.X11-unix/X4 ] || echo "X++ socket /tmp/.X11-unix/X4 not found"

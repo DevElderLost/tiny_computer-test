@@ -387,10 +387,9 @@ void XClient::ProcGetProperty() {
     if (!window) {
         throw BadWindowError(req->window);
     }
-    if (!Atom::IsValid(req->property)) {
-        throw BadAtomError(req->property);
-    }
-    const auto property = window->GetProperty(req->property);
+    // Atom yang tidak dikenal dibaca sebagai properti kosong, bukan BadAtom: xfwm4 mati dengan BadAtom pada GetProperty (request 20)
+    // dan tanpa window manager desktop tinggal hitam tanpa border jendela.
+    const auto property = Atom::IsValid(req->property) ? window->GetProperty(req->property) : decltype(window->GetProperty(req->property)){};
     xGetPropertyReply reply{.type = X_Reply,
                             .format = None,
                             .sequenceNumber = sequence,
@@ -464,9 +463,7 @@ void XClient::ProcDeleteProperty() {
     if (!window) {
         throw BadWindowError(req->window);
     }
-    if (!Atom::IsValid(req->property)) {
-        throw BadAtomError(req->property);
-    }
+    if (!Atom::IsValid(req->property)) return;
     window->DeleteProperty(req->property);
     static_cast<NativeScreen&>(server.GetScreen()).WindowPropertyChanged(window, req->property);
 }
@@ -531,10 +528,9 @@ void XClient::ProcInternAtom() {
     const auto req = GetRequestData<xInternAtomReq>();
     const std::string name(reinterpret_cast<const char*>(req + 1), req->nbytes);
 
-    const s32 id = req->onlyIfExists ? Atom::GetID(name) : Atom::Intern(name);
-    if (id < 0) {
-        throw BadAllocError();
-    }
+    // onlyIfExists untuk nama yang belum ada menghasilkan atom None (0), bukan error: GDK memanggil exit(1) pada error X apa pun.
+    s32 id = req->onlyIfExists ? Atom::GetID(name) : Atom::Intern(name);
+    if (id < 0) id = 0;
     const xInternAtomReply reply{
             .type = X_Reply,
             .sequenceNumber = sequence,
@@ -1117,9 +1113,12 @@ void XClient::ProcCreateCursor() {
     }
     CheckResourceID(req->cid);
     if (GetResource(req->cid)) throw BadIdChoiceError(req->cid);
-    if (source->GetDrawable()->GetDepth() != 1 ||
-        (mask && (mask->GetDrawable()->GetDepth() != 1 || mask->width != source->width || mask->height != source->height)) ||
-        req->x >= source->width || req->y >= source->height) throw BadMatchError();
+    if (source->GetDrawable()->GetDepth() != 1) throw BadMatchError();
+    // libXcursor tanpa RENDER membuat kursor 1-bit: hotspot di luar gambar dan mask yang tidak cocok ditoleransi (hotspot dijepit,
+    // mask dibuang) karena BadMatch membuat xfce4-terminal keluar lewat GDK.
+    if (mask && (mask->GetDrawable()->GetDepth() != 1 || mask->width != source->width || mask->height != source->height)) mask = nullptr;
+    const auto hotspotX = std::min<u32>(req->x, source->width ? source->width - 1u : 0u);
+    const auto hotspotY = std::min<u32>(req->y, source->height ? source->height - 1u : 0u);
     const auto encode_rgb = [](u16 r, u16 g, u16 b) -> u32 {
         return 0xff000000u | (u32(r >> 8) << 16) | (u32(g >> 8) << 8) | (b >> 8);
     };
@@ -1127,7 +1126,7 @@ void XClient::ProcCreateCursor() {
     const u32 bg_color = encode_rgb(req->backRed, req->backGreen, req->backBlue);
 
     const auto cursor = std::make_shared<Cursor>(
-            server.GetScreen(), req->cid, req->x, req->y, source, mask, fg_color, bg_color);
+            server.GetScreen(), req->cid, hotspotX, hotspotY, source, mask, fg_color, bg_color);
     AddResource(cursor);
 }
 
