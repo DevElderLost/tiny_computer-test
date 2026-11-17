@@ -1,6 +1,8 @@
 // Ekstensi DAMAGE 1.1, XFIXES 4.0 (region, clip picture, stub kursor) dan SHAPE 1.1 (disimpan saja, bentuk jendela tidak
 // dipakai saat menggambar). Dipakai compositor xfwm4 bersama RENDER dan Composite.
 #include <algorithm>
+#include <optional>
+#include <vector>
 
 #include "core/damage.h"
 #include "core/drawable.h"
@@ -258,38 +260,162 @@ void XClient::ProcXFixes() {
     }
 }
 
+namespace {
+// Bitmap depth 1 (nilai piksel 0/1) menjadi daftar persegi per baris; bit 1 berarti piksel masuk bentuk.
+RectList ShapeFromBitmap(Drawable& d) {
+    const s32 w = d.GetWidth(), h = d.GetHeight();
+    std::vector<u32> px(size_t(w) * h);
+    d.ReadPixels(reinterpret_cast<u8*>(px.data()), 0, 0, u16(w), u16(h), u16(w));
+    RectList out;
+    for (s32 y = 0; y < h; ++y) {
+        s32 x = 0;
+        while (x < w) {
+            while (x < w && !(px[size_t(y) * w + x] & 1)) ++x;
+            const s32 start = x;
+            while (x < w && (px[size_t(y) * w + x] & 1)) ++x;
+            if (x > start) out.push_back({start, y, x, y + 1});
+        }
+    }
+    return RegionNormalize(std::move(out));
+}
+
+const std::optional<RectList>& ShapeOf(const Window& w, u8 kind) {
+    return kind == 0 ? w.ShapeBounding() : kind == 1 ? w.ShapeClip() : w.ShapeInput();
+}
+
+RectList ShapeOrFull(const Window& w, u8 kind) {
+    const auto& shape = ShapeOf(w, kind);
+    return shape ? *shape : RectList{{0, 0, s32(w.GetWidth()), s32(w.GetHeight())}};
+}
+
+// Menggabungkan `src` (koordinat window tujuan) ke bentuk `kind` dengan operasi op: Set, Union, Intersect, Subtract, Invert.
+void ApplyShape(Window* w, u8 kind, u8 op, const RectList& src) {
+    if (kind > 2) throw BadValueError(kind);
+    const RectList base = ShapeOrFull(*w, kind);
+    RectList result;
+    switch (op) {
+        case 0: result = src; break;
+        case 1: result = RegionUnion(base, src); break;
+        case 2: result = RegionIntersect(base, src); break;
+        case 3: result = RegionSubtract(base, src); break;
+        case 4: result = RegionSubtract(src, base); break;
+        default: throw BadValueError(op);
+    }
+    w->SetShape(kind, RegionNormalize(std::move(result)));
+}
+}  // namespace
+
+// SHAPE 1.1: bentuk bounding/clip/input disimpan per window. Bentuk bounding dan clip dipakai saat window digambar ke layar
+// (NativeScreen::Collect); bentuk input hanya disimpan. ShapeNotify tidak dikirim.
 void XClient::ProcShape() {
     const auto* base = GetRequestData<xReq>();
+    const u8* p = reinterpret_cast<const u8*>(base);
     const u32* a = reinterpret_cast<const u32*>(base + 1);
     auto window = [&](u32 id) {
         auto* w = GetResourceAs<Window>(id);
         if (!w) throw BadWindowError(id);
         return w;
     };
+    auto rd32 = [&](size_t off) { u32 v; memcpy(&v, p + off, 4); return v; };
+    auto rd16 = [&](size_t off) { s16 v; memcpy(&v, p + off, 2); return v; };
+    auto changed = [&] { server.GetScreen().PostInvalidate(); };
     switch (base->data) {
     case 0: {  // QueryVersion
         Reply32 reply; reply.sequence = sequence;
         const u16 ver[2] = {1, 1}; memcpy(reply.body, ver, 4);
         WriteImmediately(&reply, sizeof(reply)); return;
     }
-    case 1: case 2: case 3: case 4: case 6: return;  // Rectangles, Mask, Combine, Offset, SelectInput
-    case 5: {  // QueryExtents: jendela dianggap persegi penuh
+    case 1: {  // Rectangles(op, destKind, ordering, dest, xOff, yOff, rects)
+        if (request_size < 16) throw BadLengthError();
+        const u8 op = p[4], kind = p[5];
+        auto* w = window(rd32(8));
+        const s32 xo = rd16(12), yo = rd16(14);
+        const size_t n = (request_size - 16) / sizeof(xRectangle);
+        RectList rects;
+        rects.reserve(n);
+        for (size_t i = 0; i < n; ++i) {
+            xRectangle r; memcpy(&r, p + 16 + i * sizeof(xRectangle), sizeof(r));
+            rects.push_back({r.x + xo, r.y + yo, r.x + xo + r.width, r.y + yo + r.height});
+        }
+        ApplyShape(w, kind, op, RegionNormalize(std::move(rects)));
+        changed(); return;
+    }
+    case 2: {  // Mask(op, destKind, dest, xOff, yOff, srcBitmap)
+        if (request_size < 20) throw BadLengthError();
+        const u8 op = p[4], kind = p[5];
+        auto* w = window(rd32(8));
+        const s32 xo = rd16(12), yo = rd16(14);
+        const u32 src = rd32(16);
+        if (kind > 2) throw BadValueError(kind);
+        if (src == None) {
+            if (op == 0) { w->SetShape(kind, std::nullopt); changed(); }  // Set + None: kembali ke bentuk bawaan
+            return;
+        }
+        auto* pixmap = GetResourceAs<Pixmap>(src);
+        if (!pixmap) throw BadPixmapError(src);
+        ApplyShape(w, kind, op, RegionTranslate(ShapeFromBitmap(*pixmap->GetDrawable()), xo, yo));
+        changed(); return;
+    }
+    case 3: {  // Combine(op, destKind, srcKind, dest, xOff, yOff, srcWindow)
+        if (request_size < 20) throw BadLengthError();
+        const u8 op = p[4], kind = p[5], srcKind = p[6];
+        auto* w = window(rd32(8));
+        const s32 xo = rd16(12), yo = rd16(14);
+        auto* source = window(rd32(16));
+        if (srcKind > 2) throw BadValueError(srcKind);
+        ApplyShape(w, kind, op, RegionTranslate(ShapeOrFull(*source, srcKind), xo, yo));
+        changed(); return;
+    }
+    case 4: {  // Offset(destKind, dest, xOff, yOff)
+        if (request_size < 16) throw BadLengthError();
+        const u8 kind = p[4];
+        auto* w = window(rd32(8));
+        if (kind > 2) throw BadValueError(kind);
+        if (const auto& shape = ShapeOf(*w, kind)) {
+            w->SetShape(kind, RegionTranslate(*shape, rd16(12), rd16(14)));
+            changed();
+        }
+        return;
+    }
+    case 5: {  // QueryExtents
         auto* w = window(a[0]);
         struct { u8 type{X_Reply}, pad{}; u16 sequence{}; u32 length{}; u8 bounding{}, clip{}; u16 pad2{};
                  s16 bx{}, by{}; u16 bw{}, bh{}; s16 cx{}, cy{}; u16 cw{}, ch{}; u32 pad3{}; } reply;
-        reply.sequence = sequence; reply.bw = reply.cw = u16(w->GetWidth()); reply.bh = reply.ch = u16(w->GetHeight());
+        reply.sequence = sequence;
+        const auto extents = [&](u8 kind, s16& x, s16& y, u16& rw, u16& rh) {
+            const auto rects = ShapeOrFull(*w, kind);
+            const auto e = RegionExtents(rects);
+            x = s16(e.x1); y = s16(e.y1); rw = u16(std::max(0, e.x2 - e.x1)); rh = u16(std::max(0, e.y2 - e.y1));
+        };
+        extents(0, reply.bx, reply.by, reply.bw, reply.bh);
+        extents(1, reply.cx, reply.cy, reply.cw, reply.ch);
+        reply.bounding = w->ShapeBounding().has_value();
+        reply.clip = w->ShapeClip().has_value();
         WriteImmediately(&reply, sizeof(reply)); return;
     }
+    case 6: window(a[0]); return;  // SelectInput: ShapeNotify tidak dikirim
     case 7: {  // InputSelected
         window(a[0]);
         Reply32 reply; reply.sequence = sequence; reply.data = 0;
         WriteImmediately(&reply, sizeof(reply)); return;
     }
-    case 8: {  // GetRectangles: satu persegi penuh
+    case 8: {  // GetRectangles(window, kind)
         auto* w = window(a[0]);
-        struct { u8 type{X_Reply}, ordering{}; u16 sequence{}; u32 length{2}; u32 count{1}; u8 pad[20]{}; xRectangle rect{}; } reply;
-        reply.sequence = sequence; reply.rect = {0, 0, u16(w->GetWidth()), u16(w->GetHeight())};
-        WriteImmediately(&reply, sizeof(reply)); return;
+        const u8 kind = p[8];
+        if (kind > 2) throw BadValueError(kind);
+        const auto rects = ShapeOrFull(*w, kind);
+        std::vector<u8> out(32 + rects.size() * sizeof(xRectangle), 0);
+        out[0] = X_Reply;
+        out[1] = 0;  // Unsorted
+        memcpy(&out[2], &sequence, 2);
+        const u32 length = u32(rects.size() * 2), count = u32(rects.size());
+        memcpy(&out[4], &length, 4);
+        memcpy(&out[8], &count, 4);
+        for (size_t i = 0; i < rects.size(); ++i) {
+            const xRectangle r{s16(rects[i].x1), s16(rects[i].y1), u16(rects[i].x2 - rects[i].x1), u16(rects[i].y2 - rects[i].y1)};
+            memcpy(&out[32 + i * sizeof(xRectangle)], &r, sizeof(r));
+        }
+        WriteImmediately(out.data(), out.size()); return;
     }
     default: throw XRequestError(BadRequest, 0);
     }

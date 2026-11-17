@@ -197,6 +197,36 @@ void NativeScreen::RemoveExternal(u32 id, u64 generation, const sp<NativeExterna
         externalFrames.erase(found); PostInvalidate();
     }
 }
+sp<NativeDrawable> NativeScreen::ShapedCopy(Window* w, const sp<NativeDrawable>& source) {
+    const u16 width = source->GetWidth(), height = source->GetHeight();
+    if (!width || !height) return nullptr;
+    auto& entry = shapeCopies[w->id];
+    if (!entry.copy || entry.source != source || entry.copy->GetWidth() != width || entry.copy->GetHeight() != height) {
+        entry.copy = std::make_shared<NativeDrawable>(width, height, 32);
+        entry.source = source;
+        entry.revision = 0;
+        entry.generation = ~0u;
+    }
+    shapeSeen.insert(w->id);
+    if (entry.revision != source->Revision() || entry.generation != w->ShapeGeneration()) {
+        std::vector<u32> pixels(size_t(width) * height);
+        source->ReadPixels(reinterpret_cast<u8*>(pixels.data()), 0, 0, width, height, width);
+        RectList visible{{0, 0, int(width), int(height)}};
+        if (w->ShapeBounding()) visible = RegionIntersect(visible, *w->ShapeBounding());
+        if (w->ShapeClip()) visible = RegionIntersect(visible, *w->ShapeClip());
+        std::vector<u8> inside(pixels.size(), 0);
+        for (const auto& r : visible) {
+            for (int y = std::max(r.y1, 0); y < std::min(r.y2, int(height)); ++y)
+                for (int x = std::max(r.x1, 0); x < std::min(r.x2, int(width)); ++x) inside[size_t(y) * width + x] = 1;
+        }
+        for (size_t i = 0; i < pixels.size(); ++i) pixels[i] = inside[i] ? (pixels[i] | 0xff000000u) : 0u;
+        entry.copy->WritePixels(reinterpret_cast<const u8*>(pixels.data()), 0, 0, 0, 0, width, height, width);
+        entry.copy->PublishContent();
+        entry.revision = source->Revision();
+        entry.generation = w->ShapeGeneration();
+    }
+    return entry.copy;
+}
 void NativeScreen::Collect(Window* w, Scene& frame, bool ancestorsMapped) {
     bool viewable = ancestorsMapped && w->IsMapped();
     if (!viewable) return;
@@ -211,10 +241,17 @@ void NativeScreen::Collect(Window* w, Scene& frame, bool ancestorsMapped) {
         if (external != externalFrames.end()) d = external->second.frame->drawable;
         if (i != direct.end() || external != externalFrames.end() || d->HasContent()) {
             const auto& rect = w->GetInRect();
+            // Window ber-SHAPE (bounding/clip) digambar dari salinan ber-alpha dan bukan opaque. Window GPU/direct/external
+            // tetap penuh karena isinya tidak bisa diubah di CPU.
+            sp<NativeDrawable> shown = d;
+            if ((w->ShapeBounding() || w->ShapeClip()) && i == direct.end() && external == externalFrames.end() &&
+                !d->HardwareBuffer()) {
+                if (auto copy = ShapedCopy(w, d)) shown = std::move(copy);
+            }
             // Vulkan window quads force useTexAlpha=0, including depth-32 images.
             // Match that opacity when discarding fully covered layers.
-            frame.entries.push_back({d, i == direct.end() ? nullptr : i->second, d->Pixels(), d->Revision(),
-                    rect.left, rect.top, true, w->id, int(w->GetWidth()), int(w->GetHeight()), {}});
+            frame.entries.push_back({shown, i == direct.end() ? nullptr : i->second, shown->Pixels(), shown->Revision(),
+                    rect.left, rect.top, shown == d, w->id, int(w->GetWidth()), int(w->GetHeight()), {}});
             if (external != externalFrames.end()) {
                 frame.entries.back().ticket.reset();
                 frame.entries.back().external = external->second.frame;
@@ -259,6 +296,8 @@ void NativeScreen::DrawableChanged(Drawable* drawable) {
     NotifyDamage(server, drawable);
     // Called under XServer::Lock: pixels changed, but geometry/visibility did not.
     auto* image = static_cast<NativeDrawable*>(drawable);
+    // Isi window ber-SHAPE ditampilkan lewat salinan; salinan harus dibuat ulang lewat scene baru.
+    for (const auto& [id, shaped] : shapeCopies) if (shaped.source.get() == image) { PostInvalidate(); return; }
     {
         std::lock_guard lock(state);
         if (sceneCurrent) {
@@ -289,7 +328,12 @@ void NativeScreen::PostInvalidate() {
     }
     if (DiagnosticsEnabled()) metricSceneBuilds.fetch_add(1, std::memory_order_relaxed);
     Scene frame;
+    shapeSeen.clear();
     Collect(server.GetWindowManager().GetRootWindow(), frame, true);
+    for (auto it = shapeCopies.begin(); it != shapeCopies.end();) {
+        if (shapeSeen.count(it->first)) ++it;
+        else it = shapeCopies.erase(it);
+    }
     // An opaque fullscreen game makes desktop/background draws unnecessary.
     const auto& info = server.GetScreenInfo();
     const bool displayX = server.RendererConfig().backend == NativeRendererConfig::Backend::DisplayX;

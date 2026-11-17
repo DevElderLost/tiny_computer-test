@@ -2,10 +2,12 @@
 
 #include <list>
 #include <atomic>
+#include <optional>
 #include <X11/X.h>
 #include <X11/Xproto.h>
 #include "base/2d.h"
 #include "core/property.h"
+#include "core/render_picture.h"
 #include "core/xresource.h"
 
 #define VisibilityNotViewable 3
@@ -75,6 +77,14 @@ public:
 
     Drawable* GetDrawable() const { return drawable.get(); }
     const sp<Drawable>& SharedDrawable() const { return drawable; }
+
+    // Bentuk SHAPE (koordinat window). nullopt = bentuk bawaan (persegi penuh).
+    const std::optional<RectList>& ShapeBounding() const { return shape_bounding; }
+    const std::optional<RectList>& ShapeClip() const { return shape_clip; }
+    const std::optional<RectList>& ShapeInput() const { return shape_input; }
+    u32 ShapeGeneration() const { return shape_generation; }
+    // kind: 0 Bounding, 1 Clip, 2 Input (konstanta ShapeBounding/ShapeClip/ShapeInput).
+    void SetShape(u8 kind, std::optional<RectList> rects);
 
     // Mengecat latar window (warna, tile pixmap, atau ParentRelative) pada persegi (x, y, w, h) koordinat window.
     // Dipakai oleh CWBackPixel/CWBackPixmap, ClearArea, dan setelah drawable dibuat ulang karena resize.
@@ -210,6 +220,8 @@ private:
 
     bool is_input_only{};
     bool composite_redirected{};
+    std::optional<RectList> shape_bounding, shape_clip, shape_input;
+    u32 shape_generation{};
     Rect out_rect{};
     Rect in_rect{};
     u16 border_width{};

@@ -310,14 +310,14 @@ class EGLNativeRenderer final : public NativeRenderer {
         return texture;
     }
     void Quad(const sp<NativeDrawable> &d, const sp<const std::vector<u8>> &pixels, u64 revision, int x,
-              int y, bool cursor) {
+              int y, bool cursor, bool texAlpha = false) {
         auto &texture = Upload(d, pixels, revision);
         glUniform4f(rect, geometry.ox + x * geometry.sx, geometry.oy + y * geometry.sy,
                     d->GetWidth() * geometry.sx, d->GetHeight() * geometry.sy);
         glUniform2f(uvMax, float(d->GetWidth()) / texture.width, float(d->GetHeight()) / texture.height);
         // CPU X11 storage is BGRA. EGLImage imports carry their own AHB format.
         glUniform1i(swap, (!texture.buffer) != (config.swapRB && !cursor));
-        glUniform1i(alpha, cursor);
+        glUniform1i(alpha, cursor || texAlpha);
         glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     }
     size_t PollLocked(size_t limit) {
@@ -430,8 +430,17 @@ class EGLNativeRenderer final : public NativeRenderer {
         glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
         glDisable(GL_DEPTH_TEST);
         glDisable(GL_BLEND);
-        for (const auto &e : frame.entries)
-            Quad(e.drawable, e.pixels, e.revision, e.x, e.y, false);
+        for (const auto &e : frame.entries) {
+            if (e.opaque) {
+                Quad(e.drawable, e.pixels, e.revision, e.x, e.y, false);
+                continue;
+            }
+            // Window ber-SHAPE: alpha tekstur menentukan bagian yang terlihat.
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            Quad(e.drawable, e.pixels, e.revision, e.x, e.y, false, true);
+            glDisable(GL_BLEND);
+        }
         if (cursorVisible && frame.cursor && frame.cursorPixels) {
             glEnable(GL_BLEND);
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);

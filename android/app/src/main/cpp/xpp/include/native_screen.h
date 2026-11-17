@@ -5,6 +5,7 @@
 #include <deque>
 #include <functional>
 #include <map>
+#include <set>
 #include "core/xscreen.h"
 #include "core/xresource.h"
 #include "native_drawable.h"
@@ -252,6 +253,8 @@ private:
         }
     };
     void Collect(Window*, Scene&, bool ancestorsMapped);
+    // Window ber-SHAPE: salinan CPU 32-bit dengan alpha (255 di dalam bentuk, 0 di luar) yang digambar tembus pandang.
+    sp<NativeDrawable> ShapedCopy(Window*, const sp<NativeDrawable>& source);
     bool PatchPresent(const sp<PresentTicket>&, const sp<PresentTicket>& previousDirect);
     bool IsWindowFiltered(Window*) const;
     void Worker();
@@ -293,6 +296,10 @@ private:
     std::map<u32, sp<PresentTicket>> direct;
     struct External { u64 generation; sp<NativeExternalFrame> frame; };
     std::map<u32, External> externalFrames;
+    // Hanya disentuh di bawah kunci XServer (sama seperti Collect/DrawableChanged).
+    struct ShapeCopy { sp<NativeDrawable> source, copy; u64 revision{}; u32 generation{}; };
+    std::map<u32, ShapeCopy> shapeCopies;
+    std::set<u32> shapeSeen;
     std::vector<sp<PresentTicket>> requests, waiting;
     // Only touched under the XServer lock (the same thread as Present/Idle).
     std::vector<sp<PresentTicket>> deferredIdles;

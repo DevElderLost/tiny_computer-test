@@ -858,6 +858,16 @@ void Window::PaintBackground(s32 x, s32 y, s32 w, s32 h) {
     drawable->WritePixels(reinterpret_cast<const u8*>(out.data()), 0, 0, s16(x), s16(y), u16(w), u16(h), u16(w));
 }
 
+void Window::SetShape(u8 kind, std::optional<RectList> rects) {
+    switch (kind) {
+        case 0: shape_bounding = std::move(rects); break;
+        case 1: shape_clip = std::move(rects); break;
+        case 2: shape_input = std::move(rects); break;
+        default: return;
+    }
+    ++shape_generation;
+}
+
 void Window::RepaintRelativeChildren() {
     for (auto* child : children) {
         if (!child->attributes.back_parent_relative) continue;
