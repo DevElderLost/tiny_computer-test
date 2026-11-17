@@ -165,7 +165,11 @@ std::vector<u8> CursorFont::ToRGBA() const {
     return rgba;
 }
 
-const CursorFont& GetXCursorFont(u32 id) { return table[id]; }
+const CursorFont& GetXCursorFont(u32 id) {
+    // Indeks di luar tabel (glyph font kursor yang tidak dikenal) jatuh ke panah (XC_left_ptr bukan bagian tabel; XC_arrow = 2).
+    constexpr u32 kArrow = 2;
+    return table[id < sizeof(table) / sizeof(table[0]) ? id : kArrow];
+}
 
 bool DecompressGrayscale(u32 width, u32 height, const u8* compressed_data, u8* decompressed_data) {
     for (int i = 0; i < (width * height + 3) / 4; i++) {

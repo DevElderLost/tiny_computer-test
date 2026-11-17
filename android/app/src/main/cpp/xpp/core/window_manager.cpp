@@ -861,7 +861,7 @@ Cursor* WindowManager::UpdatePointerPosition(s32 x, s32 y, u32 mode, bool notify
         if (!grab_pointer_window) {
             window->PointerMotionNotify(x, y, GetButtonMasks(), nullptr);
         } else {
-            ASSERT(!grab_pointer_synchronous);
+            // Grab sinkron (GrabModeSync) tidak membekukan antrean di server ini: event tetap dikirim langsung, AllowEvents no-op.
             grab_pointer_window->GrabPointerMoveNotify(x,
                                                        y,
                                                        GetButtonMasks(),
@@ -889,7 +889,7 @@ void WindowManager::UpdatePointerButton(u16 button, bool down) {
             grab_pointer_passive = true;
         }
     } else {
-        ASSERT(!grab_pointer_synchronous);
+        // Grab sinkron (GrabModeSync) tidak membekukan antrean di server ini: event tetap dikirim langsung, AllowEvents no-op.
         grab_pointer_window->GrabButtonNotify(down,
                                               x,
                                               y,
@@ -924,7 +924,7 @@ void WindowManager::OnKeyboardKeyChange(u32 keycode, bool down) {
             focus_window->KeyNotify(down, x, y, keycode, nullptr);
         }
     } else {
-        ASSERT(!grab_keyboard_synchronous);
+        // Grab sinkron (GrabModeSync) tidak membekukan antrean di server ini: event tetap dikirim langsung, AllowEvents no-op.
         grab_keyboard_window->GrabKeyNotify(down, x, y, keycode, grab_keyboard_client, false);
     }
 }

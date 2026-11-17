@@ -48,10 +48,15 @@ Cursor::Cursor(XScreen& screen,
 
 Cursor::Cursor(XScreen& screen, u32 id, u32 source_char, u32 mask_char, u32 fg_color, u32 bg_color)
         : XResource(XResourceType::Cursor, id), screen(screen) {
-    const auto& source_font = GetXCursorFont(source_char);
-    ASSERT_MSG(source_font.data, "Unsupported source char {}", source_char);
-    const auto& mask_font = GetXCursorFont(mask_char);
-    ASSERT_MSG(mask_font.data, "Unsupported mask char {}", mask_char);
+    // Glyph yang tidak ada di font kursor bawaan memakai panah (sumber 2, mask 3) alih-alih mematikan server.
+    const auto* source_glyph = &GetXCursorFont(source_char);
+    const auto* mask_glyph = &GetXCursorFont(mask_char);
+    if (!source_glyph->data || !mask_glyph->data) {
+        source_glyph = &GetXCursorFont(2);
+        mask_glyph = &GetXCursorFont(3);
+    }
+    const auto& source_font = *source_glyph;
+    const auto& mask_font = *mask_glyph;
 
     hotspot_x = source_font.xhot;
     hotspot_y = source_font.yhot;
