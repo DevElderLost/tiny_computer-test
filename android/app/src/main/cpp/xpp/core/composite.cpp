@@ -62,8 +62,10 @@ void XClient::ProcComposite() {
                                              window->SharedDrawable()));
         return;
     }
-    // GetOverlayWindow: overlay adalah root. Server sendiri menggambar jendela di atas root, jadi hasil compositor yang menggambar
-    // ke root tidak menutupi jendela dan tidak menangkap masukan; jendela tetap tampil normal.
+    // GetOverlayWindow: dibalas None. Server sendiri menggambar jendela di atas root, jadi tidak ada overlay yang berada di atas
+    // semua jendela. Compositor (xfwm4: have_overlays = FALSE, output = root) lalu menggambar ke root, di bawah jendela.
+    // Sebelumnya overlay dijawab root; xfwm4 membuat root_overlay seukuran layar sebagai anak root dan me-raise-nya, sehingga
+    // jendela hitam tanpa property menutupi wallpaper (xfdesktop) dan jendela lain yang lebih awal.
     if (minor == 7) {
         struct Request { xReq header; u32 window; };
         CHECK_REQUEST_SIZE_STRICT(Request);
@@ -71,7 +73,7 @@ void XClient::ProcComposite() {
         if (!GetResourceAs<Window>(r->window)) throw BadWindowError(r->window);
         struct Reply { u8 type{}, pad{}; u16 sequence{}; u32 length{}, overlay{}, pad2[5]{}; } reply;
         static_assert(sizeof(reply) == 32);
-        reply.type = X_Reply; reply.sequence = sequence; reply.overlay = server.GetWindowManager().GetRootWindow()->id;
+        reply.type = X_Reply; reply.sequence = sequence; reply.overlay = None;
         WriteImmediately(&reply, sizeof(reply)); return;
     }
     if (minor == 8) return;  // ReleaseOverlayWindow
