@@ -180,9 +180,10 @@ public:
 
     void FocusInNotify(u32 detail, u32 mode);
 
-    void LeaveEnterNotify(s32 x, s32 y, Window* enter_window, u32 mode);
+    // only != nullptr: event crossing hanya dikirim ke klien itu (dipakai saat pointer di-grab dengan owner_events).
+    void LeaveEnterNotify(s32 x, s32 y, Window* enter_window, u32 mode, XClient* only = nullptr);
 
-    void PointerNotify(u32 type, s32 x, s32 y, u32 detail, Window* window, u32 mode);
+    void PointerNotify(u32 type, s32 x, s32 y, u32 detail, Window* window, u32 mode, XClient* only = nullptr);
 
     void PointerMotionNotify(s32 x, s32 y, u32 button_mask, XClient* grab_client);
 

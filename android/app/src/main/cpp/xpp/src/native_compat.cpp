@@ -1,3 +1,4 @@
+#include "core/trace.h"
 #include "core/xclient.h"
 #include "core/xclient_dispatch.h"
 #include "core/xserver.h"
@@ -59,6 +60,14 @@ void XClient::ProcCompat() {
             return;
         }
         if (!gc) throw BadGCError(r->gc);
+        static int traced = 0;
+        if (traced < 120 && TraceOn()) {
+            ++traced;
+            Trace("CopyArea src=0x%x dst=0x%x from=%d,%d to=%d,%d size=%ux%u same=%d srcWin=%d dstWin=%d", unsigned(r->srcDrawable),
+                  unsigned(r->dstDrawable), int(r->srcX), int(r->srcY), int(r->dstX), int(r->dstY), unsigned(r->width),
+                  unsigned(r->height), int(r->srcDrawable == r->dstDrawable), int(srcWindow != nullptr),
+                  int(GetResourceAs<Window>(r->dstDrawable) != nullptr));
+        }
         static_cast<NativeScreen&>(server.GetScreen()).MutateDrawable(target, [&] {
             static_cast<NativeDrawable*>(target)->CopyAreaFrom(*static_cast<NativeDrawable*>(source),
                     r->srcX, r->srcY, r->dstX, r->dstY, r->width, r->height);

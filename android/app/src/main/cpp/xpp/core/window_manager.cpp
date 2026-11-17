@@ -857,7 +857,23 @@ Cursor* WindowManager::UpdatePointerPosition(s32 x, s32 y, u32 mode, bool notify
     if (window != motion_window) {
         motion_window->LeaveEnterNotify(x, y, window, mode);
         motion_window = window;
-    } else if (notify) {
+    }
+    // Grab eksplisit dengan owner_events: pointer yang masuk ke window milik klien pemegang grab tetap menghasilkan
+    // Enter/Leave normal untuk klien itu, seperti X sungguhan. GDK hanya tahu toplevel di bawah pointer dari EnterNotify
+    // native; tanpa ini menu GTK (grab pointer owner_events) tidak pernah menyorot item dan klik dijatuhkan.
+    if (grab_pointer_window && grab_pointer_owner_events && !grab_pointer_passive && grab_pointer_client) {
+        Window* under = GetPointerWindow(x, y);
+        Window* previous{};
+        if (grab_pointer_under) {
+            auto* resource = server.GetResource(grab_pointer_under);
+            if (resource && resource->GetType() == XResourceType::Window) previous = resource->As<Window>();
+        }
+        if (previous && previous != under) previous->LeaveEnterNotify(x, y, under, NotifyNormal, grab_pointer_client);
+        grab_pointer_under = under->id;
+    } else {
+        grab_pointer_under = 0;
+    }
+    if (window == motion_window && notify) {
         if (!grab_pointer_window) {
             window->PointerMotionNotify(x, y, GetButtonMasks(), nullptr);
         } else {

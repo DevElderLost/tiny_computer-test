@@ -113,6 +113,7 @@ private:
     bool grab_pointer_passive{};
     bool grab_pointer_synchronous{};
     bool grab_pointer_owner_events{};
+    u32 grab_pointer_under{};  // id window di bawah pointer saat grab owner_events (untuk event crossing normal)
     bool grab_keyboard_synchronous{};
     u32 grab_event_mask{};
     struct CompositeRedirect { XClient* client; Window* window; u8 update; };

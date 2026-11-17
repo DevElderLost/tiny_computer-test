@@ -832,6 +832,9 @@ void XClient::ProcConfigureWindow() {
     if (window->IsRoot()) return;
     server.GetWindowManager().ConfigureWindow(
             this, window, req->mask, reinterpret_cast<const u32*>(req + 1));
+    Trace("ConfigureWindow id=0x%x mask=0x%x -> %ux%u at %d,%d", unsigned(req->window), unsigned(req->mask),
+          unsigned(window->GetWidth()), unsigned(window->GetHeight()), int(window->GetOutRect().left),
+          int(window->GetOutRect().top));
 }
 
 void XClient::ProcGetGeometry() {
@@ -903,6 +906,7 @@ void XClient::ProcUnmapWindow() {
     if (!window) {
         throw BadWindowError(req->id);
     }
+    Trace("UnmapWindow id=0x%x", unsigned(req->id));
     server.GetWindowManager().UnmapWindow(window);
 }
 

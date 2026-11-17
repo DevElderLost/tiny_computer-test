@@ -369,6 +369,7 @@ void Window::Reparent(XClient* caller_client, Window* new_parent, s32 x, s32 y) 
 
 void Window::MakeExposure() {
     if (!exposed) {
+        Trace("Expose id=0x%x %ux%u", unsigned(id), unsigned(width), unsigned(height));
         xEvent event{};
         event.u.expose.window = id;
         event.u.expose.x = 0;
@@ -488,15 +489,15 @@ void Window::FocusInNotify(u32 detail, u32 mode) {
     ForeachEventListeners(FocusChangeMask, [&](XClient* client) { client->SendEvent(event); });
 }
 
-void Window::LeaveEnterNotify(s32 x, s32 y, Window* enter_window, u32 mode) {
+void Window::LeaveEnterNotify(s32 x, s32 y, Window* enter_window, u32 mode, XClient* only) {
     if (enter_window->IsAncestorOf(this)) {
-        PointerNotify(LeaveNotify, x, y, NotifyAncestor, this, mode);
+        PointerNotify(LeaveNotify, x, y, NotifyAncestor, this, mode, only);
         for (auto w = parent; w != enter_window; w = w->parent) {
-            w->PointerNotify(LeaveNotify, x, y, NotifyVirtual, this, 0);
+            w->PointerNotify(LeaveNotify, x, y, NotifyVirtual, this, 0, only);
         }
-        enter_window->PointerNotify(EnterNotify, x, y, NotifyInferior, enter_window, mode);
+        enter_window->PointerNotify(EnterNotify, x, y, NotifyInferior, enter_window, mode, only);
     } else if (this->IsAncestorOf(enter_window)) {
-        PointerNotify(LeaveNotify, x, y, NotifyInferior, this, mode);
+        PointerNotify(LeaveNotify, x, y, NotifyInferior, this, mode, only);
 
         std::stack<Window*> stack;
         for (auto w = enter_window->parent; w != this; w = w->parent) {
@@ -504,12 +505,12 @@ void Window::LeaveEnterNotify(s32 x, s32 y, Window* enter_window, u32 mode) {
         }
         while (!stack.empty()) {
             const auto w = stack.top();
-            w->PointerNotify(EnterNotify, x, y, NotifyVirtual, enter_window, mode);
+            w->PointerNotify(EnterNotify, x, y, NotifyVirtual, enter_window, mode, only);
             stack.pop();
         }
-        enter_window->PointerNotify(EnterNotify, x, y, NotifyAncestor, enter_window, mode);
+        enter_window->PointerNotify(EnterNotify, x, y, NotifyAncestor, enter_window, mode, only);
     } else {
-        PointerNotify(LeaveNotify, x, y, NotifyNonlinear, this, 0);
+        PointerNotify(LeaveNotify, x, y, NotifyNonlinear, this, 0, only);
         const Window* lca{};
         std::stack<Window*> stack;
         for (auto w = parent; w != enter_window->parent; w = w->parent) {
@@ -517,21 +518,21 @@ void Window::LeaveEnterNotify(s32 x, s32 y, Window* enter_window, u32 mode) {
                 lca = w;
                 break;
             }
-            PointerNotify(LeaveNotify, x, y, NotifyNonlinearVirtual, this, mode);
+            PointerNotify(LeaveNotify, x, y, NotifyNonlinearVirtual, this, mode, only);
         }
         for (auto w = enter_window->parent; w != lca; w = w->parent) {
             stack.push(w);
         }
         while (!stack.empty()) {
             const auto w = stack.top();
-            w->PointerNotify(EnterNotify, x, y, NotifyNonlinearVirtual, enter_window, mode);
+            w->PointerNotify(EnterNotify, x, y, NotifyNonlinearVirtual, enter_window, mode, only);
             stack.pop();
         }
-        enter_window->PointerNotify(EnterNotify, x, y, NotifyNonlinear, enter_window, mode);
+        enter_window->PointerNotify(EnterNotify, x, y, NotifyNonlinear, enter_window, mode, only);
     }
 }
 
-void Window::PointerNotify(u32 type, s32 x, s32 y, u32 detail, Window* window, u32 mode) {
+void Window::PointerNotify(u32 type, s32 x, s32 y, u32 detail, Window* window, u32 mode, XClient* only) {
     if (!IsMapped()) {
         return;
     }
@@ -562,7 +563,9 @@ void Window::PointerNotify(u32 type, s32 x, s32 y, u32 detail, Window* window, u
     event.u.enterLeave.flags = focus ? NotifyNonlinear : NotifyInferior;
     event.u.u.type = type;
 
-    ForeachEventListeners(crossing_mask, [&](XClient* client) { client->SendEvent(event); });
+    ForeachEventListeners(crossing_mask, [&](XClient* client) {
+        if (!only || client == only) client->SendEvent(event);
+    });
 }
 
 constexpr u32 ButtonEventMask(const u32 button_mask) {
