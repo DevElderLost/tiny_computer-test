@@ -22,6 +22,7 @@
 #include "core/window_manager.h"
 #include "core/xclient.h"
 #include "core/xclient_dispatch.h"
+#include "core/trace.h"
 #include "core/xscreen.h"
 #include "core/xserver.h"
 #include "native_screen.h"
@@ -662,6 +663,8 @@ void XClient::ProcGrabPointer() {
                                       req->ownerEvents,
                                       req->pointerMode == GrabModeSync,
                                       req->keyboardMode == GrabModeSync);
+    Trace("GrabPointer window=0x%x owner=%d mask=0x%x status=%u", unsigned(req->grabWindow), int(req->ownerEvents),
+          unsigned(req->eventMask), unsigned(status));
     const xGrabPointerReply reply{
             .type = X_Reply,
             .status = static_cast<CARD8>(status),
@@ -762,6 +765,9 @@ void XClient::ProcCreateWindow() {
     if (!window) {
         throw BadAllocError();
     }
+    Trace("CreateWindow id=0x%x parent=0x%x %ux%u%+d%+d depth=%u class=%u visual=0x%x mask=0x%x override=%d", unsigned(req->wid),
+          unsigned(req->parent), unsigned(req->width), unsigned(req->height), int(req->x), int(req->y), unsigned(req->depth),
+          unsigned(req->c_class), unsigned(req->visual), unsigned(req->mask), int(window->GetAttributes().override_redirect));
 }
 
 void XClient::ProcChangeWindowAttributes() {
@@ -886,6 +892,7 @@ void XClient::ProcMapWindow() {
     if (!window) {
         throw BadWindowError(req->id);
     }
+    Trace("MapWindow id=0x%x %ux%u", unsigned(req->id), unsigned(window->GetWidth()), unsigned(window->GetHeight()));
     server.GetWindowManager().MapWindow(this, window);
 }
 

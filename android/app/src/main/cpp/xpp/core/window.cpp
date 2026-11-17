@@ -13,6 +13,7 @@
 #include "core/xclient.h"
 #include "core/xscreen.h"
 #include "core/xserver.h"
+#include "core/trace.h"
 #include "native_screen.h"
 
 namespace xorg {
@@ -534,7 +535,9 @@ void Window::PointerNotify(u32 type, s32 x, s32 y, u32 detail, Window* window, u
     if (!IsMapped()) {
         return;
     }
-    if (!HasEventListenerFor(EnterWindowMask)) {
+    // EnterNotify dipilih lewat EnterWindowMask, LeaveNotify lewat LeaveWindowMask (dua bit berbeda di protokol X11).
+    const u32 crossing_mask = type == LeaveNotify ? LeaveWindowMask : EnterWindowMask;
+    if (!HasEventListenerFor(crossing_mask)) {
         return;
     }
     const Window* child = window->GetParent() == this ? window : nullptr;
@@ -559,7 +562,7 @@ void Window::PointerNotify(u32 type, s32 x, s32 y, u32 detail, Window* window, u
     event.u.enterLeave.flags = focus ? NotifyNonlinear : NotifyInferior;
     event.u.u.type = type;
 
-    ForeachEventListeners(EnterWindowMask, [&](XClient* client) { client->SendEvent(event); });
+    ForeachEventListeners(crossing_mask, [&](XClient* client) { client->SendEvent(event); });
 }
 
 constexpr u32 ButtonEventMask(const u32 button_mask) {
@@ -797,6 +800,12 @@ void Window::GrabPointerMoveNotify(
     event.u.keyButtonPointer.sameScreen = true;
     event.u.u.detail = detail;
     event.u.u.type = MotionNotify;
+    static int traced = 0;
+    if (traced < 60 && TraceOn()) {
+        ++traced;
+        Trace("grab-motion grab_window=0x%x x=%d y=%d grab_mask=0x%x owner=%d delivered_mask=0x%x", unsigned(id), int(x), int(y),
+              unsigned(event_mask), int(owner_events), unsigned(mask));
+    }
     if (owner_events && RouteGrabEvent(event, normalMask, grab_client)) return;
     if (mask) grab_client->SendEvent(event);
 }
@@ -840,6 +849,21 @@ void Window::PaintBackground(s32 x, s32 y, s32 w, s32 h) {
     }
     const auto& tile = owner->attributes.back_tile;
     if (!tile || tile->GetWidth() == 0 || tile->GetHeight() == 0) {
+        if (owner != this && owner->attributes.back_pixel == 0 && owner->drawable) {
+            // ParentRelative terhadap leluhur tanpa warna/pixmap latar (GDK memakai ini untuk widget transparan: soket tray,
+            // area sidebar menu): isi dari piksel leluhur, jangan hitam. Isi leluhur disalin apa adanya saat ini.
+            const s32 sx = x + ox, sy = y + oy;
+            const s32 cx0 = std::max<s32>(sx, 0), cy0 = std::max<s32>(sy, 0);
+            const s32 cx1 = std::min<s32>(sx + w, owner->drawable->GetWidth()), cy1 = std::min<s32>(sy + h, owner->drawable->GetHeight());
+            if (cx1 > cx0 && cy1 > cy0) {
+                std::vector<u32> pixels(size_t(cx1 - cx0) * (cy1 - cy0));
+                owner->drawable->ReadPixels(reinterpret_cast<u8*>(pixels.data()), s16(cx0), s16(cy0), u16(cx1 - cx0), u16(cy1 - cy0),
+                                            u16(cx1 - cx0));
+                drawable->WritePixels(reinterpret_cast<const u8*>(pixels.data()), 0, 0, s16(cx0 - ox), s16(cy0 - oy),
+                                      u16(cx1 - cx0), u16(cy1 - cy0), u16(cx1 - cx0));
+            }
+            return;
+        }
         drawable->FillRect(s16(x), s16(y), u16(w), u16(h), owner->attributes.back_pixel);
         return;
     }

@@ -7,6 +7,7 @@
 #include "core/window.h"
 #include "core/window_manager.h"
 #include "core/xclient.h"
+#include "core/trace.h"
 #include "core/xclient_dispatch.h"
 #include "native_screen.h"
 #include "core/selection_manager.h"
@@ -74,6 +75,8 @@ void XClient::HandleRequest() {
                         .minorCode = static_cast<CARD16>(opcode >= 128 ? req->data : 0),
                         .majorCode = opcode,
                 };
+                Trace("ERROR code=%u major=%u minor=%u resource=0x%x seq=%u", unsigned(e.code), unsigned(opcode), unsigned(req->data),
+                      unsigned(e.data), unsigned(sequence));
                 WriteImmediately(&error, sizeof(error));
             }
         }

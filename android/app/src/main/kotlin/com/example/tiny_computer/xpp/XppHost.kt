@@ -73,6 +73,8 @@ object XppHost {
         lastError = null
         try {
             sock.parentFile?.mkdirs()
+            // Jejak protokol (diagnosis): aktif selama berkas /tmp/.xpp-trace ada di kontainer; hasil di /tmp/xpp-trace.log
+            runCatching { android.system.Os.setenv("XPP_TRACE_DIR", TinyEnv.runtimeDir().toString(), true) }
             // server tidak pernah menghapus soket yang masih ada; sisa soket dari proses sebelumnya dibuang di sini
             if (sock.exists()) sock.delete()
             val flags = NativeX11.FLAG_NO_MIT_SHM or NativeX11.FLAG_NO_DRI3 or
