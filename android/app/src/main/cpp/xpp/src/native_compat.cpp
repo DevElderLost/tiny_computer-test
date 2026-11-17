@@ -69,8 +69,14 @@ void XClient::ProcCompat() {
                   int(GetResourceAs<Window>(r->dstDrawable) != nullptr));
         }
         static_cast<NativeScreen&>(server.GetScreen()).MutateDrawable(target, [&] {
-            static_cast<NativeDrawable*>(target)->CopyAreaFrom(*static_cast<NativeDrawable*>(source),
-                    r->srcX, r->srcY, r->dstX, r->dstY, r->width, r->height);
+            // Klip GC (cairo memasang XSetClipRectangles lalu satu CopyArea untuk seluruh area pembatas): hanya bagian di
+            // dalam klip yang disalin; bagian lain di window tidak boleh tertimpa isi pixmap sumber yang belum digambar.
+            const Rect area{r->dstX, r->dstY, r->dstX + int(r->width), r->dstY + int(r->height)};
+            for (const Rect& c : gc->ApplyClip(area)) {
+                static_cast<NativeDrawable*>(target)->CopyAreaFrom(*static_cast<NativeDrawable*>(source),
+                        r->srcX + (c.left - r->dstX), r->srcY + (c.top - r->dstY), c.left, c.top,
+                        c.right - c.left, c.bottom - c.top);
+            }
         });
         if (gc->GetAttribute(GCGraphicsExposures)) {
             xEvent event{}; event.u.u.type = NoExpose; event.u.noExposure.drawable = r->dstDrawable;

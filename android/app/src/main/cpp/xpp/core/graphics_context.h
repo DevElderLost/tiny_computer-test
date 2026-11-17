@@ -38,9 +38,16 @@ public:
 
     const std::vector<Rect>& GetClipRectangles() const { return clip_rectangles; }
 
+    bool HasClip() const { return has_clip; }
+
+    // Memotong persegi `r` dengan klip GC (XSetClipRectangles). Tanpa klip hasilnya persegi itu sendiri; klip kosong berarti
+    // tidak ada yang digambar. Dipakai CopyArea, PutImage, dan PolyFillRectangle.
+    std::vector<Rect> ApplyClip(const Rect& r) const;
+
 private:
     std::array<u32, 23> attributes{};
     std::vector<Rect> clip_rectangles{};
+    bool has_clip{};
 };
 
 }  // namespace xorg

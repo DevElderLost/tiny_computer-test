@@ -987,11 +987,10 @@ void XClient::ProcPolyFillRectangle() {
     static_cast<NativeScreen&>(server.GetScreen()).MutateDrawable(drawable, [&] {
         for (u32 i = 0; i < count; i++) {
             const u32 background = gc->GetForeground() | 0xff000000;
-            drawable->FillRect(rectangles[i].x,
-                               rectangles[i].y,
-                               rectangles[i].width,
-                               rectangles[i].height,
-                               background);
+            const Rect area{rectangles[i].x, rectangles[i].y, rectangles[i].x + int(rectangles[i].width),
+                            rectangles[i].y + int(rectangles[i].height)};
+            for (const Rect& c : gc->ApplyClip(area))
+                drawable->FillRect(c.left, c.top, c.right - c.left, c.bottom - c.top, background);
         }
     });
 }
@@ -1068,8 +1067,12 @@ void XClient::ProcPutImage() {
         if (req->format == ZPixmap || req->format == XYBitmap || req->format == XYPixmap) {
             if (depth == 32 || depth == 24) {
                 ASSERT(req->width * req->height * 4 <= data_len);
-                drawable->WritePixels(
-                        data, 0, 0, req->dstX, req->dstY, req->width, req->height, req->width);
+                // Klip GC: cairo memasang XSetClipRectangles lalu satu PutImage untuk seluruh area pembatas.
+                const Rect area{req->dstX, req->dstY, req->dstX + int(req->width), req->dstY + int(req->height)};
+                for (const Rect& c : gc->ApplyClip(area)) {
+                    drawable->WritePixels(data, c.left - req->dstX, c.top - req->dstY, c.left, c.top,
+                                          c.right - c.left, c.bottom - c.top, req->width);
+                }
             } else if (depth == 8 && req->format == ZPixmap) {
                 // A8 (RENDER): 8 bit per piksel, baris dibulatkan ke 4 byte; di server disimpan sebagai nilai di byte rendah
                 const size_t rowBytes = (size_t(req->width) + 3) & ~size_t(3);

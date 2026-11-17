@@ -42,11 +42,27 @@ void GraphicsContext::UpdateValues(u32 mask, const u32* values) {
     for (; mask; mask &= mask - 1) {
         const u32 index = std::countr_zero(mask);
         attributes[index] = *values++;
+        // GCClipMask = None (XSetClipMask(None)) menghapus klip persegi; mask pixmap tidak didukung dan diperlakukan tanpa klip.
+        if ((1u << index) == GCClipMask) {
+            clip_rectangles.clear();
+            has_clip = false;
+        }
     }
+}
+
+std::vector<Rect> GraphicsContext::ApplyClip(const Rect& r) const {
+    if (!has_clip) return {r};
+    std::vector<Rect> out;
+    for (const Rect& c : clip_rectangles) {
+        const Rect i{std::max(r.left, c.left), std::max(r.top, c.top), std::min(r.right, c.right), std::min(r.bottom, c.bottom)};
+        if (i.left < i.right && i.top < i.bottom) out.push_back(i);
+    }
+    return out;
 }
 
 void GraphicsContext::SetClipRectangles(s16 x, s16 y, const xRectangle* rectangle, size_t count) {
     clip_rectangles.clear();
+    has_clip = true;
     for (size_t i = 0; i < count; i++) {
         clip_rectangles.push_back(Rect{
                 .left = rectangle[i].x + x,
