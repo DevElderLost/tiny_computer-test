@@ -231,12 +231,13 @@ void XClient::ProcRender() {
             xPictDepth a1{}, a8{}, rgb{};
             xPictVisual visual{};
             xPictDepth argb{};
+            xPictVisual argbVisual{};
             u32 subpixel{};
         } packet;
-        static_assert(sizeof(packet) == 32 + 4 * 28 + 8 + 4 * 8 + 8 + 4);
+        static_assert(sizeof(packet) == 32 + 4 * 28 + 8 + 4 * 8 + 8 + 8 + 4);
         auto& h = packet.header;
         h.type = X_Reply; h.sequenceNumber = sequence; h.length = (sizeof(packet) - 32) / 4;
-        h.numFormats = 4; h.numScreens = 1; h.numDepths = 4; h.numVisuals = 1; h.numSubpixel = 1;
+        h.numFormats = 4; h.numScreens = 1; h.numDepths = 4; h.numVisuals = 2; h.numSubpixel = 1;
         for (size_t i = 0; i < 4; ++i) {
             auto& f = packet.formats[i]; f.id = formats[i]; f.type = PictTypeDirect; f.depth = kFormatDepth[i];
             if (kFormatDepth[i] == 1) { f.direct.alpha = 0; f.direct.alphaMask = 1; }
@@ -250,7 +251,9 @@ void XClient::ProcRender() {
         packet.screen.nDepth = 4; packet.screen.fallback = formats[1];
         packet.a1.depth = 1; packet.a8.depth = 8; packet.rgb.depth = 24; packet.rgb.nPictVisuals = 1;
         packet.visual.visual = server.GetRootVisual()->id; packet.visual.format = formats[1];
-        packet.argb.depth = 32;
+        // Visual ARGB (depth 32) dipetakan ke format ARGB32 (formats[2]); GDK memakainya sebagai visual RGBA.
+        packet.argb.depth = 32; packet.argb.nPictVisuals = 1;
+        packet.argbVisual.visual = server.GetArgbVisual()->id; packet.argbVisual.format = formats[2];
         WriteImmediately(&packet, sizeof(packet)); return;
     }
     case X_RenderCreatePicture: {

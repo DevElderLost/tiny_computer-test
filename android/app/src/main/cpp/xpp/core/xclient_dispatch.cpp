@@ -83,7 +83,7 @@ void XClient::ProcAuthenticateRequest() {
             .backingStore = 0,
             .saveUnders = 0,
             .rootDepth = root_visual->depth,
-            .nDepths = 1,
+            .nDepths = 2,
     };
     const size_t length = sizeof(xConnSetup) + base::AlignUp(setup.nbytesVendor, 4) +
                           setup.numFormats * sizeof(xPixmapFormat) +
@@ -126,6 +126,23 @@ void XClient::ProcAuthenticateRequest() {
             .blueMask = static_cast<CARD32>(root_visual->blue_mask),
     };
     Write(&vis, sizeof(vis));
+    // Depth 32: visual ARGB untuk window tembus pandang.
+    const auto argb_visual = server.GetArgbVisual();
+    const xDepth argb_depth{
+            .depth = argb_visual->depth,
+            .nVisuals = 1,
+    };
+    Write(&argb_depth, sizeof(argb_depth));
+    const xVisualType argb_vis{
+            .visualID = argb_visual->id,
+            .c_class = argb_visual->visual_class,
+            .bitsPerRGB = argb_visual->bpp,
+            .colormapEntries = argb_visual->colormap_entries,
+            .redMask = static_cast<CARD32>(argb_visual->red_mask),
+            .greenMask = static_cast<CARD32>(argb_visual->green_mask),
+            .blueMask = static_cast<CARD32>(argb_visual->blue_mask),
+    };
+    Write(&argb_vis, sizeof(argb_vis));
     Flush();
     authenticated = true;
 }
@@ -801,7 +818,7 @@ void XClient::ProcGetWindowAttributes() {
             .backingStore = static_cast<CARD8>(attributes.backing_store),
             .sequenceNumber = sequence,
             .length = (sizeof(xGetWindowAttributesReply) - sizeof(xGenericReply)) / 4,
-            .visualID = server.GetRootVisual()->id,
+            .visualID = server.GetVisualForDepth(window->IsInputOnly() ? 24 : window->GetDepth())->id,
             .c_class = static_cast<CARD16>(window->IsInputOnly() ? InputOnly : InputOutput),
             .bitGravity = static_cast<CARD8>(attributes.bit_gravity),
             .winGravity = static_cast<CARD8>(attributes.win_gravity),
@@ -1004,7 +1021,8 @@ void XClient::ProcPolyFillRectangle() {
     const u32 tile_alpha = drawable->GetDepth() == 24 ? 0xff000000u : 0u;
     static_cast<NativeScreen&>(server.GetScreen()).MutateDrawable(drawable, [&] {
         for (u32 i = 0; i < count; i++) {
-            const u32 background = gc->GetForeground() | 0xff000000;
+            // Depth 32: pixel foreground sudah memuat alpha; selain itu alpha penuh.
+            const u32 background = drawable->GetDepth() == 32 ? gc->GetForeground() : (gc->GetForeground() | 0xff000000);
             const Rect area{rectangles[i].x, rectangles[i].y, rectangles[i].x + int(rectangles[i].width),
                             rectangles[i].y + int(rectangles[i].height)};
             for (const Rect& c : gc->ApplyClip(area)) {
@@ -1155,7 +1173,7 @@ void XClient::ProcGetImage() {
             .depth = drawable->GetDepth(),
             .sequenceNumber = sequence,
             .length = static_cast<CARD32>(image.size() / 4),
-            .visual = server.GetRootVisual()->id,
+            .visual = server.GetVisualForDepth(drawable->GetDepth())->id,
     };
     Write(&reply, sizeof(reply));
     Write(image.data(), image.size());

@@ -437,7 +437,7 @@ class EGLNativeRenderer final : public NativeRenderer {
             }
             // Window ber-SHAPE: alpha tekstur menentukan bagian yang terlihat.
             glEnable(GL_BLEND);
-            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);  // piksel premultiplied (ARGB cairo)
             Quad(e.drawable, e.pixels, e.revision, e.x, e.y, false, true);
             glDisable(GL_BLEND);
         }

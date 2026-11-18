@@ -220,7 +220,9 @@ sp<NativeDrawable> NativeScreen::ShapedCopy(Window* w, const sp<NativeDrawable>&
             for (int y = std::max(r.y1, 0); y < std::min(r.y2, int(height)); ++y)
                 for (int x = std::max(r.x1, 0); x < std::min(r.x2, int(width)); ++x) inside[size_t(y) * width + x] = 1;
         }
-        for (size_t i = 0; i < pixels.size(); ++i) pixels[i] = inside[i] ? (pixels[i] | 0xff000000u) : 0u;
+        // Depth 24: alpha penuh di dalam bentuk. Depth 32: alpha asli window dipertahankan di dalam bentuk.
+        const u32 alpha = source->GetDepth() == 32 ? 0u : 0xff000000u;
+        for (size_t i = 0; i < pixels.size(); ++i) pixels[i] = inside[i] ? (pixels[i] | alpha) : 0u;
         entry.copy->WritePixels(reinterpret_cast<const u8*>(pixels.data()), 0, 0, 0, 0, width, height, width);
         entry.copy->PublishContent();
         entry.revision = source->Revision();
@@ -252,10 +254,9 @@ void NativeScreen::Collect(Window* w, Scene& frame, bool ancestorsMapped) {
                 !d->HardwareBuffer()) {
                 if (auto copy = ShapedCopy(w, d)) shown = std::move(copy);
             }
-            // Vulkan window quads force useTexAlpha=0, including depth-32 images.
-            // Match that opacity when discarding fully covered layers.
+            // Window depth 32 (visual ARGB, premultiplied) digambar dengan blending alpha, bukan opaque.
             frame.entries.push_back({shown, i == direct.end() ? nullptr : i->second, shown->Pixels(), shown->Revision(),
-                    rect.left, rect.top, shown == d, w->id, int(w->GetWidth()), int(w->GetHeight()), {}});
+                    rect.left, rect.top, shown == d && d->GetDepth() != 32, w->id, int(w->GetWidth()), int(w->GetHeight()), {}});
             if (external != externalFrames.end()) {
                 frame.entries.back().ticket.reset();
                 frame.entries.back().external = external->second.frame;

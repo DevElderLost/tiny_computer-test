@@ -42,6 +42,11 @@ public:
     bool ValidationEnabled() const { return validationEnabled; }
 
     Visual* GetRootVisual() const { return root_visual.get(); }
+    // Visual TrueColor 32-bit ARGB (alpha di bit 24..31, premultiplied seperti cairo). GDK memakainya untuk window tembus pandang
+    // (panel, menu) bila layar composited.
+    Visual* GetArgbVisual() const { return argb_visual.get(); }
+    // Visual untuk window/drawable dengan depth tertentu: 32 -> ARGB, selain itu visual root.
+    Visual* GetVisualForDepth(u8 depth) const { return depth == 32 ? argb_visual.get() : root_visual.get(); }
 
     const ScreenInfo& GetScreenInfo() const { return screen_info; }
 
@@ -131,6 +136,7 @@ private:
     std::unique_ptr<SelectionManager> selection_manager;
     std::unordered_map<u32, sp<XResource>> resources;
     sp<Visual> root_visual;
+    sp<Visual> argb_visual;
 };
 
 }  // namespace xorg

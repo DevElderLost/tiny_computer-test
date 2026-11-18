@@ -31,6 +31,7 @@ XServer::XServer(jobject instance, ScreenInfo info, bool validation, NativeRende
     extension_manager = std::make_unique<ExtensionManager>();
     selection_manager = std::make_unique<SelectionManager>(this);
     root_visual = std::make_shared<Visual>(GenerateID(), 24, 8, 0x0000ff, 0x00ff00, 0xff0000);
+    argb_visual = std::make_shared<Visual>(GenerateID(), 32, 8, 0x0000ff, 0x00ff00, 0xff0000);
 }
 XServer::~XServer() {
     Shutdown();
