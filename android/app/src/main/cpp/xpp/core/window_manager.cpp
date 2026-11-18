@@ -113,6 +113,7 @@ void WindowManager::RemoveCompositeClient(XClient* client) {
     for (const auto& r : composite_redirects) if (r.client == client) r.window->composite_redirected = false;
     std::erase_if(composite_redirects, [&](const auto& r) { return r.client == client; });
     for (const auto& r : composite_redirects) r.window->composite_redirected = true;
+    if (subwindows_redirector == client) subwindows_redirector = nullptr;
     if (grab_pointer_client == client) UngrabPointer(client, 0);
 }
 void WindowManager::RemoveCompositeWindow(Window* window) {

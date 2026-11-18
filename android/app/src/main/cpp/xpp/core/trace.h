@@ -6,4 +6,7 @@ namespace xorg {
 // diberikan aplikasi lewat variabel lingkungan XPP_TRACE_DIR. Pemeriksaan penanda dibatasi sekali per detik.
 bool TraceOn();
 void Trace(const char* format, ...) __attribute__((format(printf, 1, 2)));
+// Mode tampilan compositor: aktif selama berkas penanda `<dir>/.xpp-composite` ada (`touch /tmp/.xpp-composite`). Server lalu
+// menampilkan root yang digambar compositor (xfwm4) dan bukan window satu per satu. Dicek sekali per detik.
+bool CompositeDisplayRequested();
 }  // namespace xorg

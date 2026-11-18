@@ -1,5 +1,6 @@
 #include "native_screen.h"
 #include "core/damage.h"
+#include "core/trace.h"
 #include "native_displayx_visibility.h"
 #include "base/log.h"
 #include "core/window.h"
@@ -230,7 +231,7 @@ sp<NativeDrawable> NativeScreen::ShapedCopy(Window* w, const sp<NativeDrawable>&
 void NativeScreen::Collect(Window* w, Scene& frame, bool ancestorsMapped) {
     bool viewable = ancestorsMapped && w->IsMapped();
     if (!viewable) return;
-    if (!w->IsRoot() && !w->IsInputOnly() && w->GetDrawable() &&
+    if ((!w->IsRoot() || compositedDisplay) && !w->IsInputOnly() && w->GetDrawable() &&
         w->GetWidth() > 1 && w->GetHeight() > 1 && !IsWindowFiltered(w)) {
         auto i = direct.find(w->id);
         auto d = i == direct.end() ? std::static_pointer_cast<NativeDrawable>(w->SharedDrawable()) : i->second->drawable;
@@ -239,7 +240,10 @@ void NativeScreen::Collect(Window* w, Scene& frame, bool ancestorsMapped) {
             externalFrames.erase(external); external = externalFrames.end();
         }
         if (external != externalFrames.end()) d = external->second.frame->drawable;
-        if (i != direct.end() || external != externalFrames.end() || d->HasContent()) {
+        // Mode compositor: window CPU digambar oleh compositor ke root; hanya window GPU/direct/external tetap ditampilkan.
+        const bool composed = compositedDisplay && !w->IsRoot() && i == direct.end() && external == externalFrames.end();
+        if (composed) {
+        } else if (i != direct.end() || external != externalFrames.end() || d->HasContent()) {
             const auto& rect = w->GetInRect();
             // Window ber-SHAPE (bounding/clip) digambar dari salinan ber-alpha dan bukan opaque. Window GPU/direct/external
             // tetap penuh karena isinya tidak bisa diubah di CPU.
@@ -328,6 +332,7 @@ void NativeScreen::PostInvalidate() {
     }
     if (DiagnosticsEnabled()) metricSceneBuilds.fetch_add(1, std::memory_order_relaxed);
     Scene frame;
+    compositedDisplay = CompositeDisplayRequested() && server.GetWindowManager().SubwindowsRedirected();
     shapeSeen.clear();
     Collect(server.GetWindowManager().GetRootWindow(), frame, true);
     for (auto it = shapeCopies.begin(); it != shapeCopies.end();) {

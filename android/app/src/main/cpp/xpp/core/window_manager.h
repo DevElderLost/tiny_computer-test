@@ -50,6 +50,12 @@ public:
     bool ConfigureWindow(XClient* caller_client, Window* window, u32 mask, const u32* values);
     void RedirectComposite(XClient*, Window*, u8 update, bool redirect);
     void RemoveCompositeClient(XClient*);
+    // CompositeRedirectSubwindows(root, Manual) oleh compositor; dipakai untuk memilih mode tampilan compositor.
+    void SetSubwindowsRedirect(XClient* client, bool redirected) {
+        if (redirected) subwindows_redirector = client;
+        else if (subwindows_redirector == client) subwindows_redirector = nullptr;
+    }
+    bool SubwindowsRedirected() const { return subwindows_redirector != nullptr; }
     void RemoveCompositeWindow(Window*);
     void CompositeCopy(Window* source, Window* destination, s16 x, s16 y);
 
@@ -118,6 +124,7 @@ private:
     u32 grab_event_mask{};
     struct CompositeRedirect { XClient* client; Window* window; u8 update; };
     std::vector<CompositeRedirect> composite_redirects;
+    XClient* subwindows_redirector{};  // klien yang me-redirect subwindow root secara manual (compositor)
 };
 
 }  // namespace xorg

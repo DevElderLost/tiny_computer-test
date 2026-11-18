@@ -2,6 +2,7 @@
 #include "core/xclient_dispatch.h"
 #include "core/xserver.h"
 #include "core/window_manager.h"
+#include "core/xscreen.h"
 #include "core/pixmap.h"
 #include "core/render_picture.h"
 
@@ -33,7 +34,13 @@ void XClient::ProcComposite() {
         struct Request { xReq header; u32 window; u8 update; u8 pad[3]; };
         CHECK_REQUEST_SIZE_STRICT(Request);
         auto* r = GetRequestData<Request>();
-        if (!GetResourceAs<Window>(r->window)) throw BadWindowError(r->window);
+        auto* window = GetResourceAs<Window>(r->window);
+        if (!window) throw BadWindowError(r->window);
+        // Dicatat untuk mode tampilan compositor (lihat CompositeDisplayRequested).
+        if (window->IsRoot()) {
+            server.GetWindowManager().SetSubwindowsRedirect(this, minor == 2 && r->update == 1);
+            server.GetScreen().PostInvalidate();
+        }
         return;
     }
     // CreateRegionFromBorderClip(region, window)

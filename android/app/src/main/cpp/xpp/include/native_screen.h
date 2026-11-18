@@ -255,6 +255,8 @@ private:
     void Collect(Window*, Scene&, bool ancestorsMapped);
     // Window ber-SHAPE: salinan CPU 32-bit dengan alpha (255 di dalam bentuk, 0 di luar) yang digambar tembus pandang.
     sp<NativeDrawable> ShapedCopy(Window*, const sp<NativeDrawable>& source);
+    // Mode tampilan compositor: root (digambar xfwm4) ditampilkan, window CPU tidak digambar sendiri.
+    bool compositedDisplay{};
     bool PatchPresent(const sp<PresentTicket>&, const sp<PresentTicket>& previousDirect);
     bool IsWindowFiltered(Window*) const;
     void Worker();

@@ -984,13 +984,45 @@ void XClient::ProcPolyFillRectangle() {
     }
     const u32 count = (request_size - sizeof(xPolyFillRectangleReq)) / sizeof(xRectangle);
     const xRectangle* rectangles = reinterpret_cast<xRectangle*>(req + 1);
+    // FillTiled (xfwm4 mengisi title bar dan mask SHAPE-nya dengan tile pixmap): isi dengan pixmap GCTile yang diulang dari
+    // (GCTileStipXOrigin, GCTileStipYOrigin). Tanpa ini hasilnya warna foreground 0 sehingga title bar dan maskinya kosong.
+    std::vector<u32> tile;
+    s32 tile_w = 0, tile_h = 0;
+    if (gc->GetAttribute(GCFillStyle) == FillTiled) {
+        if (const auto* tile_pixmap = GetResourceAs<Pixmap>(gc->GetAttribute(GCTile)); tile_pixmap && tile_pixmap->GetDrawable()) {
+            auto source = tile_pixmap->GetDrawable();
+            tile_w = source->GetWidth();
+            tile_h = source->GetHeight();
+            if (tile_w > 0 && tile_h > 0) {
+                tile.resize(size_t(tile_w) * tile_h);
+                source->ReadPixels(reinterpret_cast<u8*>(tile.data()), 0, 0, u16(tile_w), u16(tile_h), u16(tile_w));
+            }
+        }
+    }
+    const s32 tile_ox = s16(gc->GetAttribute(GCTileStipXOrigin));
+    const s32 tile_oy = s16(gc->GetAttribute(GCTileStipYOrigin));
+    const u32 tile_alpha = drawable->GetDepth() == 24 ? 0xff000000u : 0u;
     static_cast<NativeScreen&>(server.GetScreen()).MutateDrawable(drawable, [&] {
         for (u32 i = 0; i < count; i++) {
             const u32 background = gc->GetForeground() | 0xff000000;
             const Rect area{rectangles[i].x, rectangles[i].y, rectangles[i].x + int(rectangles[i].width),
                             rectangles[i].y + int(rectangles[i].height)};
-            for (const Rect& c : gc->ApplyClip(area))
-                drawable->FillRect(c.left, c.top, c.right - c.left, c.bottom - c.top, background);
+            for (const Rect& c : gc->ApplyClip(area)) {
+                const s32 w = c.right - c.left, h = c.bottom - c.top;
+                if (tile.empty()) {
+                    drawable->FillRect(c.left, c.top, w, h, background);
+                    continue;
+                }
+                std::vector<u32> out(size_t(w) * h);
+                for (s32 y = 0; y < h; ++y) {
+                    const s32 ty = ((c.top + y - tile_oy) % tile_h + tile_h) % tile_h;
+                    for (s32 x = 0; x < w; ++x) {
+                        const s32 tx = ((c.left + x - tile_ox) % tile_w + tile_w) % tile_w;
+                        out[size_t(y) * w + x] = tile[size_t(ty) * tile_w + tx] | tile_alpha;
+                    }
+                }
+                drawable->WritePixels(reinterpret_cast<const u8*>(out.data()), 0, 0, c.left, c.top, w, h, u16(w));
+            }
         }
     });
 }

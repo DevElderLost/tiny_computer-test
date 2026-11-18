@@ -29,7 +29,7 @@ XServer::XServer(jobject instance, ScreenInfo info, bool validation, NativeRende
     mouse = std::make_unique<Mouse>(*this);
     window_manager = std::make_unique<WindowManager>(*this, *mouse, info);
     extension_manager = std::make_unique<ExtensionManager>();
-    selection_manager = std::make_unique<SelectionManager>();
+    selection_manager = std::make_unique<SelectionManager>(this);
     root_visual = std::make_shared<Visual>(GenerateID(), 24, 8, 0x0000ff, 0x00ff00, 0xff0000);
 }
 XServer::~XServer() {

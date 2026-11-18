@@ -34,6 +34,20 @@ bool TraceOn() {
     return trace_enabled;
 }
 
+bool CompositeDisplayRequested() {
+    static std::atomic<bool> requested{false};
+    static std::chrono::steady_clock::time_point last{};
+    static std::mutex mutex;
+    const auto now = std::chrono::steady_clock::now();
+    std::lock_guard lock(mutex);
+    if (now - last >= std::chrono::seconds(1)) {
+        last = now;
+        const char* dir = std::getenv("XPP_TRACE_DIR");
+        requested = dir && access((std::string(dir) + "/.xpp-composite").c_str(), F_OK) == 0;
+    }
+    return requested;
+}
+
 void Trace(const char* format, ...) {
     if (!TraceOn()) return;
     std::lock_guard lock(trace_mutex);

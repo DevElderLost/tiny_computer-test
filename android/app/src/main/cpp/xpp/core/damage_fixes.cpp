@@ -9,6 +9,7 @@
 #include "core/extension.h"
 #include "core/pixmap.h"
 #include "core/render_picture.h"
+#include "core/selection_manager.h"
 #include "core/window.h"
 #include "core/xclient.h"
 #include "core/xclient_dispatch.h"
@@ -162,7 +163,12 @@ void XClient::ProcXFixes() {
         const u32 ver[2] = {4, 0}; memcpy(reply.body, ver, 8);
         WriteImmediately(&reply, sizeof(reply)); return;
     }
-    case 1: case 2: case 3: return;  // ChangeSaveSet, SelectSelectionInput, SelectCursorInput
+    case 1: case 3: return;  // ChangeSaveSet, SelectCursorInput
+    case 2: {  // SelectSelectionInput(window, selection, eventMask)
+        if (request_size < 16) throw BadLengthError();
+        server.GetSelectionManager().SelectFixesInput(this, a[0], a[1], a[2]);
+        return;
+    }
     case 4: {  // GetCursorImage: kursor transparan 1x1 (kursor digambar oleh server)
         struct { u8 type{X_Reply}, pad{}; u16 sequence{}; u32 length{1}; s16 x{}, y{}; u16 w{1}, h{1}, xhot{}, yhot{};
                  u32 serial{}; u8 pad2[8]{}; u32 pixel{}; } reply;
