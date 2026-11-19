@@ -275,23 +275,6 @@ fi
             sb.append("echo \"[tiny] dialog berkas: zenity=\$(command -v zenity || echo TIDAK ADA) kdialog=\$(command -v kdialog || echo TIDAK ADA) DISPLAY=\$DISPLAY WAYLAND_DISPLAY=\$WAYLAND_DISPLAY GDK_BACKEND=\$GDK_BACKEND SDL_VIDEODRIVER=\$SDL_VIDEODRIVER\"\n")
         }
 
-        // sisa status "backend grafis gagal" dari proses yang dimatikan paksa (lihat komentar di dalam skrip)
-        sb.append(
-            """
-# Pulihkan status "backend grafis gagal" yang tertinggal dari proses sebelumnya. PPSSPP menulis FailedGraphicsBackends
-# ke ppsspp.ini sebelum mencoba sebuah backend dan baru menghapusnya setelah backend itu berhasil. Bila prosesnya
-# keburu dimatikan (SIGKILL saat sesi ditutup, mis. kode keluar 137) di tengah itu, OPENGL,VULKAN tertinggal di berkas;
-# peluncuran berikutnya melapor "All graphics backends failed" dan jendela tinggal hitam walau vulkaninfo normal.
-for f in "${'$'}HOME/.config/ppsspp/PSP/SYSTEM/ppsspp.ini" "${'$'}{XDG_CONFIG_HOME:-${'$'}HOME/.config}/ppsspp/PSP/SYSTEM/ppsspp.ini" "${'$'}HOME/.ppsspp/PSP/SYSTEM/ppsspp.ini" "${'$'}HOME/.var/app/org.ppsspp.PPSSPP/config/ppsspp/PSP/SYSTEM/ppsspp.ini"; do
-  [ -f "${'$'}f" ] || continue
-  if grep -q -E '^FailedGraphicsBackends[[:space:]]*=[[:space:]]*[A-Za-z]' "${'$'}f" 2>/dev/null; then
-    echo "[tiny] heal: ${'$'}f: ${'$'}(grep -E '^FailedGraphicsBackends' "${'$'}f" | head -n 1 | tr -d '\r') dikosongkan (sisa kegagalan sebelumnya)"
-    sed -i -E 's/^(FailedGraphicsBackends[[:space:]]*=).*/\1 /' "${'$'}f" 2>/dev/null
-  fi
-done
-""",
-        )
-
         // bus sesi D-Bus: pakai milik desktop bila sedang berjalan (cari di /proc), kalau tidak, buat sendiri
         sb.append(
             """
@@ -311,6 +294,38 @@ fi
 
         var cmd = effectiveCommand(app, s)
         if (s.args.isNotBlank()) cmd += " " + s.args.trim()
+        // PPSSPP: bersihkan keadaan sisa dari proses yang dimatikan paksa, lalu paksa backend Vulkan (lihat komentar di skrip).
+        // Cara menggantinya: TINY_PPSSPP_GRAPHICS di Environment Shortcut (opengl / software / none = pakai pengaturan PPSSPP).
+        val isPpsspp = app.id.contains("ppsspp", ignoreCase = true) || cmd.contains("ppsspp", ignoreCase = true)
+        if (isPpsspp) {
+            sb.append(
+                """
+# PPSSPP menyimpan dua keadaan yang bertahan walau prosesnya mati paksa (SIGKILL / kode keluar 137):
+# 1) FailedGraphicsBackends.txt (di PSP/SYSTEM): ditulis sebelum sebuah backend dicoba dan baru dihapus setelah berhasil.
+#    Bila tertinggal, peluncuran berikutnya menambah ",ALL" dan memilih backend sendiri. "IGNORE" mematikan pelacakan itu.
+# 2) shm /PPSSPP_ID: penghitung instance. Bila tertinggal, nomor instance naik terus dan suara dibisukan ("Secondary instance N").
+for d in "${'$'}{XDG_CONFIG_HOME:-${'$'}HOME/.config}/ppsspp/PSP/SYSTEM" "${'$'}HOME/.config/ppsspp/PSP/SYSTEM"; do
+  mkdir -p "${'$'}d" 2>/dev/null || continue
+  f="${'$'}d/FailedGraphicsBackends.txt"
+  cur="${'$'}(cat "${'$'}f" 2>/dev/null)"
+  if [ "${'$'}cur" != "IGNORE" ]; then
+    echo "[tiny] heal: ${'$'}f: ${'$'}{cur:-kosong} -> IGNORE"
+    printf IGNORE > "${'$'}f" 2>/dev/null
+  fi
+done
+for f in "${'$'}HOME/.var/app/org.ppsspp.PPSSPP/config/ppsspp/PSP/SYSTEM/FailedGraphicsBackends.txt" "${'$'}HOME/.var/app/org.ppsspp.PPSSPP/cache/ppsspp/FailedGraphicsBackends.txt"; do
+  [ -f "${'$'}f" ] && [ "${'$'}(cat "${'$'}f" 2>/dev/null)" != "IGNORE" ] && { echo "[tiny] heal: ${'$'}f -> IGNORE"; printf IGNORE > "${'$'}f" 2>/dev/null; }
+done
+find "${'$'}HOME/.local/share/appimages" -maxdepth 7 -name FailedGraphicsBackends.txt 2>/dev/null | while IFS= read -r f; do
+  [ "${'$'}(cat "${'$'}f" 2>/dev/null)" != "IGNORE" ] && { echo "[tiny] heal: ${'$'}f -> IGNORE"; printf IGNORE > "${'$'}f" 2>/dev/null; }
+done
+if [ -e /dev/shm/PPSSPP_ID ] && ! grep -qsa '[P]PSSPP' /proc/[0-9]*/cmdline 2>/dev/null; then
+  rm -f /dev/shm/PPSSPP_ID && echo "[tiny] heal: /dev/shm/PPSSPP_ID (penghitung instance sisa) dihapus"
+fi
+""".trimStart(),
+            )
+            if (appImage && !isWine && !cmd.contains("--graphics")) cmd += " --graphics=\${TINY_PPSSPP_GRAPHICS:-vulkan}"
+        }
         // Aplikasi Flathub (`flatpak run ...`): Wayland dulu, X11/Xwayland hanya cadangan, plus Turnip bila aktif.
         // `flatpak run` membersihkan lingkungan, jadi ini harus berupa opsi di baris perintah (lihat FlatpakWayland).
         FlatpakWayland.rewrite(ctx, cmd, FlatpakWayland.mode(effectiveEnv(app, s)), turnipOn, xpp)?.let { r ->
