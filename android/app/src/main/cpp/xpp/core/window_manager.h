@@ -1,7 +1,9 @@
 #pragma once
 
 #include <X11/X.h>
+#include <chrono>
 #include <functional>
+#include <vector>
 #include "base/types.h"
 #include "core/mouse.h"
 #include "core/screen_info.h"
@@ -88,6 +90,13 @@ public:
 
     void UngrabPointer(const XClient* client, u32 time);
 
+    // Grab tombol pasif (XGrabButton). WM seperti xfwm4 memakainya untuk click-to-focus dan raise: klik pada window klien
+    // diterima WM lebih dulu (mode sinkron), lalu WM memanggil AllowEvents(ReplayPointer) agar klik diteruskan ke klien.
+    void GrabButton(XClient* client, Window* window, u8 button, u16 modifiers, bool owner_events, u16 event_mask,
+                    bool pointer_sync, Window* confine_window, Cursor* cursor);
+    void UngrabButton(XClient* client, Window* window, u8 button, u16 modifiers);
+    void AllowEvents(XClient* client, u8 mode);
+
     void UpdatePointer(u32 mode);
 
     Cursor* UpdatePointerPosition(s32 x, s32 y, u32 mode, bool notify);
@@ -120,6 +129,28 @@ private:
     bool grab_pointer_synchronous{};
     bool grab_pointer_owner_events{};
     u32 grab_pointer_under{};  // id window di bawah pointer saat grab owner_events (untuk event crossing normal)
+
+    struct PassiveButtonGrab {
+        XClient* client;
+        u32 window;
+        u8 button;  // 0 = AnyButton
+        u16 modifiers;  // 0x8000 = AnyModifier
+        bool owner_events;
+        u16 event_mask;
+        bool pointer_sync;
+        u32 confine_window;
+        u32 cursor;
+    };
+    std::vector<PassiveButtonGrab> passive_grabs;
+    // Setelah grab pasif sinkron aktif, antrean pointer "beku" sampai AllowEvents. Aman: dilepas otomatis bila WM terlambat.
+    bool passive_frozen{};
+    bool passive_skip{};  // sedang memutar ulang klik: jangan cocokkan grab pasif lagi
+    u16 frozen_button{};
+    bool frozen_release{};
+    std::chrono::steady_clock::time_point frozen_since{};
+    const PassiveButtonGrab* FindPassiveButtonGrab(Window* pointer_window, u16 button, u32 state) const;
+    void ReplayFrozenPointer();
+    void CheckFrozenTimeout();
     bool grab_keyboard_synchronous{};
     u32 grab_event_mask{};
     struct CompositeRedirect { XClient* client; Window* window; u8 update; };

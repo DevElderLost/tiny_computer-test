@@ -21,8 +21,45 @@ void XClient::ProcCompat() {
     auto send = [this](auto& r) { r.type = X_Reply; r.sequenceNumber = sequence; WriteImmediately(&r, sizeof(r)); };
     switch (req->reqType) {
     case X_ChangeSaveSet: case X_CloseFont:
-    case X_GrabButton: case X_UngrabButton: case X_GrabKey: case X_UngrabKey:
-    case X_GrabServer: case X_UngrabServer: case X_AllowEvents:
+    case X_GrabKey: case X_UngrabKey:
+    case X_GrabServer: case X_UngrabServer:
+        // Grab tombol dan grab server tidak diimplementasikan (keyboard: tidak ada grab pasif).
+        if (TraceOn()) {
+            static int traced_grabs = 0;
+            if (traced_grabs < 200) {
+                ++traced_grabs;
+                Trace("Unsupported grab request op=%u data=%u", unsigned(req->reqType), unsigned(req->data));
+            }
+        }
+        return;
+    case X_GrabButton: {
+        CHECK_REQUEST_SIZE_STRICT(xGrabButtonReq);
+        const auto* r = GetRequestData<xGrabButtonReq>();
+        auto* window = GetResourceAs<Window>(r->grabWindow);
+        if (!window) throw BadWindowError(r->grabWindow);
+        auto* confine = r->confineTo ? GetResourceAs<Window>(r->confineTo) : nullptr;
+        auto* cursor = r->cursor ? GetResourceAs<Cursor>(r->cursor) : nullptr;
+        Trace("GrabButton win=0x%x button=%u mods=0x%x owner=%d psync=%d mask=0x%x", unsigned(r->grabWindow), unsigned(r->button),
+              unsigned(r->modifiers), int(r->ownerEvents), int(r->pointerMode == GrabModeSync), unsigned(r->eventMask));
+        server.GetWindowManager().GrabButton(this, window, r->button, r->modifiers, r->ownerEvents, r->eventMask,
+                                             r->pointerMode == GrabModeSync, confine, cursor);
+        return;
+    }
+    case X_UngrabButton: {
+        CHECK_REQUEST_SIZE_STRICT(xUngrabButtonReq);
+        const auto* r = GetRequestData<xUngrabButtonReq>();
+        auto* window = GetResourceAs<Window>(r->grabWindow);
+        if (!window) throw BadWindowError(r->grabWindow);
+        server.GetWindowManager().UngrabButton(this, window, r->button, r->modifiers);
+        return;
+    }
+    case X_AllowEvents: {
+        CHECK_REQUEST_SIZE_STRICT(xAllowEventsReq);
+        const auto* r = GetRequestData<xAllowEventsReq>();
+        Trace("AllowEvents mode=%u", unsigned(r->mode));
+        server.GetWindowManager().AllowEvents(this, r->mode);
+        return;
+    }
     case X_ChangeKeyboardControl: case X_ChangePointerControl:
     case X_SetCloseDownMode: case X_SetScreenSaver: case X_InstallColormap:
     case X_UninstallColormap: case X_FreeColors:
@@ -43,6 +80,7 @@ void XClient::ProcCompat() {
     }
     case X_GrabKeyboard: {
         CHECK_REQUEST_SIZE_STRICT(xGrabKeyboardReq);
+        Trace("GrabKeyboard window=0x%x (tidak dicatat server)", unsigned(GetRequestData<xGrabKeyboardReq>()->grabWindow));
         xGrabKeyboardReply r{}; r.status = GrabSuccess; send(r); return;
     }
     case X_UngrabKeyboard: return;

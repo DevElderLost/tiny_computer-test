@@ -7,6 +7,7 @@
 #include "core/id_generator.h"
 
 #include "core/keyboard.h"
+#include "core/trace.h"
 #include "core/window.h"
 #include "core/window_manager.h"
 #include "core/xclient.h"
@@ -114,6 +115,7 @@ void WindowManager::RemoveCompositeClient(XClient* client) {
     std::erase_if(composite_redirects, [&](const auto& r) { return r.client == client; });
     for (const auto& r : composite_redirects) r.window->composite_redirected = true;
     if (subwindows_redirector == client) subwindows_redirector = nullptr;
+    std::erase_if(passive_grabs, [&](const PassiveButtonGrab& g) { return g.client == client; });
     if (grab_pointer_client == client) UngrabPointer(client, 0);
 }
 void WindowManager::RemoveCompositeWindow(Window* window) {
@@ -758,6 +760,7 @@ void WindowManager::RemoveAllSubWindows(Window* window, std::vector<Window*>& wi
 }
 
 void WindowManager::SetInputFocus(Window* window, u8 revert_to, u32 time) {
+    Trace("SetInputFocus window=0x%x revert=%u time=%u", window ? unsigned(window->id) : 0u, unsigned(revert_to), unsigned(time));
     FocusInOutNotify(focus_window,
                      window,
                      GetPointerWindow(mouse.GetX(), mouse.GetY()),
@@ -809,10 +812,82 @@ u32 WindowManager::GrabPointer(XClient* client,
     return Success;
 }
 
+void WindowManager::GrabButton(XClient* client, Window* window, u8 button, u16 modifiers, bool owner_events, u16 event_mask,
+                               bool pointer_sync, Window* confine_window, Cursor* cursor) {
+    // Grab yang sama (window, button, modifiers) milik klien yang sama diganti.
+    std::erase_if(passive_grabs, [&](const PassiveButtonGrab& g) {
+        return g.client == client && g.window == window->id && g.button == button && g.modifiers == modifiers;
+    });
+    passive_grabs.push_back({client, window->id, button, modifiers, owner_events, event_mask, pointer_sync,
+                             confine_window ? confine_window->id : 0u, cursor ? cursor->id : 0u});
+}
+
+void WindowManager::UngrabButton(XClient* client, Window* window, u8 button, u16 modifiers) {
+    std::erase_if(passive_grabs, [&](const PassiveButtonGrab& g) {
+        return g.client == client && g.window == window->id && (button == 0 || g.button == button) &&
+               (modifiers == 0x8000 || g.modifiers == modifiers);
+    });
+}
+
+// Grab pasif yang paling dekat ke root (leluhur tertinggi) yang cocok menang, seperti X11.
+const WindowManager::PassiveButtonGrab* WindowManager::FindPassiveButtonGrab(Window* pointer_window, u16 button, u32 state) const {
+    if (passive_grabs.empty()) return nullptr;
+    std::vector<Window*> chain;
+    for (Window* w = pointer_window; w; w = w->GetParent()) chain.push_back(w);
+    const u16 mods = u16(state & 0xff);
+    for (auto it = chain.rbegin(); it != chain.rend(); ++it) {
+        for (const auto& g : passive_grabs) {
+            if (g.window != (*it)->id) continue;
+            if (g.button != 0 && g.button != button) continue;
+            if (g.modifiers != 0x8000 && g.modifiers != mods) continue;
+            return &g;
+        }
+    }
+    return nullptr;
+}
+
+void WindowManager::AllowEvents(XClient* client, u8 mode) {
+    if (!passive_frozen || client != grab_pointer_client) return;
+    if (mode == ReplayPointer) {
+        ReplayFrozenPointer();
+        return;
+    }
+    if (mode == AsyncPointer || mode == SyncPointer || mode == AsyncBoth || mode == SyncBoth) {
+        // Lepas beku: klik tetap menjadi milik pemegang grab; lepasan tombol yang tertahan diteruskan.
+        passive_frozen = false;
+        if (frozen_release) {
+            frozen_release = false;
+            UpdatePointerButton(frozen_button, false);
+        }
+    }
+}
+
+// Memutar ulang klik yang ditahan WM ke klien: grab pasif dilepas, klik dikirim lewat jalur normal.
+void WindowManager::ReplayFrozenPointer() {
+    passive_frozen = false;
+    const bool release = frozen_release;
+    frozen_release = false;
+    const u16 button = frozen_button;
+    UngrabPointer(grab_pointer_client, 0);
+    passive_skip = true;
+    UpdatePointerButton(button, true);
+    passive_skip = false;
+    if (release || mouse.GetButtons() == 0) UpdatePointerButton(button, false);
+}
+
+void WindowManager::CheckFrozenTimeout() {
+    if (passive_frozen && std::chrono::steady_clock::now() - frozen_since > std::chrono::milliseconds(800)) {
+        Trace("Passive grab dibekukan terlalu lama; klik diputar ulang otomatis");
+        ReplayFrozenPointer();
+    }
+}
+
 void WindowManager::UngrabPointer(const XClient* client, u32 time) {
     if (client != grab_pointer_client) {
         return;
     }
+    passive_frozen = false;
+    frozen_release = false;
     grab_pointer_window = nullptr;
     grab_confine_window = nullptr;
     grab_cursor = nullptr;
@@ -893,6 +968,45 @@ Cursor* WindowManager::UpdatePointerPosition(s32 x, s32 y, u32 mode, bool notify
 void WindowManager::UpdatePointerButton(u16 button, bool down) {
     const s32 x = mouse.GetX();
     const s32 y = mouse.GetY();
+    static int traced_buttons = 0;
+    if (traced_buttons < 250 && TraceOn()) {
+        ++traced_buttons;
+        Trace("Button %u %s at %d,%d pointerWin=0x%x grabPtr=0x%x passive=%d", unsigned(button), down ? "down" : "up", int(x), int(y),
+              unsigned(GetPointerWindow(x, y)->id), grab_pointer_window ? unsigned(grab_pointer_window->id) : 0u,
+              int(grab_pointer_passive));
+    }
+    CheckFrozenTimeout();
+    if (passive_frozen) {
+        // Antrean pointer beku sampai WM memanggil AllowEvents; lepasan tombol disimpan.
+        if (!down) frozen_release = true;
+        return;
+    }
+    if (!grab_pointer_window && down && !passive_skip) {
+        // Grab tombol pasif (XGrabButton) milik WM: klien pemegang grab menerima klik lebih dulu.
+        Window* under = GetPointerWindow(x, y);
+        if (const auto* grab = FindPassiveButtonGrab(under, button, GetButtonMasks())) {
+            auto* gw = server.GetResource(grab->window);
+            if (gw && gw->GetType() == XResourceType::Window) {
+                Window* grab_window = gw->As<Window>();
+                const PassiveButtonGrab g = *grab;
+                auto* confine = g.confine_window ? server.GetResource(g.confine_window) : nullptr;
+                auto* cur = g.cursor ? server.GetResource(g.cursor) : nullptr;
+                GrabPointer(g.client, grab_window,
+                            confine && confine->GetType() == XResourceType::Window ? confine->As<Window>() : nullptr,
+                            cur && cur->GetType() == XResourceType::Cursor ? cur->As<Cursor>() : nullptr, 0, g.event_mask,
+                            g.owner_events, g.pointer_sync, false);
+                grab_pointer_passive = true;
+                if (g.pointer_sync) {
+                    passive_frozen = true;
+                    frozen_button = button;
+                    frozen_release = false;
+                    frozen_since = std::chrono::steady_clock::now();
+                }
+                grab_pointer_window->GrabButtonNotify(true, x, y, button, grab_pointer_client, g.event_mask, g.owner_events);
+                return;
+            }
+        }
+    }
     if (!grab_pointer_window) {
         Window* w = GetPointerWindow(x, y);
         XClient* recipient = nullptr;
@@ -920,6 +1034,7 @@ void WindowManager::UpdatePointerButton(u16 button, bool down) {
 }
 
 void WindowManager::OnPointerMove(s32 x, s32 y) {
+    CheckFrozenTimeout();
     // UpdateCursor already publishes the cursor snapshot (or a full scene when
     // needed). Rebuilding here repeats that work for every mouse movement.
     UpdatePointerPosition(x, y, 0, true);
@@ -930,6 +1045,13 @@ void WindowManager::OnPointerButtonChange(u16 button, bool down) {
 }
 
 void WindowManager::OnKeyboardKeyChange(u32 keycode, bool down) {
+    static int traced_keys = 0;
+    if (traced_keys < 250 && TraceOn()) {
+        ++traced_keys;
+        Trace("Key %s code=%u focus=0x%x pointerWin=0x%x grabKb=0x%x", down ? "down" : "up", unsigned(keycode),
+              focus_window ? unsigned(focus_window->id) : 0u, unsigned(GetPointerWindow(mouse.GetX(), mouse.GetY())->id),
+              grab_keyboard_window ? unsigned(grab_keyboard_window->id) : 0u);
+    }
     if (!focus_window && !grab_keyboard_window) return;
     const s32 x = mouse.GetX();
     const s32 y = mouse.GetY();
