@@ -197,9 +197,15 @@ if [ -n "${'$'}TINY_LAUNCH_LOG" ]; then
     command -v xprop >/dev/null 2>&1 && echo "[tiny] diag root ${'$'}(xprop -root _NET_CLIENT_LIST _NET_ACTIVE_WINDOW _NET_SUPPORTING_WM_CHECK 2>&1 | tr '\n' ' ')"
     echo "[tiny] diag xpp-trace klien (pid/proses yang tersambung ke server X++):"
     grep " CLIENT " /tmp/xpp-trace.log 2>/dev/null | tail -n 24
-    # request milik klien PPSSPP (150 terakhir dari 4000 pertama): apa yang diminta SDL/Mesa dan di mana berhenti
-    cb=${'$'}(grep " CLIENT .*comm=ld-linux" /tmp/xpp-trace.log 2>/dev/null | tail -n 1 | sed 's/.*base=\(0x[0-9a-f]*\).*/\1/')
-    [ -n "${'$'}cb" ] && { echo "[tiny] diag xpp-trace request klien ${'$'}cb:"; grep " REQ c=${'$'}cb " /tmp/xpp-trace.log 2>/dev/null | tail -n 150; }
+    # request SEMUA klien PPSSPP (proses ini punya lebih dari satu sambungan X): jumlah per opcode dan 40 request terakhir
+    # (hanya 4000 request pertama tiap klien yang dicatat). Opcode ekstensi (>=128) diikuti data = nomor request ekstensi.
+    for cb in ${'$'}(grep " CLIENT .*comm=ld-linux" /tmp/xpp-trace.log 2>/dev/null | sed 's/.*base=\(0x[0-9a-f]*\).*/\1/' | sort -u); do
+      echo "[tiny] diag xpp-trace klien ${'$'}cb: ${'$'}(grep -c " REQ c=${'$'}cb " /tmp/xpp-trace.log 2>/dev/null) request; jumlah per op:"
+      grep " REQ c=${'$'}cb " /tmp/xpp-trace.log 2>/dev/null | sed 's/.* op=\([0-9]*\) data=\([0-9]*\) .*/\1\/\2/' | sort | uniq -c | sort -rn | head -14 | tr '\n' ' '
+      echo
+      echo "[tiny] diag xpp-trace 40 request terakhir klien ${'$'}cb:"
+      grep " REQ c=${'$'}cb " /tmp/xpp-trace.log 2>/dev/null | tail -n 40
+    done
     echo "[tiny] diag xpp-trace (80 baris terakhir, tanpa Unsupported grab dan REQ):"
     grep -v -e "Unsupported grab request" -e " REQ c=" -e " CLIENT " /tmp/xpp-trace.log 2>/dev/null | tail -n 80
   ) &
