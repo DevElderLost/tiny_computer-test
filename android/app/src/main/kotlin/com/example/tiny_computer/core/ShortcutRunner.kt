@@ -215,11 +215,84 @@ for line in open('/proc/%s/maps' % pid):
     if len(f) < 5 or 'x' not in f[1]:
         continue
     a, b = [int(x, 16) for x in f[0].split('-')]
-    maps.append((a, b, int(f[2], 16), (f[5].strip() if len(f) > 5 else '[anon]').split('/')[-1]))
+    full = f[5].strip() if len(f) > 5 else '[anon]'
+    maps.append((a, b, int(f[2], 16), full.split('/')[-1], full))
+import bisect, glob, struct, subprocess
+symcache = {}
+def find_file(full, base):
+    # path di /proc/PID/maps adalah path host; dari dalam proot berkas yang sama dicari lewat nama
+    if os.path.isfile(full):
+        return full
+    for pat in ('/home/tiny/.local/share/appimages/*/app/**/' + base, '/usr/lib/**/' + base, '/usr/local/**/' + base):
+        for c in glob.glob(pat, recursive=True):
+            if os.path.isfile(c):
+                return c
+    return None
+def load_syms(full, base):
+    # tabel simbol FUNC (.symtab bila ada, selain itu .dynsym) + peta offset berkas -> vaddr; None bila tidak terbaca
+    if base in symcache:
+        return symcache[base]
+    res = None
+    try:
+        path = find_file(full, base)
+        if not path:
+            raise ValueError('berkas tidak ketemu')
+        d = open(path, 'rb').read()
+        if d[:4] != b'\x7fELF' or d[4] != 2:
+            raise ValueError('bukan ELF64')
+        phoff, shoff = struct.unpack_from('<QQ', d, 0x20)[0], struct.unpack_from('<Q', d, 0x28)[0]
+        phentsize, phnum, shentsize, shnum = struct.unpack_from('<HHHH', d, 0x36)
+        loads = []
+        for i in range(phnum):
+            t, fl, po, pv, pp, pfs = struct.unpack_from('<IIQQQQ', d, phoff + i * phentsize)
+            if t == 1:
+                loads.append((po, po + pfs, pv))
+        secs = [struct.unpack_from('<IIQQQQIIQQ', d, shoff + i * shentsize) for i in range(shnum)]
+        syms = []
+        kinds = [s for s in secs if s[1] == 2] or [s for s in secs if s[1] == 11]
+        for sh in kinds:
+            stro = secs[sh[6]][4]
+            for o in range(sh[4], sh[4] + sh[5], 24):
+                nm, info, oth, shn, val, size = struct.unpack_from('<IBBHQQ', d, o)
+                if (info & 15) == 2 and val:
+                    e = d.index(b'\0', stro + nm)
+                    syms.append((val, size, d[stro + nm:e].decode('latin1')))
+        syms.sort()
+        res = (loads, [x[0] for x in syms], syms, 'symtab' if kinds and kinds[0][1] == 2 else 'dynsym')
+    except Exception as e:
+        print('[tiny] diag sym %s: tidak bisa dibaca: %s' % (base, e))
+    symcache[base] = res
+    return res
+def demangle(n):
+    try:
+        return subprocess.run(['c++filt', n], capture_output=True, text=True, timeout=5).stdout.strip() or n
+    except Exception:
+        return n
+def symbol(full, base, fileoff):
+    r = load_syms(full, base)
+    if not r:
+        return ''
+    loads, keys, syms, kind = r
+    va = None
+    for lo, hi, pv in loads:
+        if lo <= fileoff < hi:
+            va = fileoff - lo + pv
+            break
+    if va is None:
+        return ''
+    i = bisect.bisect_right(keys, va) - 1
+    if i < 0:
+        return ''
+    val, size, name = syms[i]
+    if size and va >= val + size:
+        return ''
+    return ' {%s+0x%x}' % (demangle(name)[:90], va - val)
 def where(v):
-    for a, b, off, name in maps:
+    for a, b, off, name, full in maps:
         if a <= v < b:
-            return '%s+0x%x' % (name, v - a + off)
+            fo = v - a + off
+            extra = symbol(full, name, fo) if (name.startswith('PPSSPP') or name.startswith('libGLX')) else ''
+            return '%s+0x%x%s' % (name, fo, extra)
     return None
 try:
     mem = open('/proc/%s/mem' % pid, 'rb', 0)
@@ -252,7 +325,7 @@ for t in sorted(os.listdir('/proc/%s/task' % pid), key=int):
             w = where(int.from_bytes(data[i:i + 8], 'little'))
             if w and (not hits or hits[-1] != w):
                 hits.append(w)
-            if len(hits) >= 16:
+            if len(hits) >= 24:
                 break
         print('[tiny] diag stack %s/%s %s pc=%s <- %s' % (pid, t, comm, where(pc), ' < '.join(hits)))
     except Exception as e:
@@ -263,6 +336,9 @@ PYSTACK
       echo "[tiny] diag prop ${'$'}w ${'$'}(xprop -id ${'$'}w WM_STATE _NET_WM_STATE WM_HINTS _NET_WM_WINDOW_TYPE _NET_FRAME_EXTENTS 2>&1 | tr '\n' ' ')"
     done
     command -v xprop >/dev/null 2>&1 && echo "[tiny] diag root ${'$'}(xprop -root _NET_CLIENT_LIST _NET_ACTIVE_WINDOW _NET_SUPPORTING_WM_CHECK 2>&1 | tr '\n' ' ')"
+    command -v xprop >/dev/null 2>&1 && for w in ${'$'}(xprop -root _NET_CLIENT_LIST 2>/dev/null | grep -o '0x[0-9a-f]*'); do
+      echo "[tiny] diag client ${'$'}w ${'$'}(xprop -id ${'$'}w WM_STATE _NET_WM_STATE _NET_FRAME_EXTENTS WM_PROTOCOLS _NET_WM_SYNC_REQUEST_COUNTER 2>&1 | tr '\n' ' ')"
+    done
     echo "[tiny] diag xpp-trace klien (pid/proses yang tersambung ke server X++):"
     grep " CLIENT " /tmp/xpp-trace.log 2>/dev/null | tail -n 24
     # request SEMUA klien PPSSPP (proses ini punya lebih dari satu sambungan X): jumlah per opcode dan 40 request terakhir
