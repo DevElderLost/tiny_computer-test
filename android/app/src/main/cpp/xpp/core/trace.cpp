@@ -34,6 +34,17 @@ bool TraceOn() {
     return trace_enabled;
 }
 
+bool TraceOnFast() {
+    static std::atomic<long long> nextCheck{0};
+    const long long now = std::chrono::steady_clock::now().time_since_epoch().count();
+    if (now >= nextCheck.load(std::memory_order_relaxed)) {
+        nextCheck.store(now + std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::seconds(1)).count(),
+                        std::memory_order_relaxed);
+        return TraceOn();
+    }
+    return trace_enabled.load(std::memory_order_relaxed);
+}
+
 bool CompositeDisplayRequested() {
     static std::atomic<bool> requested{false};
     static std::chrono::steady_clock::time_point last{};

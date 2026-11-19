@@ -109,6 +109,7 @@ private:
     bool requestsPending{};
     u16 sequence{};
     u32 rid_base{};
+    unsigned traceRequests{}; // jumlah request yang sudah dicatat jejak diagnosis (dibatasi per klien)
     BufferedInputStream input_stream;
     std::vector<u32> await_fences;
     friend class NativeScreen;

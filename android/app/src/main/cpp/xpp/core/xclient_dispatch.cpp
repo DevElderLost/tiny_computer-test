@@ -1,4 +1,9 @@
 #include <atomic>
+#include <cstdio>
+#include <cstring>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <unistd.h>
 #include <fmt/core.h>
 // clang-format off
 #include <X11/X.h>
@@ -146,6 +151,22 @@ void XClient::ProcAuthenticateRequest() {
     Write(&argb_vis, sizeof(argb_vis));
     Flush();
     authenticated = true;
+    if (TraceOnFast()) {
+        // Jejak diagnosis: proses mana yang memegang klien ini (pid dan nama dari /proc) dan basis ID sumber dayanya, supaya
+        // baris REQ di bawah bisa dikaitkan dengan aplikasi (mis. ld-linux = AppImage, xfwm4, xfce4-panel).
+        struct { pid_t pid; uid_t uid; gid_t gid; } cred{};  // sama dengan struct ucred
+        socklen_t credLen = sizeof(cred);
+        char comm[32] = "?";
+        if (getsockopt(socket_fd, SOL_SOCKET, SO_PEERCRED, &cred, &credLen) == 0 && cred.pid > 0) {
+            char path[48];
+            std::snprintf(path, sizeof(path), "/proc/%d/comm", int(cred.pid));
+            if (FILE* f = std::fopen(path, "r")) {
+                if (std::fgets(comm, sizeof(comm), f)) comm[std::strcspn(comm, "\n")] = 0;
+                std::fclose(f);
+            }
+        }
+        Trace("CLIENT fd=%d pid=%d comm=%s base=0x%x", socket_fd, int(cred.pid), comm, unsigned(rid_base));
+    }
 }
 
 void XClient::ProcNormalRequest() {
@@ -156,6 +177,13 @@ void XClient::ProcNormalRequest() {
 #if 0
     TRACE("[{}] Request: {} ({}) ", socket_fd, opcode, sequence);
 #endif
+    // Jejak diagnosis (hanya bila /tmp/.xpp-trace ada): 4000 request pertama tiap klien. Untuk opcode ekstensi (>=128)
+    // `data` adalah nomor request ekstensi. Dipakai untuk melihat apa yang diminta aplikasi sebelum macet.
+    if (traceRequests < 4000 && TraceOnFast()) {
+        ++traceRequests;
+        Trace("REQ c=0x%x seq=%u op=%u data=%u len=%zu", unsigned(rid_base), unsigned(sequence), unsigned(opcode),
+              unsigned(req->data), request_size);
+    }
     if (opcode >= kExtensionBase) {
         if (const auto extension = server.GetExtensionManager().GetExtension(opcode)) {
             extension->handler(this);

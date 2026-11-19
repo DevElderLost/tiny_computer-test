@@ -5,6 +5,8 @@ namespace xorg {
 // `touch /tmp/.xpp-trace` di dalam kontainer); isi jejak ditulis ke `<dir>/xpp-trace.log`. <dir> = folder tmp kontainer yang
 // diberikan aplikasi lewat variabel lingkungan XPP_TRACE_DIR. Pemeriksaan penanda dibatasi sekali per detik.
 bool TraceOn();
+// Sama dengan TraceOn() tetapi tanpa mutex di jalur panas (dipakai per request): status disegarkan paling sering sekali per detik.
+bool TraceOnFast();
 void Trace(const char* format, ...) __attribute__((format(printf, 1, 2)));
 // Mode tampilan compositor: aktif selama berkas penanda `<dir>/.xpp-composite` ada (`touch /tmp/.xpp-composite`). Server lalu
 // menampilkan root yang digambar compositor (xfwm4) dan bukan window satu per satu. Dicek sekali per detik.

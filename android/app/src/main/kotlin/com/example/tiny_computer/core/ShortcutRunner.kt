@@ -184,8 +184,24 @@ if [ -n "${'$'}TINY_LAUNCH_LOG" ]; then
     for p in ${'$'}(ps -eo pid,comm 2>/dev/null | awk 'NR>1 && ${'$'}2 !~ /^(sh|ps|awk|sleep|tee|dbus|xfwm4)/ {print ${'$'}1}' | head -12); do
       echo "[tiny] diag proc ${'$'}p ${'$'}(cat /proc/${'$'}p/comm 2>/dev/null) state=${'$'}(awk '/^State:/{print ${'$'}2}' /proc/${'$'}p/status 2>/dev/null) wchan=${'$'}(cat /proc/${'$'}p/wchan 2>/dev/null)"
     done
-    echo "[tiny] diag xpp-trace (80 baris terakhir, tanpa Unsupported grab):"
-    grep -v "Unsupported grab request" /tmp/xpp-trace.log 2>/dev/null | tail -n 80
+    # status tiap thread proses aplikasi: thread utama yang menunggu futex berarti menunggu thread lain; thread yang tidur di
+    # poll/recvmsg berarti menunggu balasan server X (lihat juga baris REQ di bawah)
+    for p in ${'$'}(ps -eo pid,comm 2>/dev/null | awk 'NR>1 && ${'$'}2 ~ /ld-linux|ppsspp|PPSSPP/ {print ${'$'}1}' | head -4); do
+      for t in /proc/${'$'}p/task/*; do
+        echo "[tiny] diag thr ${'$'}p/${'$'}{t##*/} ${'$'}(cat ${'$'}t/comm 2>/dev/null) state=${'$'}(awk '/^State:/{print ${'$'}2}' ${'$'}t/status 2>/dev/null) wchan=${'$'}(cat ${'$'}t/wchan 2>/dev/null) syscall=${'$'}(cut -d' ' -f1-3 ${'$'}t/syscall 2>/dev/null)"
+      done
+    done
+    command -v xprop >/dev/null 2>&1 && for w in ${'$'}(xwininfo -root -children 2>/dev/null | awk '/^ +0x[0-9a-f]+ "/{print ${'$'}1}' | head -6); do
+      echo "[tiny] diag prop ${'$'}w ${'$'}(xprop -id ${'$'}w WM_STATE _NET_WM_STATE WM_HINTS _NET_WM_WINDOW_TYPE _NET_FRAME_EXTENTS 2>&1 | tr '\n' ' ')"
+    done
+    command -v xprop >/dev/null 2>&1 && echo "[tiny] diag root ${'$'}(xprop -root _NET_CLIENT_LIST _NET_ACTIVE_WINDOW _NET_SUPPORTING_WM_CHECK 2>&1 | tr '\n' ' ')"
+    echo "[tiny] diag xpp-trace klien (pid/proses yang tersambung ke server X++):"
+    grep " CLIENT " /tmp/xpp-trace.log 2>/dev/null | tail -n 24
+    # request milik klien PPSSPP (150 terakhir dari 4000 pertama): apa yang diminta SDL/Mesa dan di mana berhenti
+    cb=${'$'}(grep " CLIENT .*comm=ld-linux" /tmp/xpp-trace.log 2>/dev/null | tail -n 1 | sed 's/.*base=\(0x[0-9a-f]*\).*/\1/')
+    [ -n "${'$'}cb" ] && { echo "[tiny] diag xpp-trace request klien ${'$'}cb:"; grep " REQ c=${'$'}cb " /tmp/xpp-trace.log 2>/dev/null | tail -n 150; }
+    echo "[tiny] diag xpp-trace (80 baris terakhir, tanpa Unsupported grab dan REQ):"
+    grep -v -e "Unsupported grab request" -e " REQ c=" -e " CLIENT " /tmp/xpp-trace.log 2>/dev/null | tail -n 80
   ) &
 fi
 """.trimStart(),
@@ -202,8 +218,18 @@ fi
         // di skrip sesi ([prepareSession]) menjeda WM selama berkas itu ada. Aplikasi Linux menghapus berkas itu sehingga WM
         // menyala lagi, kecuali masih ada Wine yang berjalan (WM tidak boleh mengambil alih jendela game).
         // Desktop yang menyala punya WM sendiri (xfwm4 desktop): tidak disentuh.
+        // PPSSPP di X++ (layar hitam: jendela utama dibuat tetapi tidak pernah tampil): emulator ini memakai satu jendela
+        // 960x544 layar penuh dan tidak butuh bingkai. Di log, xfwm4 sempat membuat bingkai 960x544 untuk jendela itu lalu
+        // menghilang, dan jendela tetap tidak ter-map. Window manager mengambil alih setiap jendela baru lewat
+        // SubstructureRedirect, jadi PPSSPP dijalankan seperti aplikasi Wine: WM dijeda dan jendela di-map langsung oleh klien.
+        // Ini mitigasi: bila layar tetap hitam, log diagnosis 15 detik (thread, properti jendela, request klien) menunjukkan sebabnya.
+        // Kembali ke perilaku lama: tambahkan TINY_PPSSPP_WM=1 di Environment Shortcut PPSSPP.
+        val ppssppNoWm = xpp &&
+            (app.id.contains("ppsspp", ignoreCase = true) || effectiveCommand(app, s).contains("ppsspp", ignoreCase = true)) &&
+            effectiveEnv(app, s).lineSequence().none { it.trim() == "TINY_PPSSPP_WM=1" }
         if (!Launcher.guiStarted) {
-            if (isWine) {
+            if (isWine || ppssppNoWm) {
+                if (ppssppNoWm && !isWine) sb.append("echo \"[tiny] X++: window manager dijeda untuk PPSSPP (TINY_PPSSPP_WM=1 = nyalakan lagi)\"\n")
                 sb.append(": > \"\$HOME/.vnc/no-wm\"\n")
                 sb.append("for w in xfwm4 openbox metacity marco icewm fluxbox; do pkill -x \$w 2>/dev/null; done\n")
             } else {
