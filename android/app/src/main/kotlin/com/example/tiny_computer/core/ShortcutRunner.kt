@@ -191,6 +191,53 @@ if [ -n "${'$'}TINY_LAUNCH_LOG" ]; then
         echo "[tiny] diag thr ${'$'}p/${'$'}{t##*/} ${'$'}(cat ${'$'}t/comm 2>/dev/null) state=${'$'}(awk '/^State:/{print ${'$'}2}' ${'$'}t/status 2>/dev/null) wchan=${'$'}(cat ${'$'}t/wchan 2>/dev/null) syscall=${'$'}(cut -d' ' -f1-3 ${'$'}t/syscall 2>/dev/null)"
       done
     done
+    # backtrace kasar tiap thread: ambil sp dari /proc/PID/task/TID/syscall, baca stack lewat /proc/PID/mem, lalu tampilkan
+    # nilai yang menunjuk ke kode (modul+offset). Menunjukkan di perpustakaan mana thread yang macet berada.
+    for p in ${'$'}(ps -eo pid,comm 2>/dev/null | awk 'NR>1 && ${'$'}2 ~ /ld-linux|ppsspp|PPSSPP/ {print ${'$'}1}' | head -4); do
+      command -v python3 >/dev/null 2>&1 && python3 - "${'$'}p" 2>&1 <<'PYSTACK'
+import os, sys
+pid = sys.argv[1]
+maps = []
+for line in open('/proc/%s/maps' % pid):
+    f = line.split(None, 5)
+    if len(f) < 5 or 'x' not in f[1]:
+        continue
+    a, b = [int(x, 16) for x in f[0].split('-')]
+    maps.append((a, b, int(f[2], 16), (f[5].strip() if len(f) > 5 else '[anon]').split('/')[-1]))
+def where(v):
+    for a, b, off, name in maps:
+        if a <= v < b:
+            return '%s+0x%x' % (name, v - a + off)
+    return None
+try:
+    mem = open('/proc/%s/mem' % pid, 'rb', 0)
+except Exception as e:
+    print('[tiny] diag stack: /proc/%s/mem tidak bisa dibuka: %s' % (pid, e))
+    sys.exit(0)
+for t in sorted(os.listdir('/proc/%s/task' % pid), key=int):
+    try:
+        comm = open('/proc/%s/task/%s/comm' % (pid, t)).read().strip()
+        if comm.startswith('PoolW'):
+            continue
+        f = open('/proc/%s/task/%s/syscall' % (pid, t)).read().split()
+        if len(f) < 3:
+            print('[tiny] diag stack %s/%s %s: %s' % (pid, t, comm, ' '.join(f)))
+            continue
+        sp, pc = int(f[-2], 16), int(f[-1], 16)
+        mem.seek(sp)
+        data = mem.read(6144)
+        hits = []
+        for i in range(0, len(data) - 7, 8):
+            w = where(int.from_bytes(data[i:i + 8], 'little'))
+            if w and (not hits or hits[-1] != w):
+                hits.append(w)
+            if len(hits) >= 16:
+                break
+        print('[tiny] diag stack %s/%s %s pc=%s <- %s' % (pid, t, comm, where(pc), ' < '.join(hits)))
+    except Exception as e:
+        print('[tiny] diag stack %s/%s %s gagal: %s' % (pid, t, comm, e))
+PYSTACK
+    done
     command -v xprop >/dev/null 2>&1 && for w in ${'$'}(xwininfo -root -children 2>/dev/null | awk '/^ +0x[0-9a-f]+ "/{print ${'$'}1}' | head -6); do
       echo "[tiny] diag prop ${'$'}w ${'$'}(xprop -id ${'$'}w WM_STATE _NET_WM_STATE WM_HINTS _NET_WM_WINDOW_TYPE _NET_FRAME_EXTENTS 2>&1 | tr '\n' ' ')"
     done
