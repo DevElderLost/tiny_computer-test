@@ -164,6 +164,28 @@ fi
             // sama dengan desktop X++ (Launcher.guiCommandXpp): tanpa Wayland, kursor/masukan lewat event inti X
             sb.append("unset WAYLAND_DISPLAY\n")
             sb.append("export TINY_NO_WAYLAND=1 GDK_CORE_DEVICE_EVENTS=1 QT_XCB_NO_XI2=1\n")
+            // Diagnosis layar hitam (hanya bila Pengaturan > Logs > Launch log menyala): log SDL3 rinci, jejak protokol server X++
+            // (/tmp/.xpp-trace -> /tmp/xpp-trace.log) dan, 15 detik setelah mulai, status proses + jendela X ke log shortcut.
+            sb.append(
+                """
+if [ -n "${'$'}TINY_LAUNCH_LOG" ]; then
+  export SDL_LOGGING='*=debug'
+  : > /tmp/xpp-trace.log 2>/dev/null
+  : > /tmp/.xpp-trace 2>/dev/null
+  (
+    sleep 15
+    echo "[tiny] diag X++ (15 dtk): soket=${'$'}(ls /tmp/.X11-unix 2>&1 | tr '\n' ' ')"
+    command -v xdpyinfo >/dev/null 2>&1 && xdpyinfo 2>&1 | grep -E 'number of extensions|dimensions:|^    (GLX|RANDR|XInputExtension|Present|DRI3|XFIXES|Composite)$' | head -12
+    command -v xwininfo >/dev/null 2>&1 && xwininfo -root -tree 2>&1 | head -30
+    for p in ${'$'}(ps -eo pid,comm 2>/dev/null | awk 'NR>1 && ${'$'}2 !~ /^(sh|ps|awk|sleep|tee|dbus|xfwm4)/ {print ${'$'}1}' | head -12); do
+      echo "[tiny] diag proc ${'$'}p ${'$'}(cat /proc/${'$'}p/comm 2>/dev/null) state=${'$'}(awk '/^State:/{print ${'$'}2}' /proc/${'$'}p/status 2>/dev/null) wchan=${'$'}(cat /proc/${'$'}p/wchan 2>/dev/null)"
+    done
+    echo "[tiny] diag xpp-trace (60 baris terakhir):"
+    tail -n 60 /tmp/xpp-trace.log 2>/dev/null
+  ) &
+fi
+""".trimStart(),
+            )
         }
         // sesi X (Xwayland atau X++ milik desktop atau milik sesi aplikasi) bisa baru menyala: tunggu soketnya
         sb.append("i=0; while [ \$i -lt 150 ] && [ ! -S /tmp/.X11-unix/X4 ]; do sleep 0.2; i=\$((i+1)); done\n")

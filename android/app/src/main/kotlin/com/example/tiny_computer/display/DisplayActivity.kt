@@ -244,6 +244,12 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
         super.onNewIntent(intent)
         setIntent(intent)
         readLaunchIntent(intent)
+        // Display server sekarang beda dari yang dipakai layar ini (pengaturan diganti, sesi lama dimulai ulang):
+        // layar dibuat ulang supaya memasang Surface ke server yang benar (X++ atau compositor Wayland), bukan layar hitam.
+        if (currentApp != null && decideXpp() != useXpp) {
+            recreate()
+            return
+        }
         syncOutputSize()
         if (surfaceReady) startRequestedSession()
     }

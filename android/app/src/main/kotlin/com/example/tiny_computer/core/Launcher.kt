@@ -70,9 +70,20 @@ object Launcher {
      */
     fun shortcutXpp(): Boolean = when {
         guiStarted -> desktopIsXpp
+        sessionStale() -> Cfg.desktopXpp
         appSessionStarted -> appSessionXpp
         else -> Cfg.desktopXpp
     }
+
+    /**
+     * Sesi aplikasi Shortcut yang masih hidup memakai server X yang BERBEDA dari pengaturan Display server sekarang
+     * (mis. dulu Xwayland, sekarang X++), dan tidak ada aplikasi yang sedang bekerja di dalamnya. Dulu sesi lama ini
+     * tetap dipakai terus (peluncur tanpa --kill-on-exit membuat proot sesi hidup selama ada daemon pendukung), sehingga
+     * aplikasi berikutnya "terkunci" di server lama walau pengaturan sudah diganti. Sesi seperti ini dimulai ulang
+     * oleh [launchAppLocked]. Sesi yang masih punya aplikasi berjalan tidak disentuh.
+     */
+    fun sessionStale(): Boolean =
+        !guiStarted && appSessionStarted && appSessionXpp != Cfg.desktopXpp && !appsBusy()
 
     /** True setelah perintah Xwayland + Xsession dikirim ke kontainer yang sedang berjalan. */
     // state Compose (bukan @Volatile biasa) supaya tombol "kembali ke desktop" muncul/hilang mengikuti status desktop
@@ -1208,6 +1219,14 @@ fi
 
     private fun launchAppLocked(ctx: Context, appId: String) {
         val myEpoch = epoch
+        // Pengaturan Display server berubah sejak sesi ini dimulai dan tidak ada aplikasi yang berjalan: buang sesi lama
+        // dulu supaya aplikasi ini memakai server yang dipilih sekarang, bukan server lama yang terkunci.
+        val staleGone = ArrayList<Int>()
+        if (sessionStale()) {
+            LaunchLog.write(appSessionLog, "session", "Display server berubah (${if (appSessionXpp) "X++" else "Xwayland"} -> ${if (Cfg.desktopXpp) "X++" else "Xwayland"}); sesi lama dimulai ulang")
+            staleGone += stopAppSession(graceful = true)
+            waitGone(staleGone, 2500)
+        }
         // Display server aplikasi ini = pengaturan Display server desktop (X++ atau Xwayland/Wayland), ditetapkan sekali di sini
         val xpp = shortcutXpp()
         val script = ShortcutRunner.prepare(ctx, appId, xpp) ?: run {
@@ -1364,6 +1383,8 @@ fi
             appSessionXpp = false
             XppHost.stop()
         }
+        // penanda jejak protokol X++ (lihat ShortcutRunner.script): jangan dibiarkan menyala untuk sesi berikutnya
+        runCatching { File(TinyEnv.runtimeDir(), ".xpp-trace").delete() }
         return killed
     }
 
