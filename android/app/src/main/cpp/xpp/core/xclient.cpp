@@ -96,6 +96,20 @@ void XClient::HandleRequest() {
 
 void XClient::SendEvent(xEvent& event) {
     event.u.u.sequenceNumber = sequence;
+    // Jejak diagnosis: event yang dikirim server ke klien ini (Expose, MapNotify, Focus*, Visibility*, ConfigureNotify, ...).
+    // Gerak/masuk/keluar pointer dibatasi 20 supaya tidak membanjiri. w4/w8 = dua kata pertama setelah header
+    // (biasanya id window event/window).
+    if (TraceOnFast()) {
+        const unsigned type = event.u.u.type & 0x7f;
+        const bool noisy = type == MotionNotify || type == EnterNotify || type == LeaveNotify;
+        unsigned& counter = noisy ? traceNoisyEvents : traceEvents;
+        if (counter < (noisy ? 20u : 400u)) {
+            ++counter;
+            const auto* words = reinterpret_cast<const u32*>(&event);
+            Trace("EVT c=0x%x type=%u detail=%u w4=0x%x w8=0x%x", unsigned(rid_base), type, unsigned(event.u.u.detail),
+                  unsigned(words[1]), unsigned(words[2]));
+        }
+    }
     WriteImmediately(&event, sizeof(event));
 }
 

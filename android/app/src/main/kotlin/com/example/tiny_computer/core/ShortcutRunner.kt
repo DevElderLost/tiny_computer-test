@@ -252,7 +252,13 @@ PYSTACK
       echo
       echo "[tiny] diag xpp-trace 40 request terakhir klien ${'$'}cb:"
       grep " REQ c=${'$'}cb " /tmp/xpp-trace.log 2>/dev/null | tail -n 40
+      echo "[tiny] diag xpp-trace event yang DIKIRIM server ke klien ${'$'}cb (jumlah per type; type 12=Expose 19=MapNotify 18=UnmapNotify 22=ConfigureNotify 9=FocusIn 10=FocusOut 15=Visibility 28=PropertyNotify 35=Generic):"
+      grep " EVT c=${'$'}cb " /tmp/xpp-trace.log 2>/dev/null | sed 's/.* type=\([0-9]*\) .*/\1/' | sort -n | uniq -c | tr '\n' ' '
+      echo
+      echo "[tiny] diag xpp-trace 40 event terakhir klien ${'$'}cb:"
+      grep " EVT c=${'$'}cb " /tmp/xpp-trace.log 2>/dev/null | grep -v " type=\(6\|7\|8\) " | tail -n 40
     done
+    command -v xrandr >/dev/null 2>&1 && echo "[tiny] diag xrandr: ${'$'}(xrandr --current 2>&1 | head -8 | tr '\n' '|')"
     echo "[tiny] diag xpp-trace (80 baris terakhir, tanpa Unsupported grab dan REQ):"
     grep -v -e "Unsupported grab request" -e " REQ c=" -e " CLIENT " /tmp/xpp-trace.log 2>/dev/null | tail -n 80
   ) &
