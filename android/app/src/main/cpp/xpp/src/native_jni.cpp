@@ -93,7 +93,7 @@ extern "C" JNIEXPORT jlong JNICALL JNI_NAME(nativeCreate)(JNIEnv* env, jclass, j
         if (!path.text || !library.text || !nativeLib.text) return 0;
         xorg::NativeRendererConfig config;
         config.driverPath = path.text; config.libraryName = library.text; config.nativeLibDir = nativeLib.text;
-        config.swapRB = swapRB == JNI_TRUE; config.presentMode = presentMode == 1 ? 1 : 2;
+        config.swapRB = swapRB == JNI_TRUE; config.presentMode = presentMode >= 0 && presentMode <= 3 ? presentMode : 2;
         config.backend = backend == 2 ? xorg::NativeRendererConfig::Backend::DisplayX
                 : backend == 1 ? xorg::NativeRendererConfig::Backend::EGL : xorg::NativeRendererConfig::Backend::Vulkan;
         config.trueDisplayX = flags & 1; config.performanceMode = flags & 2;

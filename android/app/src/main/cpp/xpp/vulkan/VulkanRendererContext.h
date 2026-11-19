@@ -191,10 +191,12 @@ public:
     void setRenderList(const int64_t* ids, const int* xs, const int* ys, int count);
     // Native X11 supplies a complete scene snapshot without Java window-tree callbacks.
     // This entry point is unused by the existing Java renderer.
-    void setExternalRenderList(const int64_t* ids, const int* xs, const int* ys, int count) {
+    // alphas (opsional): 1 = window ber-alpha (depth 32 / ber-SHAPE, premultiplied) digambar dengan blending, 0/null = opaque.
+    void setExternalRenderList(const int64_t* ids, const int* xs, const int* ys, int count,
+                               const uint8_t* alphas = nullptr) {
         std::lock_guard<std::mutex> lock(renderMutex);
         renderList.resize(count);
-        for (int i = 0; i < count; ++i) renderList[i] = {ids[i], xs[i], ys[i]};
+        for (int i = 0; i < count; ++i) renderList[i] = {ids[i], xs[i], ys[i], alphas && alphas[i]};
         treeDirty = false;
     }
 #ifdef LUDASHI_NATIVE_X11
@@ -314,7 +316,7 @@ private:
         uint32_t height = 0;
     };
 
-    struct RenderEntry { int64_t id; int x, y; };
+    struct RenderEntry { int64_t id; int x, y; bool alpha = false; };
     struct DrawEntry {
         VkImage         img            = VK_NULL_HANDLE;
         VkDescriptorSet ds             = VK_NULL_HANDLE;
@@ -322,6 +324,7 @@ private:
         int             x=0, y=0, w=0, h=0;
         bool            needsTransition = false;
         bool            isAHB          = false;
+        bool            alpha          = false;
     };
 
     struct WinNode {
@@ -437,6 +440,8 @@ public:
     VkPipeline            pipeline        = VK_NULL_HANDLE;
     VkPipeline opaquePipeline = VK_NULL_HANDLE;
     bool opaquePipelineAttempted = false;
+    // Window ber-alpha (ARGB32 premultiplied): ONE / ONE_MINUS_SRC_ALPHA, sama dengan jalur EGL.
+    VkPipeline alphaPipeline = VK_NULL_HANDLE;
     VkPipeline            sgsrPipeline    = VK_NULL_HANDLE;
     VkPipeline            fsr1Pipeline    = VK_NULL_HANDLE;
     VkPipeline            lanczosPipeline = VK_NULL_HANDLE;
@@ -533,7 +538,7 @@ public:
     void createRenderPass();
     void createFrameGenRenderPass();
     void createDSLayout();
-    void createPipeline(bool blend, VkPipeline& out);
+    void createPipeline(bool blend, VkPipeline& out, bool premultiplied = false);
     void createSgsrPipeline();
     void createFsr1Pipeline();
     void createLanczosPipeline();

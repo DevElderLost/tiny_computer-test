@@ -156,10 +156,6 @@ object Cfg {
     var xppBackend: Int
         get() = TinyPrefs.getInt("xppBackend", XPP_EGL).let { if (it in XPP_VULKAN..XPP_OLD_DISPLAY) it else XPP_EGL }
         set(v) = TinyPrefs.setInt("xppBackend", if (v in XPP_VULKAN..XPP_OLD_DISPLAY) v else XPP_EGL)
-    /** Mode present Vulkan X++: true = MAILBOX (tanpa tearing, latensi rendah), false = FIFO (vsync). Hanya berlaku untuk [XPP_VULKAN]. */
-    var xppVulkanMailbox: Boolean
-        get() = TinyPrefs.getBool("xppVulkanMailbox", false)
-        set(v) = TinyPrefs.setBool("xppVulkanMailbox", v)
     /**
      * Compositor xfwm4 (blur/transparansi) dibiarkan menyala sesuai setelan XFCE saat Open desktop dimulai. Bawaan mati:
      * compositing dimatikan di awal sesi. Apa pun pilihannya, vblank_mode xfwm4 dipaksa off (lihat assets/tiny/xsession.sh):

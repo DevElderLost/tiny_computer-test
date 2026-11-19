@@ -166,7 +166,7 @@
     <string name="tc_mem_vulkan_hint">Per application: the memory heap it sees is cut to this size and allocations above it fail. Applies the next time the container or a Shortcut is started. Flatpak apps get the same limit.</string>
     <string name="tc_mem_vulkan_missing">The Vulkan layer is not part of this build (CI could not build it), so this setting has no effect.</string>
     <string name="tc_disp_vsync">VSync / present mode</string>
-    <string name="tc_disp_vsync_hint">How the compositor hands frames to the screen. FIFO waits for the vblank (no tearing, most latency). Relaxed FIFO tears only when a frame is late. Mailbox keeps only the newest frame (no tearing, low latency, needs three buffers). Immediate never waits and may tear. A mode the screen does not offer falls back to FIFO. Applies at once by rebuilding the screen swapchain; the zero-copy display layer is paced by Android itself.</string>
+    <string name="tc_disp_vsync_hint">How the compositor hands frames to the screen. FIFO waits for the vblank (no tearing, most latency). Relaxed FIFO tears only when a frame is late. Mailbox keeps only the newest frame (no tearing, low latency, needs three buffers). Immediate never waits and may tear. A mode the screen does not offer falls back to FIFO. Applies at once by rebuilding the screen swapchain; the zero-copy display layer is paced by Android itself. With the X++ display server (Vulkan renderer) the mode applies the next time the desktop starts.</string>
     <string name="tc_vsync_auto">Auto</string>
     <string name="tc_vsync_fifo">FIFO (VSync)</string>
     <string name="tc_vsync_fifo_relaxed">FIFO relaxed</string>
@@ -404,8 +404,6 @@
     <string name="tc_ui_display_xpp">X++ native X server</string>
     <string name="tc_ui_xpp_backend">X++ renderer</string>
     <string name="tc_ui_xpp_backend_hint">Vulkan draws through a Vulkan swapchain. EGL (OpenGL ES) works on every device. DisplayX uses Android SurfaceControl (Android 10+) for lower latency. Old Display uses the EGL backend with the default Fit view, like Winlator Ludashi. Applies on next desktop start.</string>
-    <string name="tc_ui_xpp_vulkan_mailbox">Vulkan MAILBOX present</string>
-    <string name="tc_ui_xpp_vulkan_mailbox_hint">Use MAILBOX instead of FIFO (vsync) for the Vulkan renderer: lower latency, no tearing, but higher GPU use. Applies on next desktop start.</string>
     <string name="tc_ui_desktop_wayland">Wayland for Vulkan apps in the desktop</string>
     <string name="tc_ui_xfce_compositor">Allow XFCE compositor (blur, transparency)</string>
     <string name="tc_ui_xfce_compositor_hint">Keeps the xfwm4 compositor on when the desktop starts. Its vertical sync (vblank) is always forced off, because the GLX/Zink or xpresent sync path never completes on Xwayland without DRM and leaves a black screen. Compositing itself runs on the CPU (XRender); xfwm4 has no Vulkan backend. When off, the compositor still starts disabled but can be switched on in Window Manager Tweaks. Applies on next desktop start.</string>

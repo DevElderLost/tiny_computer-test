@@ -182,8 +182,9 @@ public:
 private:
     bool wfgSelected{};
     void UpdateScene(const NativeFrame& frame) {
-        ids.clear(); xs.clear(); ys.clear();
+        ids.clear(); xs.clear(); ys.clear(); alphas.clear();
         ids.reserve(frame.entries.size()); xs.reserve(frame.entries.size()); ys.reserve(frame.entries.size());
+        alphas.reserve(frame.entries.size());
         for (const auto& entry : frame.entries) {
             // Java-compatible IDLE does not invalidate scene content. Resource
             // references remain retained independently until this GPU work retires.
@@ -235,13 +236,15 @@ private:
                 revisions[id] = entry.revision;
             }
             ids.push_back(id); xs.push_back(entry.x); ys.push_back(entry.y);
+            // Window ARGB32/ber-SHAPE (tidak opaque) dicampur dengan alpha, seperti renderer EGL.
+            alphas.push_back(entry.opaque ? 0 : 1);
         }
         for (auto i = registry.begin(); i != registry.end();) {
             if (i->second.expired()) {
                 context->removeWindow(i->first); revisions.erase(i->first); i = registry.erase(i);
             } else ++i;
         }
-        context->setExternalRenderList(ids.data(), xs.data(), ys.data(), ids.size());
+        context->setExternalRenderList(ids.data(), xs.data(), ys.data(), ids.size(), alphas.data());
         if (frame.cursor && frame.cursorPixels && cursorID != frame.cursor->ID()) {
             const auto& d = *frame.cursor;
             // Cursor pixels share the same BGRA byte order as desktop uploads.
@@ -301,6 +304,7 @@ private:
     // Stable window counts reuse these buffers across frames and cursor redraws.
     std::vector<int64_t> ids;
     std::vector<int> xs, ys;
+    std::vector<uint8_t> alphas;
 };
 // Dipanggil dari CreateNativeRenderer (native_renderer.cpp) untuk backend Vulkan (nomor 0).
 std::unique_ptr<NativeRenderer> CreateNativeVulkanRenderer(u16 w, u16 h, bool validation, const NativeRendererConfig& config) {

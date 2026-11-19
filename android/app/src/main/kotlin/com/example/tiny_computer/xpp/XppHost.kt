@@ -61,6 +61,21 @@ object XppHost {
     /** Ukuran layar X yang sedang berjalan, atau null bila server belum dibuat. */
     val size: Pair<Int, Int>? get() = synchronized(lock) { if (handle != 0L) width to height else null }
 
+    /** Setelan [Cfg.presentMode] (0 auto, 1 FIFO, 2 FIFO relaxed, 3 Mailbox, 4 Immediate) -> VkPresentModeKHR. Auto = FIFO. */
+    private fun vkPresentMode(setting: Int): Int = when (setting) {
+        2 -> 3
+        3 -> 1
+        4 -> 0
+        else -> 2
+    }
+
+    private fun vkPresentName(mode: Int): String = when (mode) {
+        0 -> "IMMEDIATE"
+        1 -> "MAILBOX"
+        3 -> "FIFO relaxed"
+        else -> "FIFO"
+    }
+
     fun socketFile(): File = File(File(TinyEnv.runtimeDir(), ".X11-unix"), "X4")
 
     /**
@@ -76,8 +91,9 @@ object XppHost {
             Cfg.XPP_DISPLAYX -> NativeX11.BACKEND_DISPLAYX
             else -> NativeX11.BACKEND_EGL
         }
-        // VkPresentModeKHR: 1 = MAILBOX, 2 = FIFO. Hanya dipakai backend Vulkan.
-        val wantPresent = if (wantBackend == NativeX11.BACKEND_VULKAN && Cfg.xppVulkanMailbox) 1 else 2
+        // Present mode memakai setelan Display > VSync / present mode ([Cfg.presentMode]) yang sama dengan compositor Wayland,
+        // dipetakan ke VkPresentModeKHR: 0 IMMEDIATE, 1 MAILBOX, 2 FIFO, 3 FIFO_RELAXED. Hanya dipakai backend Vulkan.
+        val wantPresent = if (wantBackend == NativeX11.BACKEND_VULKAN) vkPresentMode(Cfg.presentMode) else 2
         if (handle != 0L && width == w && height == h && backend == wantBackend && presentMode == wantPresent &&
             boundSocket == sock.absolutePath) {
             return true
@@ -109,7 +125,7 @@ object XppHost {
             applyOptionsLocked(ctx)
             surface?.let { NativeX11.nativeSurface(h0, it) }
             val backendName = when (Cfg.xppBackend) {
-                Cfg.XPP_VULKAN -> if (wantPresent == 1) "Vulkan (MAILBOX)" else "Vulkan (FIFO)"
+                Cfg.XPP_VULKAN -> "Vulkan (${vkPresentName(wantPresent)})"
                 Cfg.XPP_DISPLAYX -> "DisplayX"
                 Cfg.XPP_OLD_DISPLAY -> "Old Display (EGL)"
                 else -> "EGL"

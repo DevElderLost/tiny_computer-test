@@ -234,7 +234,7 @@ void VulkanRendererContext::recordCmdBuf(VkCommandBuffer cb, uint32_t imgIdx,
     const bool useOpaque = !useSgsr && !useFsr && !useLanczos && !useColorBoost &&
         !usePostFX && !useStretch && opaquePipeline != VK_NULL_HANDLE && activePipeline == opaquePipeline;
     if (!useFrameGeneration && useOpaque && nativeNoClearPass != VK_NULL_HANDLE && draws.size() == 1 &&
-        draws[0].img != VK_NULL_HANDLE && draws[0].ds != VK_NULL_HANDLE &&
+        !draws[0].alpha && draws[0].img != VK_NULL_HANDLE && draws[0].ds != VK_NULL_HANDLE &&
         cw > 0.f && ch > 0.f && sx > 0.f && sy > 0.f &&
         scissorRect.offset.x == 0 && scissorRect.offset.y == 0 &&
         scissorRect.extent.width >= swapchainExt.width && scissorRect.extent.height >= swapchainExt.height) {
@@ -290,13 +290,33 @@ void VulkanRendererContext::recordCmdBuf(VkCommandBuffer cb, uint32_t imgIdx,
     vk_.CmdSetViewport(cb, 0, 1, &viewport);
     vk_.CmdSetScissor(cb, 0, 1, &scissor);
     vk_.CmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, activePipeline);
+    VkPipeline boundPipeline = activePipeline;
 
     for (auto& d : draws) {
         if (d.ds == VK_NULL_HANDLE) continue;
+        // Window ber-alpha (ARGB32 / ber-SHAPE) memakai pipeline blending premultiplied tanpa filter; mode stretch tetap apa adanya.
+        const bool blendDraw = d.alpha && alphaPipeline != VK_NULL_HANDLE && !useStretch;
+        const VkPipeline wantPipeline = blendDraw ? alphaPipeline : activePipeline;
+        if (wantPipeline != boundPipeline) {
+            vk_.CmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, wantPipeline);
+            boundPipeline = wantPipeline;
+        }
         vk_.CmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeLayout,
                                   0, 1, &d.ds, 0, nullptr);
 
-        if (useSgsr) {
+        if (blendDraw) {
+            WindowPushConstants pc{};
+            pc.ndcX0 = (ox + (float)d.x * sx) / cw * 2.0f - 1.0f;
+            pc.ndcY0 = (oy + (float)d.y * sy) / ch * 2.0f - 1.0f;
+            pc.ndcX1 = (ox + (float)(d.x + d.w) * sx) / cw * 2.0f - 1.0f;
+            pc.ndcY1 = (oy + (float)(d.y + d.h) * sy) / ch * 2.0f - 1.0f;
+            pc.useTexAlpha = 1;
+            pc.cosR = rotCosR;
+            pc.sinR = rotSinR;
+            vk_.CmdPushConstants(cb, pipeLayout,
+                VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                0, sizeof(pc), &pc);
+        } else if (useSgsr) {
             WindowPushConstantsSGSR pc{};
             if (useStretch) { pc.ndcX0 = -1.0f; pc.ndcX1 = 1.0f; }
             else {

@@ -185,12 +185,6 @@ fun SettingsScreen() {
                     ),
                     xppBackend,
                 ) { xppBackend = it; Cfg.xppBackend = it }
-                if (xppBackend == Cfg.XPP_VULKAN) {
-                    var mailbox by remember { mutableStateOf(Cfg.xppVulkanMailbox) }
-                    DeckSwitchRow(
-                        stringResource(R.string.tc_ui_xpp_vulkan_mailbox), stringResource(R.string.tc_ui_xpp_vulkan_mailbox_hint), mailbox,
-                    ) { mailbox = it; Cfg.xppVulkanMailbox = it }
-                }
             }
             DeckSwitchRow(stringResource(R.string.tc_ui_xfce_compositor), stringResource(R.string.tc_ui_xfce_compositor_hint), Cfg.xfceCompositor) { Cfg.xfceCompositor = it }
         }

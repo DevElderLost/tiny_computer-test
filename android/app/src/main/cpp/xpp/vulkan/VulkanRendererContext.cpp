@@ -53,6 +53,11 @@ VulkanRendererContext::VulkanRendererContext(ANativeWindow* win, int cW, int cH,
         RLOG_E("Native opaque pipeline unavailable: %s", e.what());
     }
     opaquePipelineAttempted = true;
+    try { createPipeline(true, alphaPipeline, true); }
+    catch (const std::exception& e) {
+        alphaPipeline = VK_NULL_HANDLE;
+        RLOG_E("Native alpha window pipeline unavailable: %s", e.what());
+    }
 #endif
     createFramebuffers(); createCmdPool(); createSampler();
     createWinTexPool(); createCursorDS(); createCmdBufs(); createSyncObjects();
@@ -84,6 +89,7 @@ VulkanRendererContext::~VulkanRendererContext() {
     vk_.DestroyPipeline(device, pipeline, nullptr);
 #ifdef LUDASHI_NATIVE_X11
     if (opaquePipeline != VK_NULL_HANDLE) vk_.DestroyPipeline(device, opaquePipeline, nullptr);
+    if (alphaPipeline != VK_NULL_HANDLE) vk_.DestroyPipeline(device, alphaPipeline, nullptr);
     if (nativeNoClearPass != VK_NULL_HANDLE) vk_.DestroyRenderPass(device, nativeNoClearPass, nullptr);
 #endif
     vk_.DestroyPipelineLayout(device, pipeLayout, nullptr);
@@ -723,7 +729,7 @@ VkShaderModule VulkanRendererContext::makeShader(const uint32_t* code, size_t sz
     return m;
 }
 
-void VulkanRendererContext::createPipeline(bool blend, VkPipeline& out) {
+void VulkanRendererContext::createPipeline(bool blend, VkPipeline& out, bool premultiplied) {
     if (pipeLayout==VK_NULL_HANDLE) {
         VkPushConstantRange pc{}; pc.stageFlags=VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT;
         pc.size=sizeof(WindowPushConstantsSGSR);
@@ -744,7 +750,7 @@ void VulkanRendererContext::createPipeline(bool blend, VkPipeline& out) {
     VkPipelineRasterizationStateCreateInfo rast{}; rast.sType=VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO; rast.polygonMode=VK_POLYGON_MODE_FILL; rast.lineWidth=1.f; rast.cullMode=VK_CULL_MODE_NONE; rast.frontFace=VK_FRONT_FACE_COUNTER_CLOCKWISE;
     VkPipelineMultisampleStateCreateInfo ms{}; ms.sType=VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO; ms.rasterizationSamples=VK_SAMPLE_COUNT_1_BIT;
     VkPipelineColorBlendAttachmentState ba{}; ba.colorWriteMask=0xF; ba.blendEnable=blend?VK_TRUE:VK_FALSE;
-    if (blend){ba.srcColorBlendFactor=VK_BLEND_FACTOR_SRC_ALPHA;ba.dstColorBlendFactor=VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;ba.colorBlendOp=VK_BLEND_OP_ADD;ba.srcAlphaBlendFactor=VK_BLEND_FACTOR_ONE;ba.dstAlphaBlendFactor=VK_BLEND_FACTOR_ZERO;ba.alphaBlendOp=VK_BLEND_OP_ADD;}
+    if (blend){ba.srcColorBlendFactor=premultiplied?VK_BLEND_FACTOR_ONE:VK_BLEND_FACTOR_SRC_ALPHA;ba.dstColorBlendFactor=VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;ba.colorBlendOp=VK_BLEND_OP_ADD;ba.srcAlphaBlendFactor=VK_BLEND_FACTOR_ONE;ba.dstAlphaBlendFactor=premultiplied?VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA:VK_BLEND_FACTOR_ZERO;ba.alphaBlendOp=VK_BLEND_OP_ADD;}
     VkPipelineColorBlendStateCreateInfo cb{}; cb.sType=VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO; cb.attachmentCount=1; cb.pAttachments=&ba;
     VkGraphicsPipelineCreateInfo pi{}; pi.sType=VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
     pi.stageCount=2; pi.pStages=stages; pi.pVertexInputState=&vi; pi.pInputAssemblyState=&ia;
@@ -2019,6 +2025,7 @@ void VulkanRendererContext::renderFrame() {
             if (wt.ds==VK_NULL_HANDLE) continue;
             DrawEntry de{wt.img,wt.ds,VK_NULL_HANDLE,re.x,re.y,wt.w,wt.h};
             de.isAHB=wt.isAHB;
+            de.alpha=re.alpha;
             if (wt.isAHB) {
                 auto cit=ahbImportCache.find(wt.ahb);
                 if (cit!=ahbImportCache.end() && cit->second.img==wt.img &&
@@ -2087,13 +2094,14 @@ void VulkanRendererContext::renderFrame() {
         for (const auto& d : frameDraws) {
             commandKey.Add(d.img); commandKey.Add(d.ds); commandKey.Add(d.isAHB);
             commandKey.Add(d.x); commandKey.Add(d.y); commandKey.Add(d.w); commandKey.Add(d.h);
+            commandKey.Add(d.alpha);
         }
         commandKey.Add(filterMode);
         commandKey.Add(ox); commandKey.Add(oy); commandKey.Add(sx); commandKey.Add(sy);
         commandKey.Add(cw); commandKey.Add(ch);
         commandKey.Add(effectiveScissor.offset.x); commandKey.Add(effectiveScissor.offset.y);
         commandKey.Add(effectiveScissor.extent.width); commandKey.Add(effectiveScissor.extent.height);
-        commandKey.Add(pipeline); commandKey.Add(opaquePipeline); commandKey.Add(renderPass);
+        commandKey.Add(pipeline); commandKey.Add(opaquePipeline); commandKey.Add(alphaPipeline); commandKey.Add(renderPass);
         commandKey.Add(nativeNoClearPass); commandKey.Add(swapRB);
         const auto queryPool = nativeTrace ? nativeGpuQueries : VK_NULL_HANDLE;
         commandKey.Add(queryPool);
