@@ -275,6 +275,23 @@ fi
             sb.append("echo \"[tiny] dialog berkas: zenity=\$(command -v zenity || echo TIDAK ADA) kdialog=\$(command -v kdialog || echo TIDAK ADA) DISPLAY=\$DISPLAY WAYLAND_DISPLAY=\$WAYLAND_DISPLAY GDK_BACKEND=\$GDK_BACKEND SDL_VIDEODRIVER=\$SDL_VIDEODRIVER\"\n")
         }
 
+        // sisa status "backend grafis gagal" dari proses yang dimatikan paksa (lihat komentar di dalam skrip)
+        sb.append(
+            """
+# Pulihkan status "backend grafis gagal" yang tertinggal dari proses sebelumnya. PPSSPP menulis FailedGraphicsBackends
+# ke ppsspp.ini sebelum mencoba sebuah backend dan baru menghapusnya setelah backend itu berhasil. Bila prosesnya
+# keburu dimatikan (SIGKILL saat sesi ditutup, mis. kode keluar 137) di tengah itu, OPENGL,VULKAN tertinggal di berkas;
+# peluncuran berikutnya melapor "All graphics backends failed" dan jendela tinggal hitam walau vulkaninfo normal.
+for f in "${'$'}HOME/.config/ppsspp/PSP/SYSTEM/ppsspp.ini" "${'$'}{XDG_CONFIG_HOME:-${'$'}HOME/.config}/ppsspp/PSP/SYSTEM/ppsspp.ini" "${'$'}HOME/.ppsspp/PSP/SYSTEM/ppsspp.ini" "${'$'}HOME/.var/app/org.ppsspp.PPSSPP/config/ppsspp/PSP/SYSTEM/ppsspp.ini"; do
+  [ -f "${'$'}f" ] || continue
+  if grep -q -E '^FailedGraphicsBackends[[:space:]]*=[[:space:]]*[A-Za-z]' "${'$'}f" 2>/dev/null; then
+    echo "[tiny] heal: ${'$'}f: ${'$'}(grep -E '^FailedGraphicsBackends' "${'$'}f" | head -n 1 | tr -d '\r') dikosongkan (sisa kegagalan sebelumnya)"
+    sed -i -E 's/^(FailedGraphicsBackends[[:space:]]*=).*/\1 /' "${'$'}f" 2>/dev/null
+  fi
+done
+""",
+        )
+
         // bus sesi D-Bus: pakai milik desktop bila sedang berjalan (cari di /proc), kalau tidak, buat sendiri
         sb.append(
             """
