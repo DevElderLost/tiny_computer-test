@@ -247,6 +247,11 @@ class EGLNativeRenderer final : public NativeRenderer {
     }
     void DrawSoft() {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        // Filter Nearest (Cfg.upscaler) harus berlaku juga pada lintasan warp; tekstur FBO dibuat GL_LINEAR.
+        glBindTexture(GL_TEXTURE_2D, softTexture);
+        const GLint soften = filter == 1 ? GL_NEAREST : GL_LINEAR;
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, soften);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, soften);
         glDisable(GL_SCISSOR_TEST);
         glDisable(GL_BLEND);
         glUseProgram(softProgram);
@@ -413,7 +418,11 @@ class EGLNativeRenderer final : public NativeRenderer {
         if (outerW <= 0 || outerH <= 0)
             return false;
         geometry.Update(outerW, outerH, width, height, fullscreen, zoom, frame.cursorX, frame.cursorY, pan);
-        const bool soft = fullscreen && stretch == 1 && EnsureSoft(outerW, outerH);
+        const bool wantSoft = fullscreen && stretch == 1;
+        // Bebaskan target off-screen (seukuran layar) begitu Soft Stretch dimatikan.
+        if (!wantSoft && softFbo)
+            ReleaseSoft();
+        const bool soft = wantSoft && EnsureSoft(outerW, outerH);
         glBindFramebuffer(GL_FRAMEBUFFER, soft ? softFbo : 0);
         glViewport(0, 0, outerW, outerH);
         glDisable(GL_SCISSOR_TEST);

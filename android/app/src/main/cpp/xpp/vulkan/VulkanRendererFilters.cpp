@@ -9,6 +9,32 @@
 #include "window_vert.h"
 #include "window_lanczos_frag.h"
 
+namespace {
+// Kurva Soft Stretch di sisi CPU, identik dengan hybrid_curve()/main() di window_stretch.frag: posisi layar (NDC) ->
+// posisi scene (NDC). Dipakai membalik kurva supaya quad tiap window/kursor hanya memakan area layar yang benar.
+float softStretchWarp(float x, float strength, float profile) {
+    constexpr float kPi = 3.14159265358979323846f;
+    const float x2 = x * x;
+    const float x5 = x2 * x2 * x;
+    const float sinShape = std::sin(0.5f * kPi * x);
+    const float quintic = 0.5f * x5 - 1.5f * x2 * x + 2.0f * x;
+    const float curved = sinShape + (quintic - sinShape) * profile;
+    return x + (curved - x) * strength;
+}
+
+// Kebalikan softStretchWarp (monoton naik pada [-1, 1]), lewat bagi dua; di luar rentang dijepit ke tepi layar.
+float softStretchUnwarp(float u, float strength, float profile) {
+    if (u <= -1.0f) return -1.0f;
+    if (u >= 1.0f) return 1.0f;
+    float lo = -1.0f, hi = 1.0f;
+    for (int i = 0; i < 24; ++i) {
+        const float mid = 0.5f * (lo + hi);
+        if (softStretchWarp(mid, strength, profile) < u) lo = mid; else hi = mid;
+    }
+    return 0.5f * (lo + hi);
+}
+} // namespace
+
 void VulkanRendererContext::createLanczosPipeline() {
     if (lanczosPipeline != VK_NULL_HANDLE) return;
 
@@ -209,7 +235,10 @@ void VulkanRendererContext::recordCmdBuf(VkCommandBuffer cb, uint32_t imgIdx,
     const bool useLanczos = filterMode == 4 && lanczosPipeline != VK_NULL_HANDLE;
     const bool useColorBoost = filterMode == 5 && postfxPipeline != VK_NULL_HANDLE;
     const bool usePostFX = postFXMode > 0 && postfxPipeline != VK_NULL_HANDLE;
-    const bool useStretch = stretchMode == 1 && stretchPipeline != VK_NULL_HANDLE;
+    // Soft Stretch memakai pipeline-nya sendiri; filter/efek lain (SGSR, FSR, Lanczos, ColorBoost, PostFX) punya shader
+    // sendiri dan tidak bisa digabung, jadi Soft Stretch mengalah pada mereka (bukan memaksa window selebar layar tanpa warp).
+    const bool useStretch = stretchMode == 1 && stretchPipeline != VK_NULL_HANDLE &&
+        !useSgsr && !useFsr && !useLanczos && !useColorBoost && !usePostFX;
 
     VkPipeline activePipeline = useSgsr ? sgsrPipeline
                               : useFsr ? fsr1Pipeline
@@ -283,6 +312,30 @@ void VulkanRendererContext::recordCmdBuf(VkCommandBuffer cb, uint32_t imgIdx,
     float rotCosR, rotSinR;
     getPreRotationCosSin(rotCosR, rotSinR);
 
+    // Soft Stretch: kurva berlaku untuk seluruh layar. Rentang X item pada scene (srcX0..srcX1, NDC) dibalik lewat kurva
+    // menjadi rentang X-nya di layar; shader lalu mengambil sampel per piksel dan membuang yang di luar item. Dengan
+    // begitu window yang lebih kecil dari layar (menu, dialog, panel) dan kursor tetap tepat, sama seperti renderer EGL
+    // yang melebarkan seluruh scene. Mengembalikan false bila item sepenuhnya di luar layar (tidak perlu digambar).
+    const float softPad = 2.0f / (float)std::max(1u, std::min(swapchainExt.width, swapchainExt.height));
+    auto fillStretch = [&](WindowPushConstantsStretch& pc, float srcX0, float srcX1, float ndcY0, float ndcY1,
+                           int alphaMode) {
+        const float outX0 = softStretchUnwarp(srcX0, stretchStrength, stretchProfile);
+        const float outX1 = softStretchUnwarp(srcX1, stretchStrength, stretchProfile);
+        if (!(outX1 > outX0) || !(srcX1 > srcX0)) return false;
+        pc.ndcX0 = std::max(-1.0f, outX0 - softPad);
+        pc.ndcX1 = std::min(1.0f, outX1 + softPad);
+        pc.ndcY0 = ndcY0;
+        pc.ndcY1 = ndcY1;
+        pc.srcX0 = srcX0;
+        pc.srcX1 = srcX1;
+        pc.useTexAlpha = alphaMode;
+        pc.strength = stretchStrength;
+        pc.profile = stretchProfile;
+        pc.cosR = rotCosR;
+        pc.sinR = rotSinR;
+        return true;
+    };
+
 #ifdef LUDASHI_NATIVE_X11
     if (!splitCursor || !nativeSceneReplay) {
         if (splitCursor) { cb = nativeSceneCommand; beginSecondary(cb); }
@@ -318,11 +371,8 @@ void VulkanRendererContext::recordCmdBuf(VkCommandBuffer cb, uint32_t imgIdx,
                 0, sizeof(pc), &pc);
         } else if (useSgsr) {
             WindowPushConstantsSGSR pc{};
-            if (useStretch) { pc.ndcX0 = -1.0f; pc.ndcX1 = 1.0f; }
-            else {
-                pc.ndcX0 = (ox + (float)d.x * sx) / cw * 2.0f - 1.0f;
-                pc.ndcX1 = (ox + (float)(d.x + d.w) * sx) / cw * 2.0f - 1.0f;
-            }
+            pc.ndcX0 = (ox + (float)d.x * sx) / cw * 2.0f - 1.0f;
+            pc.ndcX1 = (ox + (float)(d.x + d.w) * sx) / cw * 2.0f - 1.0f;
             pc.ndcY0 = (oy + (float)d.y * sy) / ch * 2.0f - 1.0f;
             pc.ndcY1 = (oy + (float)(d.y + d.h) * sy) / ch * 2.0f - 1.0f;
             pc.useTexAlpha = 0;
@@ -342,11 +392,8 @@ void VulkanRendererContext::recordCmdBuf(VkCommandBuffer cb, uint32_t imgIdx,
                 0, sizeof(pc), &pc);
         } else if (useFsr || useLanczos) {
             WindowPushConstantsFSR1 pc{};
-            if (useStretch) { pc.ndcX0 = -1.0f; pc.ndcX1 = 1.0f; }
-            else {
-                pc.ndcX0 = (ox + (float)d.x * sx) / cw * 2.0f - 1.0f;
-                pc.ndcX1 = (ox + (float)(d.x + d.w) * sx) / cw * 2.0f - 1.0f;
-            }
+            pc.ndcX0 = (ox + (float)d.x * sx) / cw * 2.0f - 1.0f;
+            pc.ndcX1 = (ox + (float)(d.x + d.w) * sx) / cw * 2.0f - 1.0f;
             pc.ndcY0 = (oy + (float)d.y * sy) / ch * 2.0f - 1.0f;
             pc.ndcY1 = (oy + (float)(d.y + d.h) * sy) / ch * 2.0f - 1.0f;
             pc.useTexAlpha = 0;
@@ -380,15 +427,12 @@ void VulkanRendererContext::recordCmdBuf(VkCommandBuffer cb, uint32_t imgIdx,
                 0, sizeof(pc), &pc);
         } else if (useStretch) {
             WindowPushConstantsStretch pc{};
-            pc.ndcX0 = -1.0f;
-            pc.ndcX1 = 1.0f;
-            pc.ndcY0 = (oy + (float)d.y * sy) / ch * 2.0f - 1.0f;
-            pc.ndcY1 = (oy + (float)(d.y + d.h) * sy) / ch * 2.0f - 1.0f;
-            pc.useTexAlpha = 0;
-            pc.strength = stretchStrength;
-            pc.profile = stretchProfile;
-            pc.cosR = rotCosR;
-            pc.sinR = rotSinR;
+            if (!fillStretch(pc, (ox + (float)d.x * sx) / cw * 2.0f - 1.0f,
+                             (ox + (float)(d.x + d.w) * sx) / cw * 2.0f - 1.0f,
+                             (oy + (float)d.y * sy) / ch * 2.0f - 1.0f,
+                             (oy + (float)(d.y + d.h) * sy) / ch * 2.0f - 1.0f,
+                             d.alpha ? 1 : 0))
+                continue;
             vk_.CmdPushConstants(cb, pipeLayout,
                 VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
                 0, sizeof(pc), &pc);
@@ -425,23 +469,40 @@ void VulkanRendererContext::recordCmdBuf(VkCommandBuffer cb, uint32_t imgIdx,
             vk_.CmdSetScissor(cb, 0, 1, &scissor);
         }
 #endif
-        vk_.CmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-        vk_.CmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeLayout,
-                                  0, 1, &cursorDS, 0, nullptr);
         float cx = (float)std::max(0, (int)ptrX - curHotX);
         float cy = (float)std::max(0, (int)ptrY - curHotY);
-        WindowPushConstants pc{};
-        pc.ndcX0 = (ox + cx * sx) / cw * 2.0f - 1.0f;
-        pc.ndcY0 = (oy + cy * sy) / ch * 2.0f - 1.0f;
-        pc.ndcX1 = (ox + (cx + curW) * sx) / cw * 2.0f - 1.0f;
-        pc.ndcY1 = (oy + (cy + curH) * sy) / ch * 2.0f - 1.0f;
-        pc.useTexAlpha = 1;
-        pc.cosR = rotCosR;
-        pc.sinR = rotSinR;
-        vk_.CmdPushConstants(cb, pipeLayout,
-            VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-            0, sizeof(pc), &pc);
-        vk_.CmdDraw(cb, 4, 1, 0, 0);
+        const float curX0 = (ox + cx * sx) / cw * 2.0f - 1.0f;
+        const float curY0 = (oy + cy * sy) / ch * 2.0f - 1.0f;
+        const float curX1 = (ox + (cx + curW) * sx) / cw * 2.0f - 1.0f;
+        const float curY1 = (oy + (cy + curH) * sy) / ch * 2.0f - 1.0f;
+        WindowPushConstantsStretch spc{};
+        // Soft Stretch: kursor ikut melewati kurva yang sama dengan isi layar (seperti EGL dan pemetaan sentuhan
+        // DisplayFit); tanpa ini kursor tergambar di posisi linear sementara isi layar sudah bergeser.
+        if (useStretch && fillStretch(spc, curX0, curX1, curY0, curY1, 2)) {
+            vk_.CmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, stretchPipeline);
+            vk_.CmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeLayout,
+                                      0, 1, &cursorDS, 0, nullptr);
+            vk_.CmdPushConstants(cb, pipeLayout,
+                VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                0, sizeof(spc), &spc);
+            vk_.CmdDraw(cb, 4, 1, 0, 0);
+        } else if (!useStretch) {
+            vk_.CmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+            vk_.CmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeLayout,
+                                      0, 1, &cursorDS, 0, nullptr);
+            WindowPushConstants pc{};
+            pc.ndcX0 = curX0;
+            pc.ndcY0 = curY0;
+            pc.ndcX1 = curX1;
+            pc.ndcY1 = curY1;
+            pc.useTexAlpha = 1;
+            pc.cosR = rotCosR;
+            pc.sinR = rotSinR;
+            vk_.CmdPushConstants(cb, pipeLayout,
+                VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                0, sizeof(pc), &pc);
+            vk_.CmdDraw(cb, 4, 1, 0, 0);
+        }
     }
 
 #ifdef LUDASHI_NATIVE_X11

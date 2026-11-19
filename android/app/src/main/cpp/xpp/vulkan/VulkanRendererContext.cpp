@@ -827,7 +827,11 @@ void VulkanRendererContext::createStretchPipeline() {
     VkPipelineViewportStateCreateInfo vp{}; vp.sType=VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO; vp.viewportCount=1; vp.scissorCount=1;
     VkPipelineRasterizationStateCreateInfo rast{}; rast.sType=VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO; rast.polygonMode=VK_POLYGON_MODE_FILL; rast.lineWidth=1.f; rast.cullMode=VK_CULL_MODE_NONE; rast.frontFace=VK_FRONT_FACE_COUNTER_CLOCKWISE;
     VkPipelineMultisampleStateCreateInfo ms{}; ms.sType=VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO; ms.rasterizationSamples=VK_SAMPLE_COUNT_1_BIT;
-    VkPipelineColorBlendAttachmentState ba{}; ba.colorWriteMask=0xF; ba.blendEnable=VK_FALSE;
+    // Window ber-alpha dan kursor ikut lewat pipeline ini (shader membuang piksel di luar window), jadi blending
+    // premultiplied menyala; window opaque menghasilkan alpha 1 sehingga hasilnya tetap menimpa.
+    VkPipelineColorBlendAttachmentState ba{}; ba.colorWriteMask=0xF; ba.blendEnable=VK_TRUE;
+    ba.srcColorBlendFactor=VK_BLEND_FACTOR_ONE; ba.dstColorBlendFactor=VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA; ba.colorBlendOp=VK_BLEND_OP_ADD;
+    ba.srcAlphaBlendFactor=VK_BLEND_FACTOR_ONE; ba.dstAlphaBlendFactor=VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA; ba.alphaBlendOp=VK_BLEND_OP_ADD;
     VkPipelineColorBlendStateCreateInfo cb{}; cb.sType=VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO; cb.attachmentCount=1; cb.pAttachments=&ba;
     VkGraphicsPipelineCreateInfo pi{}; pi.sType=VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
     pi.stageCount=2; pi.pStages=stages; pi.pVertexInputState=&vi; pi.pInputAssemblyState=&ia;
@@ -2734,8 +2738,17 @@ void VulkanRendererContext::setFilterMode(int mode) {
 void VulkanRendererContext::setStretchMode(int mode) {
     RLOG("setStretchMode: %d -> %d", stretchMode, mode);
     if (stretchMode == mode) return;
+    // Soft Stretch hanya kosmetik: bila pipeline gagal dibuat, tetap Stretch biasa (jangan melempar dari opsi visual,
+    // dan jangan menyimpan mode 1 tanpa pipeline).
+    if (mode == 1 && stretchPipeline == VK_NULL_HANDLE) {
+        try { createStretchPipeline(); }
+        catch (const std::exception& e) {
+            RLOG_E("Soft Stretch pipeline unavailable: %s", e.what());
+            mode = 0;
+            if (stretchMode == mode) return;
+        }
+    }
     stretchMode = mode;
-    if (mode == 1 && stretchPipeline == VK_NULL_HANDLE) createStretchPipeline();
     needsRender.store(true); dirtyCV.notify_one();
 }
 

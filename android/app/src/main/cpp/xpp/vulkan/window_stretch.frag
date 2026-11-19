@@ -3,13 +3,15 @@
 layout(binding = 0) uniform sampler2D texSampler;
 
 layout(push_constant) uniform PC {
-    float ndcX0;
+    float ndcX0;   // tepi kiri quad di layar (NDC, sebelum pra-rotasi)
     float ndcY0;
-    float ndcX1;
+    float ndcX1;   // tepi kanan quad di layar
     float ndcY1;
-    int   useTexAlpha;
+    int   useTexAlpha; // 0 = opaque, 1 = alpha premultiplied, 2 = alpha straight (kursor)
     float strength;
     float profile;
+    float srcX0;   // rentang X window pada scene (NDC, sebelum warp)
+    float srcX1;
 } pc;
 
 layout(location = 0) in  vec2 fragTexCoord;
@@ -26,11 +28,19 @@ float hybrid_curve(float x, float prof) {
 }
 
 void main() {
-    float x = fragTexCoord.x * 2.0 - 1.0;
+    // Posisi X piksel ini di layar -> posisi X pada scene lewat kurva Soft Stretch. Kurva berlaku untuk seluruh
+    // layar (bukan per window), jadi window yang tidak memenuhi layar tetap berada di tempat yang benar.
+    float x = mix(pc.ndcX0, pc.ndcX1, fragTexCoord.x);
     float curved = hybrid_curve(x, pc.profile);
-    float warped = mix(x, curved, pc.strength);
-    float u = clamp(0.5 * warped + 0.5, 0.0, 1.0);
+    float u = mix(x, curved, pc.strength);
 
-    vec4 c = texture(texSampler, vec2(u, fragTexCoord.y));
-    outColor = vec4(c.rgb, pc.useTexAlpha != 0 ? c.a : 1.0);
+    float span = pc.srcX1 - pc.srcX0;
+    if (span <= 0.0) discard;
+    float tx = (u - pc.srcX0) / span;
+    if (tx < 0.0 || tx > 1.0) discard;   // di luar window ini
+
+    vec4 c = texture(texSampler, vec2(tx, fragTexCoord.y));
+    if (pc.useTexAlpha == 0)      outColor = vec4(c.rgb, 1.0);
+    else if (pc.useTexAlpha == 1) outColor = c;
+    else                          outColor = vec4(c.rgb * c.a, c.a);
 }

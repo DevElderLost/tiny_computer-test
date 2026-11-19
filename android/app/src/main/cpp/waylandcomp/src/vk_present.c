@@ -474,7 +474,15 @@ static void update_map(int scene_w, int scene_h) {
 
 int vkp_output_to_scene(double ox, double oy, double *sx, double *sy) {
     if (!g_map.valid || g_map.kx <= 0 || g_map.ky <= 0) return 0;
-    *sx = (ox - g_map.off_x) / g_map.kx;
+    if (g_soft && g_map.mode == VKP_MODE_STRETCH && g_map.rw > 0) {
+        /* Soft Stretch: gambar dilebarkan horizontal lewat kurva (soft_blits), jadi pemetaan balik X harus melewati kurva
+         * yang sama; kalau tidak, jari/pointer meleset dari yang tergambar di bawahnya. Y tetap linear. */
+        float t = (float)((ox - g_map.rx) / g_map.rw);
+        t = t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t);
+        *sx = (double)soft_warp(t) * g_map.scene_w;
+    } else {
+        *sx = (ox - g_map.off_x) / g_map.kx;
+    }
     *sy = (oy - g_map.off_y) / g_map.ky;
     return 1;
 }

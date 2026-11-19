@@ -22,7 +22,16 @@ object DisplayFit {
     private const val SOFT_STRENGTH = 0.40f
     private const val SOFT_PROFILE = 0.60f
 
-    val mode: Int get() = Cfg.displayFit
+    /**
+     * Apakah renderer yang sedang aktif benar-benar menggambar Soft Stretch. DisplayX (ASurfaceControl) tidak bisa
+     * melebarkan non-linear, sehingga ia menggambar Stretch biasa; [XppHost] mengisi ini supaya pemetaan sentuhan,
+     * kursor, dan skala memakai mode yang sama dengan gambar (bukan kurva warp pada gambar yang tidak di-warp).
+     */
+    @Volatile
+    var softSupported: Boolean = true
+
+    /** Mode yang efektif digambar: pilihan pengguna, kecuali Soft Stretch pada renderer yang tidak mendukungnya (jadi Stretch). */
+    val mode: Int get() = Cfg.displayFit.let { if (it == SOFT && !softSupported) STRETCH else it }
 
     /** Nilai scale mode compositor Wayland: 1 = FIT, 2 = STRETCH (Soft memakai STRETCH + [nativeSetSoftStretch]). */
     fun waylandScaleMode(): Int = if (mode == FIT) 1 else 2

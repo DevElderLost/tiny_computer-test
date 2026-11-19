@@ -6,6 +6,7 @@ import android.view.Surface
 import android.view.WindowManager
 import com.example.tiny_computer.core.Cfg
 import com.example.tiny_computer.core.TinyEnv
+import com.example.tiny_computer.display.DisplayFit
 import java.io.File
 import kotlin.math.max
 import kotlin.math.min
@@ -163,6 +164,8 @@ object XppHost {
         // fullscreen + stretch 1 (shader pelebaran horizontal Vulkan/EGL, sama dengan Winlator Ludashi). DisplayX tidak punya Soft Stretch.
         val fit = Cfg.displayFit
         val soft = fit == Cfg.FIT_SOFT && backend != NativeX11.BACKEND_DISPLAYX
+        // DisplayX menggambar Stretch biasa; beri tahu DisplayFit agar sentuhan/kursor tidak memakai kurva warp.
+        DisplayFit.softSupported = backend != NativeX11.BACKEND_DISPLAYX
         NativeX11.nativeOptions(handle, fit != Cfg.FIT_FIT, true, Cfg.fpsLimit, refreshHz)
         // Cfg.upscaler: 2 = Nearest. Filter lain memakai bilinear (0 = linear, 1 = nearest di semua backend); efek lain milik
         // compositor Wayland tidak ada di server ini. Parameter stretch: 0 = Fit/Stretch biasa, 1 = Soft Stretch.
@@ -175,6 +178,7 @@ object XppHost {
     private fun stopLocked() {
         val h = handle
         handle = 0L
+        DisplayFit.softSupported = true // sesi berikutnya (Xwayland/Wayland/X++ lain) mendukung Soft Stretch
         boundSocket = null
         remX = 0; remY = 0; scrollRemV = 0; scrollRemH = 0
         if (h != 0L) runCatching { NativeX11.nativeDestroy(h) }.onFailure { Log.e(TAG, "destroy", it) }

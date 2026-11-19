@@ -149,8 +149,11 @@ struct WindowPushConstantsSGSR  { float ndcX0, ndcY0, ndcX1, ndcY1; int useTexAl
                                   float resW;
                                   float sharpness;
                                   float cosR = 1.f, sinR = 0.f; };
+// ndcX0/ndcX1 = rentang X quad di layar (hasil unwarp), srcX0/srcX1 = rentang X window pada scene (NDC, sebelum warp).
+// useTexAlpha: 0 opaque, 1 premultiplied, 2 straight (kursor). Tata letak harus sama dengan window_stretch.frag.
 struct WindowPushConstantsStretch { float ndcX0, ndcY0, ndcX1, ndcY1; int useTexAlpha; float strength; float profile;
-                                  float _pad[5];
+                                  float srcX0 = -1.f, srcX1 = 1.f;
+                                  float _pad[3];
                                   float cosR = 1.f, sinR = 0.f; };
 
 struct WindowPushConstantsFSR1  { float ndcX0, ndcY0, ndcX1, ndcY1; int useTexAlpha;
@@ -170,6 +173,8 @@ struct WindowPushConstantsPostFX  { float ndcX0, ndcY0, ndcX1, ndcY1;
 static_assert(offsetof(WindowPushConstants,       cosR) == 48, "cosR offset must match window_vert.txt layout(offset=48)");
 static_assert(offsetof(WindowPushConstantsSGSR,   cosR) == 48, "cosR offset must match window_vert.txt layout(offset=48)");
 static_assert(offsetof(WindowPushConstantsStretch,cosR) == 48, "cosR offset must match window_vert.txt layout(offset=48)");
+static_assert(offsetof(WindowPushConstantsStretch,srcX0) == 28, "srcX0 offset must match window_stretch.frag");
+static_assert(sizeof(WindowPushConstantsStretch) <= sizeof(WindowPushConstantsSGSR), "stretch push constants must fit the shared pipeline layout range");
 static_assert(offsetof(WindowPushConstantsFSR1,   cosR) == 48, "cosR offset must match window_vert.txt layout(offset=48)");
 static_assert(sizeof(WindowPushConstantsFSR1) == sizeof(WindowPushConstantsSGSR), "FSR1 push constants must fit the shared pipeline layout range");
 static_assert(offsetof(WindowPushConstantsPostFX, cosR) == 48, "cosR offset must match window_vert.txt layout(offset=48)");
