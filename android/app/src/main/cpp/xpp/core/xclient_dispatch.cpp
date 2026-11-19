@@ -849,6 +849,20 @@ void XClient::ProcGetWindowAttributes() {
         your_event_mask = it->second;
     }
 
+    // map_state harus IsUnmapped untuk jendela yang belum di-map. Sebelumnya selalu IsUnviewable, sehingga SDL
+    // (X11_IsWindowMapped: map_state != IsUnmapped) mengira jendela sudah tampil dan tidak pernah mengirim MapWindow
+    // (PPSSPP: layar hitam). IsViewable hanya bila jendela dan semua induknya ter-map.
+    CARD8 map_state = IsUnmapped;
+    if (window->IsMapped()) {
+        map_state = IsViewable;
+        for (const Window* p = window->GetParent(); p; p = p->GetParent()) {
+            if (!p->IsRoot() && !p->IsMapped()) {
+                map_state = IsUnviewable;
+                break;
+            }
+        }
+    }
+
     const xGetWindowAttributesReply reply{
             .type = X_Reply,
             .backingStore = static_cast<CARD8>(attributes.backing_store),
@@ -862,7 +876,7 @@ void XClient::ProcGetWindowAttributes() {
             .backingPixel = attributes.backing_pixel,
             .saveUnder = attributes.save_under,
             .mapInstalled = 1,
-            .mapState = static_cast<CARD8>(window->IsMapped() ? IsViewable : IsUnviewable),
+            .mapState = map_state,
             .override = attributes.override_redirect,
             .colormap = 0,
             .allEventMasks = window->GetAllEventMasks(),
