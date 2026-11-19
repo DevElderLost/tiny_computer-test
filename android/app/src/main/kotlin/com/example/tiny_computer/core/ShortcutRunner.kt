@@ -232,6 +232,12 @@ fi
                 if (ppssppNoWm && !isWine) sb.append("echo \"[tiny] X++: window manager dijeda untuk PPSSPP (TINY_PPSSPP_WM=1 = nyalakan lagi)\"\n")
                 sb.append(": > \"\$HOME/.vnc/no-wm\"\n")
                 sb.append("for w in xfwm4 openbox metacity marco icewm fluxbox; do pkill -x \$w 2>/dev/null; done\n")
+                if (ppssppNoWm && !isWine) {
+                    // Balapan: penjaga WM di skrip sesi bisa memulai xfwm4 SETELAH pkill di atas (dbus-launch butuh waktu sebelum
+                    // proses xfwm4 ada), jadi xfwm4 hidup dan membingkai jendela PPSSPP. Tegakkan lagi no-wm dan matikan WM selama
+                    // 15 detik pertama (WM harus sudah hilang sebelum PPSSPP membuat jendela).
+                    sb.append("( i=0; while [ \$i -lt 60 ]; do : > \"\$HOME/.vnc/no-wm\"; for w in xfwm4 openbox metacity marco icewm fluxbox; do pkill -x \$w 2>/dev/null; done; sleep 0.25; i=\$((i+1)); done ) >/dev/null 2>&1 &\n")
+                }
             } else {
                 sb.append("pgrep -x wineserver >/dev/null 2>&1 || rm -f \"\$HOME/.vnc/no-wm\"\n")
             }

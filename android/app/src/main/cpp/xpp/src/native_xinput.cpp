@@ -195,9 +195,21 @@ void XClient::ProcXInput() {
         if (!count) badDevice(wanted);
         store(packet.data, 8, count); reply(packet); return;
     }
+    case 50: { // XIGetFocus: fokus dilaporkan sama dengan fokus X11 inti
+        size(8);
+        const auto* focus = server.GetWindowManager().GetFocuseWindow();
+        store(packet.data, 8, u32(focus ? focus->id : 0));
+        reply(packet); return;
+    }
+    case 51: // XIGrabDevice: grab dianggap berhasil (status 0 = GrabSuccess); balasan wajib ada
+        reply(packet); return;
+    case 54: // XIPassiveGrabDevice: tidak ada modifier yang gagal (num_modifiers = 0); balasan wajib ada
+        reply(packet); return;
     // Match the Java subset for state requests that do not expect a reply.
+    // 55 = XIPassiveUngrabDevice (dipanggil SDL3 setelah GrabButton; sebelumnya BadRequest, dan error Xlib
+    // bawaan mematikan PPSSPP seketika, jadi jendela hilang dan layar hitam).
     case 4: case 6: case 42: case 43: case 44: case 49:
-    case 52: case 53: case 57: case 58: case 61:
+    case 52: case 53: case 55: case 57: case 58: case 61:
         return;
     default: throw BadRequestError();
     }
