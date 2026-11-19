@@ -1,3 +1,4 @@
+#include <atomic>
 #include "native_screen.h"
 #include "core/damage.h"
 #include "core/trace.h"
@@ -674,7 +675,17 @@ void NativeScreen::Complete(const sp<PresentTicket>& t, bool idleFirst) {
     // Use the same timestamp for UST and MSC instead of another clock read for
     // every subscriber. MSC retains the configured physical refresh rate.
     const u64 msc = u64(ust * double(refresh.load(std::memory_order_relaxed)) / 1000000.0);
-    if (selected == subscriptions.end()) return;
+    if (selected == subscriptions.end()) {
+        Trace("Present Complete serial=%u window=0x%x: tidak ada subscriber", unsigned(t->serial), unsigned(t->window));
+        return;
+    }
+    {
+        static std::atomic<unsigned> completeCount{0};
+        const unsigned n = ++completeCount;
+        if (n <= 40)
+            Trace("Present Complete#%u serial=%u window=0x%x idleFirst=%d sendIdle=%d", n, unsigned(t->serial),
+                  unsigned(t->window), int(idleFirst), int(sendIdle));
+    }
     for (auto& sub : selected->second) {
         const bool idleEvent = sendIdle && (sub->mask & PresentIdleNotifyMask);
         const bool completeEvent = sub->mask & PresentCompleteNotifyMask;

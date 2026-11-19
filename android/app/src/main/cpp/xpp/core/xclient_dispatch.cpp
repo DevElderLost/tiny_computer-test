@@ -1202,6 +1202,14 @@ void XClient::ProcPutImage() {
             Trace("PutImage#%u id=0x%x %ux%u at %d,%d depth=%u", n, unsigned(req->drawable), unsigned(req->width),
                   unsigned(req->height), int(req->dstX), int(req->dstY), unsigned(req->depth));
     }
+    if (unsigned(req->width) * unsigned(req->height) >= 100000u) {
+        // Frame penuh (mis. swapchain WSI software): tampilkan 40 pertama beserta tujuan (window atau pixmap).
+        static std::atomic<unsigned> frameCount{0};
+        const unsigned n = ++frameCount;
+        if (n <= 40)
+            Trace("PutImage-frame#%u id=0x%x %ux%u depth=%u", n, unsigned(req->drawable), unsigned(req->width),
+                  unsigned(req->height), unsigned(req->depth));
+    }
     static_cast<NativeScreen&>(server.GetScreen()).HudFrame(req->drawable);
 }
 

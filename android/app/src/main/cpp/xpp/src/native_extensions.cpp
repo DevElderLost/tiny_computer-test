@@ -1,3 +1,5 @@
+#include "core/trace.h"
+#include <atomic>
 #include "native_screen.h"
 #include "base/fd.h"
 #include "core/extension.h"
@@ -165,6 +167,13 @@ void XClient::ProcPresent() {
         for (u32 id : {r->wait_fence, r->idle_fence}) {
             auto* f = GetResource(id);
             if (id && (!f || f->GetType() != XResourceType::Fence)) throw BadValueError(id);
+        }
+        {
+            static std::atomic<unsigned> presentCount{0};
+            const unsigned n = ++presentCount;
+            if (n <= 40)
+                Trace("PresentPixmap#%u win=0x%x pixmap=0x%x serial=%u", n, unsigned(r->window), unsigned(r->pixmap),
+                      unsigned(r->serial));
         }
         auto ticket = std::make_shared<PresentTicket>();
         ticket->window = r->window; ticket->pixmap = r->pixmap; ticket->serial = r->serial;
