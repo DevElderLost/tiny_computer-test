@@ -235,6 +235,15 @@ for t in sorted(os.listdir('/proc/%s/task' % pid), key=int):
         if len(f) < 3:
             print('[tiny] diag stack %s/%s %s: %s' % (pid, t, comm, ' '.join(f)))
             continue
+        if f[0] == '115' and len(f) >= 5:
+            # clock_nanosleep(clock, flags, req, rem): baca timespec yang diminta thread untuk melihat lama tidurnya
+            try:
+                import struct
+                mem.seek(int(f[3], 16))
+                sec, nsec = struct.unpack('<qq', mem.read(16))
+                print('[tiny] diag sleep %s/%s %s clock_nanosleep clock=%s flags=%s req=%d.%09d detik' % (pid, t, comm, f[1], f[2], sec, nsec))
+            except Exception as e:
+                print('[tiny] diag sleep %s/%s %s: gagal baca timespec: %s' % (pid, t, comm, e))
         sp, pc = int(f[-2], 16), int(f[-1], 16)
         mem.seek(sp)
         data = mem.read(6144)
