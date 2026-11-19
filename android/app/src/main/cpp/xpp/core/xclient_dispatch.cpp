@@ -1,3 +1,4 @@
+#include <atomic>
 #include <fmt/core.h>
 // clang-format off
 #include <X11/X.h>
@@ -375,6 +376,13 @@ void XClient::ProcShmRequest() {
             d->WritePixels(static_cast<const u8*>(entry.addr) + r->offset, r->srcX, r->srcY,
                            r->dstX, r->dstY, r->srcWidth, r->srcHeight, r->totalWidth);
         });
+        {
+            static std::atomic<unsigned> shmPutImageCount{0};
+            const unsigned n = ++shmPutImageCount;
+            if (n <= 10 || n % 200 == 0)
+                Trace("ShmPutImage#%u id=0x%x %ux%u at %d,%d", n, unsigned(r->drawable), unsigned(r->srcWidth),
+                      unsigned(r->srcHeight), int(r->dstX), int(r->dstY));
+        }
         static_cast<NativeScreen&>(server.GetScreen()).HudFrame(r->drawable);
         if (r->sendEvent) {
             xShmCompletionEvent event{};
@@ -1144,6 +1152,14 @@ void XClient::ProcPutImage() {
             throw BadMatchError();
         }
     });
+    {
+        // Trace dibatasi: 10 pertama lalu tiap ke-200, supaya terlihat apakah aplikasi benar-benar menggambar ke window.
+        static std::atomic<unsigned> putImageCount{0};
+        const unsigned n = ++putImageCount;
+        if (n <= 10 || n % 200 == 0)
+            Trace("PutImage#%u id=0x%x %ux%u at %d,%d depth=%u", n, unsigned(req->drawable), unsigned(req->width),
+                  unsigned(req->height), int(req->dstX), int(req->dstY), unsigned(req->depth));
+    }
     static_cast<NativeScreen&>(server.GetScreen()).HudFrame(req->drawable);
 }
 

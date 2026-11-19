@@ -177,11 +177,15 @@ if [ -n "${'$'}TINY_LAUNCH_LOG" ]; then
     echo "[tiny] diag X++ (15 dtk): soket=${'$'}(ls /tmp/.X11-unix 2>&1 | tr '\n' ' ')"
     command -v xdpyinfo >/dev/null 2>&1 && xdpyinfo 2>&1 | grep -E 'number of extensions|dimensions:|^    (GLX|RANDR|XInputExtension|Present|DRI3|XFIXES|Composite)$' | head -12
     command -v xwininfo >/dev/null 2>&1 && xwininfo -root -tree 2>&1 | head -30
+    # status peta (Map State) tiap window tingkat atas: window yang dibuat tetapi tidak pernah di-map tidak tampil (layar hitam)
+    for w in ${'$'}(xwininfo -root -children 2>/dev/null | awk '/^ +0x[0-9a-f]+ /{print ${'$'}1}' | head -20); do
+      echo "[tiny] diag win ${'$'}w ${'$'}(xwininfo -id ${'$'}w 2>/dev/null | awk -F': +' '/Map State|Override Redirect State|Depth/{printf "%s=%s ", ${'$'}1, ${'$'}2}')"
+    done
     for p in ${'$'}(ps -eo pid,comm 2>/dev/null | awk 'NR>1 && ${'$'}2 !~ /^(sh|ps|awk|sleep|tee|dbus|xfwm4)/ {print ${'$'}1}' | head -12); do
       echo "[tiny] diag proc ${'$'}p ${'$'}(cat /proc/${'$'}p/comm 2>/dev/null) state=${'$'}(awk '/^State:/{print ${'$'}2}' /proc/${'$'}p/status 2>/dev/null) wchan=${'$'}(cat /proc/${'$'}p/wchan 2>/dev/null)"
     done
-    echo "[tiny] diag xpp-trace (60 baris terakhir):"
-    tail -n 60 /tmp/xpp-trace.log 2>/dev/null
+    echo "[tiny] diag xpp-trace (80 baris terakhir, tanpa Unsupported grab):"
+    grep -v "Unsupported grab request" /tmp/xpp-trace.log 2>/dev/null | tail -n 80
   ) &
 fi
 """.trimStart(),
@@ -322,6 +326,20 @@ done
 if [ -e /dev/shm/PPSSPP_ID ] && ! grep -qsa '[P]PSSPP' /proc/[0-9]*/cmdline 2>/dev/null; then
   rm -f /dev/shm/PPSSPP_ID && echo "[tiny] heal: /dev/shm/PPSSPP_ID (penghitung instance sisa) dihapus"
 fi
+""".trimStart(),
+            )
+            sb.append(
+                """
+# Log PPSSPP ke stdout yang berupa pipa (berkas log shortcut) disangga penuh oleh libc, dan bagian yang belum ter-flush
+# HILANG saat sesi ditutup paksa (SIGKILL). Itu sebabnya log berhenti di "Registered VFS ..." walau PPSSPP terus berjalan.
+# libstdbuf (coreutils) membuat stdout/stderr per baris. Dilewati bila berkasnya tidak ada.
+for L in /usr/libexec/coreutils/libstdbuf.so /usr/lib/coreutils/libstdbuf.so /usr/lib/aarch64-linux-gnu/coreutils/libstdbuf.so; do
+  if [ -f "${'$'}L" ]; then
+    export _STDBUF_O=L _STDBUF_E=L LD_PRELOAD="${'$'}L${'$'}{LD_PRELOAD:+:${'$'}LD_PRELOAD}"
+    echo "[tiny] log PPSSPP per baris: ${'$'}L"
+    break
+  fi
+done
 """.trimStart(),
             )
             if (appImage && !isWine && !cmd.contains("--graphics")) cmd += " --graphics=\${TINY_PPSSPP_GRAPHICS:-vulkan}"
