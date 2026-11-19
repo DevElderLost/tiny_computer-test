@@ -159,10 +159,14 @@ object XppHost {
         val hz = (ctx.getSystemService(Context.WINDOW_SERVICE) as WindowManager).defaultDisplay.refreshRate
         refreshHz = if (hz >= 1f) hz else 60f
         NativeX11.nativeRefreshRates(handle, intArrayOf(refreshHz.roundToInt()))
-        NativeX11.nativeOptions(handle, false, true, Cfg.fpsLimit, refreshHz)
+        // Mode tampilan menu sesi ([Cfg.displayFit]): Fit = fullscreen mati; Stretch = fullscreen (isi layar); Soft Stretch =
+        // fullscreen + stretch 1 (shader pelebaran horizontal Vulkan/EGL, sama dengan Winlator Ludashi). DisplayX tidak punya Soft Stretch.
+        val fit = Cfg.displayFit
+        val soft = fit == Cfg.FIT_SOFT && backend != NativeX11.BACKEND_DISPLAYX
+        NativeX11.nativeOptions(handle, fit != Cfg.FIT_FIT, true, Cfg.fpsLimit, refreshHz)
         // Cfg.upscaler: 2 = Nearest. Filter lain memakai bilinear (0 = linear, 1 = nearest di semua backend); efek lain milik
-        // compositor Wayland tidak ada di server ini. Mode stretch 0 = Fit (bawaan Old Display dan Vulkan).
-        NativeX11.nativeVisualOptions(handle, if (Cfg.upscaler == 2) 1 else 0, 0, 0, 0.5f, false, null, 2, -1, 70, refreshHz, 0)
+        // compositor Wayland tidak ada di server ini. Parameter stretch: 0 = Fit/Stretch biasa, 1 = Soft Stretch.
+        NativeX11.nativeVisualOptions(handle, if (Cfg.upscaler == 2) 1 else 0, 0, if (soft) 1 else 0, 0.5f, false, null, 2, -1, 70, refreshHz, 0)
     }
 
     /** Mematikan server dan menghapus soketnya. Aman dipanggil bila server tidak ada. */

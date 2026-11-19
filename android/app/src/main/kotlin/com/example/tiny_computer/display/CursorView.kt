@@ -116,10 +116,12 @@ class CursorView(
         if (!ui.showCursor || hidden && clientDecided) return
         val (sw, sh) = sceneSize()
         if (sw <= 0 || sh <= 0 || width <= 0 || height <= 0) return
-        // sama dengan pemetaan sentuhan di DisplayActivity: scene diletakkan FIT di tengah layar
-        val s = min(width.toFloat() / sw, height.toFloat() / sh)
-        val cx = (width - sw * s) / 2f + px16 / 16f * s
-        val cy = (height - sh * s) / 2f + py16 / 16f * s
+        // sama dengan pemetaan sentuhan di DisplayActivity ([DisplayFit]: Fit/Stretch/Soft Stretch)
+        val vw = width.toFloat()
+        val vh = height.toFloat()
+        val s = DisplayFit.viewScale(vw, vh, sw, sh)
+        val cx = DisplayFit.screenX(px16 / 16f, vw, vh, sw, sh)
+        val cy = DisplayFit.screenY(py16 / 16f, vw, vh, sw, sh)
         val k = max(0.1f, s * ui.cursorScale)
         val bmp = bitmap
         if (bmp != null) {

@@ -17,6 +17,7 @@
 #include <errno.h>
 #include <poll.h>
 #include <time.h>
+#include <math.h>
 #include <pthread.h>
 #include <android/log.h>
 
@@ -219,6 +220,8 @@ static int g_req_detached;
 
 /* Scale mode + alignment (app values, see vk_present.h); written from any thread, read per frame. */
 static volatile int g_mode = VKP_MODE_STRETCH, g_align = VKP_ALIGN_CENTER;
+/* Soft Stretch menyala (hanya berarti saat g_mode == VKP_MODE_STRETCH). */
+static volatile int g_soft;
 
 /* The scene -> output mapping of the last frame (compositor thread): scene pixel (x,y) lands at
  * output (off_x + x * kx, off_y + y * ky), clipped to the region rectangle. */
@@ -363,6 +366,48 @@ void vk_present_set_scale_mode(int mode, int alignment) {
     if (alignment < VKP_ALIGN_CENTER || alignment > VKP_ALIGN_BOTTOM) alignment = VKP_ALIGN_CENTER;
     g_mode = mode;
     g_align = alignment;
+}
+
+void vk_present_set_soft_stretch(int on) { g_soft = on ? 1 : 0; }
+
+int vkp_soft_stretch_active(void) { return g_soft && g_mode == VKP_MODE_STRETCH; }
+
+/* Kurva Soft Stretch, sama dengan hybrid_curve()/main() di window_stretch.frag Winlator Ludashi: posisi output 0..1 ->
+ * posisi sumber 0..1. Tengah layar tertekan, tepi terentang. */
+#define SOFT_STRENGTH 0.40f
+#define SOFT_PROFILE  0.60f
+#define SOFT_STRIPS   96
+static float soft_warp(float t) {
+    const float x = t * 2.0f - 1.0f;
+    const float x2 = x * x, x5 = x2 * x2 * x;
+    const float sin_shape = sinf(0.5f * (float)M_PI * x);
+    const float quintic = 0.5f * x5 - 1.5f * x2 * x + 2.0f * x;
+    const float curved = sin_shape * (1.0f - SOFT_PROFILE) + quintic * SOFT_PROFILE;
+    const float warped = x + (curved - x) * SOFT_STRENGTH;
+    float u = 0.5f * warped + 0.5f;
+    return u < 0.0f ? 0.0f : (u > 1.0f ? 1.0f : u);
+}
+
+/* Soft Stretch tanpa shader: blit sumber (src_w x src_h) ke persegi tujuan [dx0,dx1) x [dy0,dy1) dalam jalur-jalur vertikal;
+ * tiap jalur memetakan rentang sumber dari soft_warp() secara linear (pendekatan per bagian, filter LINEAR). Mengembalikan
+ * jumlah region yang terisi (maks SOFT_STRIPS), 0 bila tidak ada yang bisa digambar. */
+static int soft_blits(VkImageBlit *out, int src_w, int src_h, int dx0, int dy0, int dx1, int dy1) {
+    const int w = dx1 - dx0;
+    if (w < 2 || dy1 <= dy0 || src_w < 2 || src_h < 1) return 0;
+    const int strips = w < SOFT_STRIPS ? w : SOFT_STRIPS;
+    int n = 0, px = dx0, ps = 0;
+    for (int i = 1; i <= strips; i++) {
+        int x = i == strips ? dx1 : dx0 + (int)((int64_t)w * i / strips);
+        int s = i == strips ? src_w : (int)(soft_warp((float)i / (float)strips) * (float)src_w + 0.5f);
+        if (x <= px || s <= ps) continue; /* jalur ini digabung ke jalur berikutnya */
+        out[n++] = (VkImageBlit){.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+                                 .srcOffsets = {{ps, 0, 0}, {s, src_h, 1}},
+                                 .dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+                                 .dstOffsets = {{px, dy0, 0}, {x, dy1, 1}}};
+        px = x;
+        ps = s;
+    }
+    return n;
 }
 
 static const char *mode_name(int m) {
@@ -1521,9 +1566,19 @@ static void record_screen_blit(VkCommandBuffer cmd, VkImage src, int src_w, int 
                           .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT};
     g_vk.CmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
                             0, 1, &mb, 0, NULL, 0, NULL);
-    if (have_blit)
-        g_vk.CmdBlitImage(cmd, src, VK_IMAGE_LAYOUT_GENERAL, g_images[img],
-                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, filter);
+    if (have_blit) {
+        VkImageBlit soft_regions[SOFT_STRIPS];
+        const int ns = vkp_soft_stretch_active()
+            ? soft_blits(soft_regions, src_w, src_h, blit.dstOffsets[0].x, blit.dstOffsets[0].y,
+                         blit.dstOffsets[1].x, blit.dstOffsets[1].y)
+            : 0;
+        if (ns > 0)
+            g_vk.CmdBlitImage(cmd, src, VK_IMAGE_LAYOUT_GENERAL, g_images[img],
+                              VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, (uint32_t)ns, soft_regions, filter);
+        else
+            g_vk.CmdBlitImage(cmd, src, VK_IMAGE_LAYOUT_GENERAL, g_images[img],
+                              VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, filter);
+    }
     VkImageMemoryBarrier b_present = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
@@ -1758,7 +1813,9 @@ static int render_impl(int scene_w, int scene_h, const struct vkp_draw *draws, i
         }
     }
     /* An HDR scene always takes the pass: its draws are composed into one encoding first. */
-    const int pass = deep || ((fx || fg || (hf && n > 0)) && ensure_scene_image(scene_w, scene_h) == 0);
+    /* Soft Stretch: the scene is composed off-screen first, then mapped onto the output in strips (record_screen_blit). */
+    const int soft = !g_plain_frame && vkp_soft_stretch_active();
+    const int pass = deep || ((fx || fg || soft || (hf && n > 0)) && ensure_scene_image(scene_w, scene_h) == 0);
     VkImage scene_img = deep ? g_fgscene.img : g_scene.img;
     const VkFormat scene_fmt = deep ? FG_HDR_FMT : SCENE_FMT;
     const VkFilter blit_filter = vkp_effects_blit_filter();
@@ -2401,9 +2458,15 @@ int vkp_pass_copy_to(struct vkp_image *dst, int wait_fd) {
                         .srcOffsets = {{0, 0, 0}, {g_pass.rw, g_pass.rh, 1}},
                         .dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
                         .dstOffsets = {{0, 0, 0}, {dst->w, dst->h, 1}}};
-    g_vk.CmdBlitImage(cmd, g_pass.result, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dst->image,
-                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit,
-                      (g_pass.rw == dst->w && g_pass.rh == dst->h) ? VK_FILTER_NEAREST : VK_FILTER_LINEAR);
+    VkImageBlit soft_regions[SOFT_STRIPS];
+    const int ns = vkp_soft_stretch_active() ? soft_blits(soft_regions, g_pass.rw, g_pass.rh, 0, 0, dst->w, dst->h) : 0;
+    if (ns > 0)
+        g_vk.CmdBlitImage(cmd, g_pass.result, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dst->image,
+                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, (uint32_t)ns, soft_regions, VK_FILTER_LINEAR);
+    else
+        g_vk.CmdBlitImage(cmd, g_pass.result, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dst->image,
+                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit,
+                          (g_pass.rw == dst->w && g_pass.rh == dst->h) ? VK_FILTER_NEAREST : VK_FILTER_LINEAR);
     VkImageMemoryBarrier rel = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         .newLayout = VK_IMAGE_LAYOUT_GENERAL, .srcQueueFamilyIndex = g_qfam,

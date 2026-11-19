@@ -2793,7 +2793,8 @@ static void render_scene(void) {
     }
 
     int rendered = 0;
-    int fx_on = vkp_effects_active();
+    /* Soft Stretch memakai compositor pass seperti efek layar: layer zero-copy tidak bisa melebarkan non-linear. */
+    int fx_on = vkp_effects_active() || vkp_soft_stretch_active();
     int framegen = vkp_framegen_active();
     /* HDR (see hdr_plan): route 0 = the old paths below; 1 / 2 = composed; 3 = layer only, effects and
      * frame generation skipped. Always 0 while the HDR gate is closed: nothing changes for that session. */

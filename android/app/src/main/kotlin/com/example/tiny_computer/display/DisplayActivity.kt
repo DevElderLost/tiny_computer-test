@@ -46,7 +46,6 @@ import com.example.tiny_computer.xpp.XppHost
 import com.example.tiny_computer.ui.TinyTheme
 import java.io.File
 import kotlin.math.abs
-import kotlin.math.min
 
 /** Status UI yang dibaca overlay Compose. */
 class DisplayUiState {
@@ -368,7 +367,7 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
         val id = if (CompositorHost.isStarted) null else turnip.install(Cfg.androidDriver)
         val refresh = (getSystemService(Context.WINDOW_SERVICE) as WindowManager).defaultDisplay.refreshRate
 
-        WaylandCompositor.nativeSetScaleMode(SCALE_FIT, ALIGN_CENTER)
+        ScreenFx.applyDisplayMode()
         WaylandCompositor.nativeSetUpscaler(Cfg.upscaler)
         WaylandCompositor.nativeSetMemoryLimit(Cfg.compositorMemMb)
         WaylandCompositor.nativeSetPresentMode(Cfg.presentMode)
@@ -486,19 +485,15 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
         return w to h
     }
 
-    /** Posisi layar -> koordinat scene (piksel scene yang digambar), dengan letterbox FIT di tengah. */
+    /** Posisi layar -> koordinat scene (piksel scene yang digambar), sesuai mode tampilan ([DisplayFit]: Fit/Stretch/Soft Stretch). */
     private fun sceneX(vx: Float): Int {
         val (sw, sh) = currentScene()
-        val s = min(surfaceView.width.toFloat() / sw, surfaceView.height.toFloat() / sh)
-        val off = (surfaceView.width - sw * s) / 2f
-        return ((vx - off) / s).toInt().coerceIn(0, sw - 1)
+        return DisplayFit.sceneX(vx, surfaceView.width.toFloat(), surfaceView.height.toFloat(), sw, sh)
     }
 
     private fun sceneY(vy: Float): Int {
         val (sw, sh) = currentScene()
-        val s = min(surfaceView.width.toFloat() / sw, surfaceView.height.toFloat() / sh)
-        val off = (surfaceView.height - sh * s) / 2f
-        return ((vy - off) / s).toInt().coerceIn(0, sh - 1)
+        return DisplayFit.sceneY(vy, surfaceView.width.toFloat(), surfaceView.height.toFloat(), sw, sh)
     }
 
     private fun move(x: Float, y: Float) =
@@ -550,7 +545,7 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
         }
         if (touchpad) {
             val (sw, sh) = currentScene()
-            val s = min(surfaceView.width.toFloat() / sw, surfaceView.height.toFloat() / sh)
+            val s = DisplayFit.viewScale(surfaceView.width.toFloat(), surfaceView.height.toFloat(), sw, sh)
             touchpadInput.speed = ui.touchpadSpeed
             touchpadInput.scrollSpeed = ui.touchpadScroll
             touchpadInput.naturalScroll = ui.touchpadNatural
@@ -663,8 +658,6 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
 
         /** Ukuran output yang terakhir diberikan ke compositor (satu proses = satu compositor). */
         @Volatile private var lastOutput: Pair<Int, Int>? = null
-        private const val SCALE_FIT = 1
-        private const val ALIGN_CENTER = 0
         private const val SCENE_MOTION = 2
         private const val SCENE_BUTTON = 3
         private const val SCENE_WHEEL = 4

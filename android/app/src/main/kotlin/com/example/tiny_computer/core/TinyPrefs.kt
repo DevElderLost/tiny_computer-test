@@ -209,6 +209,16 @@ object Cfg {
     var presentMode: Int
         get() = TinyPrefs.getInt("presentMode", 0)
         set(v) = TinyPrefs.setInt("presentMode", v)
+    /**
+     * Mode tampilan layar (menu sesi > Effects), berlaku untuk Xwayland, Wayland, dan X++: [FIT_FIT] letterbox rasio asli,
+     * [FIT_STRETCH] memenuhi layar, [FIT_SOFT] Stretch dengan pelebaran horizontal non-linear (Soft Stretch Winlator Ludashi).
+     */
+    const val FIT_FIT = 0
+    const val FIT_STRETCH = 1
+    const val FIT_SOFT = 2
+    var displayFit: Int
+        get() = TinyPrefs.getInt("displayFit", FIT_FIT).coerceIn(FIT_FIT, FIT_SOFT)
+        set(v) = TinyPrefs.setInt("displayFit", v.coerceIn(FIT_FIT, FIT_SOFT))
     /** Jumlah buffer swapchain layar: 0 otomatis, 2 double, 3 triple, 4 quad buffering. */
     var swapBuffers: Int
         get() = TinyPrefs.getInt("swapBuffers", 0)

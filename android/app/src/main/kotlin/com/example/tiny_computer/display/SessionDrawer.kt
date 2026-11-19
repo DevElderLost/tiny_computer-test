@@ -378,6 +378,20 @@ private val UPSCALER_NAMES = listOf("None", "Linear", "Nearest", "SGSR", "FSR", 
 @Composable
 private fun EffectPage() {
     var rev by remember { mutableStateOf(0) }
+    val ctx = LocalContext.current
+    // Mode tampilan (Fit / Stretch / Soft Stretch): berlaku untuk Xwayland, Wayland, dan X++
+    DeckGroup(stringResource(R.string.tc_display_mode_title)) {
+        var fit by remember { mutableStateOf(Cfg.displayFit) }
+        DeckChoiceRow(
+            stringResource(R.string.tc_display_mode), stringResource(R.string.tc_display_mode_hint),
+            listOf(
+                Cfg.FIT_FIT to stringResource(R.string.tc_display_mode_fit),
+                Cfg.FIT_STRETCH to stringResource(R.string.tc_display_mode_stretch),
+                Cfg.FIT_SOFT to stringResource(R.string.tc_display_mode_soft),
+            ),
+            fit,
+        ) { fit = it; Cfg.displayFit = it; ScreenFx.applyDisplayModeIfRunning(ctx) }
+    }
     DeckGroup(stringResource(R.string.tc_fx_title)) {
         key(rev) {
             var up by remember { mutableStateOf(Cfg.upscaler) }

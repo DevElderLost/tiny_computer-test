@@ -436,6 +436,12 @@
     <string name="tc_drawer_edit_layout">Edit controller layout</string>
     <string name="tc_drawer_effect">Effects</string>
     <string name="tc_fx_title">Screen effects</string>
+    <string name="tc_display_mode_title">Display mode</string>
+    <string name="tc_display_mode">Fit / Stretch</string>
+    <string name="tc_display_mode_hint">How the desktop fills the screen, for Xwayland, Wayland and X++. Fit keeps the aspect ratio (bars around the picture), Stretch fills the whole screen, Soft Stretch fills it and widens the picture more at the left and right edges than in the middle. Touch input follows the mode. With the DisplayX renderer Soft Stretch falls back to Stretch.</string>
+    <string name="tc_display_mode_fit">Fit</string>
+    <string name="tc_display_mode_stretch">Stretch</string>
+    <string name="tc_display_mode_soft">Soft Stretch</string>
     <string name="tc_fx_hdr_output">HDR10 output</string>
     <string name="tc_fx_hdr_output_hint">Offers HDR to games (DXVK_HDR=1 for Wine apps). Needs an HDR10 display; applies when the session starts.</string>
     <string name="tc_fx_hdr_white">SDR white level in HDR (nits)</string>

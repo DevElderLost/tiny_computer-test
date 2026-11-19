@@ -439,6 +439,10 @@ public final class WaylandCompositor {
      *  the pointer agree. OFF and FIT both letterbox. Callable any time; the next frame uses it. */
     public static native void nativeSetScaleMode(int fullscreenMode, int screenAlignment);
 
+    /** Soft Stretch (Winlator Ludashi): with the STRETCH scale mode the picture is widened horizontally along a
+     *  non-linear curve (edges stretch more than the centre). Ignored in the other scale modes. Callable any time. */
+    public static native void nativeSetSoftStretch(boolean enabled);
+
     // ---- Screen effects: the X11 Vulkan renderer's post chain, run by the compositor between the
     // composited scene and the output blit (waylandcomp/src/effects_chain.c). Same modes, ranges and
     // pass order as VulkanRenderer's setters, so a saved preset looks the same on both backends.

@@ -31,6 +31,12 @@ enum vkp_scale_mode { VKP_MODE_OFF = 0, VKP_MODE_FIT = 1, VKP_MODE_STRETCH = 2, 
                       VKP_MODE_INTEGER = 4 };
 enum vkp_align { VKP_ALIGN_CENTER = 0, VKP_ALIGN_TOP = 1, VKP_ALIGN_BOTTOM = 2 };
 void vk_present_set_scale_mode(int mode, int alignment);
+/* Soft Stretch (logika window_stretch.frag Winlator Ludashi): pada mode STRETCH, gambar dilebarkan horizontal dengan kurva
+ * non-linear (strength .40, profile .60) sehingga tepi kiri/kanan lebih terentang daripada tengah. Hanya berlaku bersama
+ * VKP_MODE_STRETCH; mode lain mengabaikannya. Callable dari thread mana pun, berlaku di frame berikutnya. */
+void vk_present_set_soft_stretch(int on);
+/* 1 bila Soft Stretch sedang berlaku (menyala DAN mode STRETCH): scene harus lewat compositor pass, bukan layer zero-copy. */
+int vkp_soft_stretch_active(void);
 /* Output pixel (0..output size) -> scene pixel through the current mapping (compositor thread).
  * Returns 0 before the first frame has established a mapping (sx/sy untouched). */
 int vkp_output_to_scene(double ox, double oy, double *sx, double *sy);

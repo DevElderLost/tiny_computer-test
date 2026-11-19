@@ -111,7 +111,7 @@ private fun DeckExtras(pad: PadBridge, reloadKey: Int, sceneSize: Pair<Int, Int>
         // grip dan trackpad ditaruh di titik tengah tersimpan (editor) atau bawaan, sama dengan yang ditampilkan editor
         val placed = remember(w, h, scale, density, reloadKey) { DeckLayout.resolve(ctx, w, h, density, scale) }
         // piksel layar per piksel scene (letterbox FIT), untuk kecepatan kursor mode mouse
-        val viewScale = min(w.toFloat() / max(1, sceneSize.first), h.toFloat() / max(1, sceneSize.second))
+        val viewScale = com.example.tiny_computer.display.DisplayFit.viewScale(w.toFloat(), h.toFloat(), max(1, sceneSize.first), max(1, sceneSize.second))
         for (spec in DeckLayout.specs) {
             val c = placed[spec.id] ?: continue
             val wDp = (spec.wDp * scale).dp

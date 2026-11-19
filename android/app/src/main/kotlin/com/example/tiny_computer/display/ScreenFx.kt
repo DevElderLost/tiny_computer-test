@@ -1,10 +1,12 @@
 package com.example.tiny_computer.display
 
+import android.content.Context
 import com.droiddeck.launcher.wayland.CompositorHost
 import com.droiddeck.launcher.wayland.WaylandCompositor
 import com.example.tiny_computer.core.Cfg
 import com.example.tiny_computer.core.ReshadeShaders
 import com.example.tiny_computer.core.TinyPrefs
+import com.example.tiny_computer.xpp.XppHost
 
 /**
  * Menerapkan efek layar compositor Wayland dari [Cfg] (HDR bloom, CAS, debanding, grading warna, FXAA,
@@ -31,6 +33,18 @@ object ScreenFx {
         if (!CompositorHost.isStarted) return
         WaylandCompositor.nativeSetPresentMode(Cfg.presentMode)
         WaylandCompositor.nativeSetBuffering(Cfg.swapBuffers)
+    }
+
+    /** Scale mode + Soft Stretch compositor Wayland dari [Cfg.displayFit] (Fit / Stretch / Soft Stretch). */
+    fun applyDisplayMode() {
+        WaylandCompositor.nativeSetScaleMode(DisplayFit.waylandScaleMode(), 0)
+        WaylandCompositor.nativeSetSoftStretch(DisplayFit.mode == DisplayFit.SOFT)
+    }
+
+    /** Dari menu sesi: mode tampilan berlaku langsung di compositor Wayland (Xwayland/Wayland) dan server X++ yang hidup. */
+    fun applyDisplayModeIfRunning(ctx: Context) {
+        if (CompositorHost.isStarted) applyDisplayMode()
+        XppHost.applyOptions(ctx)
     }
 
     /** Batas memori Vulkan compositor: berlaku langsung (alokasi baru di atas batas ditolak). */

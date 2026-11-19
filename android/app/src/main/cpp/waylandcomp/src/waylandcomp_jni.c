@@ -464,6 +464,14 @@ Java_com_droiddeck_launcher_wayland_WaylandCompositor_nativeSetScaleMode(JNIEnv 
     __android_log_print(ANDROID_LOG_INFO, TAG, "scale mode %d alignment %d", mode, alignment);
 }
 
+/* Soft Stretch (hanya berlaku bersama scale mode STRETCH). Any thread, any time; the next frame uses it. */
+JNIEXPORT void JNICALL
+Java_com_droiddeck_launcher_wayland_WaylandCompositor_nativeSetSoftStretch(JNIEnv *env, jclass clazz, jboolean on) {
+    (void)env; (void)clazz;
+    vk_present_set_soft_stretch(on == JNI_TRUE);
+    __android_log_print(ANDROID_LOG_INFO, TAG, "soft stretch %d", on == JNI_TRUE);
+}
+
 /* ---- screen effects (effects_chain.c): the X11 Vulkan renderer's post chain in the compositor.
  * Any thread, any time; the compositor thread applies them on its next frame and logs one
  * `effects` line per change. Values are 1:1 with VulkanRenderer's setters. */
