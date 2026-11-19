@@ -126,13 +126,14 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
 
     /**
      * True bila layar ini menampilkan X++ native X server, bukan compositor Wayland: desktop dengan Display server = X++,
-     * atau aplikasi Shortcut yang berjalan di dalam desktop X++ itu. Ditentukan sekali saat layar dibuat.
+     * atau aplikasi Shortcut yang mengikuti pengaturan itu (di dalam desktop X++, atau sesi aplikasi sendiri di atas X++ bila
+     * desktop belum berjalan). Ditentukan sekali saat layar dibuat.
      */
     private var useXpp = false
 
     private fun decideXpp(): Boolean =
         if (currentApp == null) (if (Launcher.guiStarted) Launcher.desktopIsXpp else Cfg.desktopXpp)
-        else Launcher.guiStarted && Launcher.desktopIsXpp
+        else Launcher.shortcutXpp()
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {

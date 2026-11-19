@@ -56,9 +56,20 @@ object FlatpakWayland {
     /** Xwayland hasil patch (DRI3 tanpa DRM) terpasang dan dinyalakan: syarat jalur X11 memberi GPU untuk GL dan Vulkan. */
     private fun dri3Xwayland(): Boolean = Cfg.dri3 && File(TinyEnv.dataPath, "tiny/extra/Xwayland").isFile
 
-    /** AUTO -> X11 (Zink/Turnip untuk OpenGL) bila Turnip aktif dan DRI3 ada, selain itu Wayland seperti sebelumnya. */
-    internal fun resolve(mode: Mode, turnipOn: Boolean): Mode =
-        if (mode == Mode.AUTO) (if (turnipOn && dri3Xwayland()) Mode.X11 else Mode.WAYLAND) else mode
+    /**
+     * Mengikuti pengaturan Display server desktop:
+     *  - [xpp] (X++): tidak ada compositor Wayland sama sekali, jadi selalu X11 (juga bila env meminta `wayland`);
+     *  - mode Xwayland ([Cfg.desktopWayland] mati): AUTO -> X11, seperti desktop yang tidak memakai Wayland;
+     *  - mode Wayland: AUTO -> X11 (Zink/Turnip untuk OpenGL) bila Turnip aktif dan DRI3 ada, selain itu Wayland seperti sebelumnya.
+     * `off` tidak pernah sampai ke sini (lihat [rewrite]).
+     */
+    internal fun resolve(mode: Mode, turnipOn: Boolean, xpp: Boolean = false): Mode = when {
+        xpp -> Mode.X11
+        mode != Mode.AUTO -> mode
+        !Cfg.desktopWayland -> Mode.X11
+        turnipOn && dri3Xwayland() -> Mode.X11
+        else -> Mode.WAYLAND
+    }
 
     private fun q(s: String) = "'" + s.replace("'", "'\\''") + "'"
 
@@ -107,11 +118,11 @@ object FlatpakWayland {
 
     /**
      * Menulis ulang [cmd] bila itu `flatpak run ...`; null bila bukan flatpak atau [mode] OFF.
-     * [turnipOn] = Turnip aktif untuk aplikasi ini (lihat ShortcutRunner).
+     * [turnipOn] = Turnip aktif untuk aplikasi ini (lihat ShortcutRunner). [xpp] = aplikasi berjalan di atas X++ native X server.
      */
-    fun rewrite(ctx: Context, cmd: String, requested: Mode, turnipOn: Boolean): Result? {
+    fun rewrite(ctx: Context, cmd: String, requested: Mode, turnipOn: Boolean, xpp: Boolean = false): Result? {
         if (requested == Mode.OFF) return null
-        val mode = resolve(requested, turnipOn)
+        val mode = resolve(requested, turnipOn, xpp)
         val m = RUN.matchEntire(cmd.trim()) ?: return null
         val prog = m.groupValues[1]
         val rest = m.groupValues[2]
@@ -152,7 +163,8 @@ object FlatpakWayland {
             // Xwayland tanpa DRI3 (hanya jalur X11): presentasi Vulkan lewat WSI software
             if (mode == Mode.X11) {
                 opts += "--env=LIBGL_KOPPER_DRI2=true"
-                if (!Cfg.dri3) opts += "--env=MESA_VK_WSI_DEBUG=sw"
+                // X++ tidak punya DRI3 yang bisa dipakai Mesa biasa: selalu WSI software (GPU tetap merender)
+                if (!Cfg.dri3 || xpp) opts += "--env=MESA_VK_WSI_DEBUG=sw"
             }
             // ICD bawaan (`$GUEST_TINY/extra/...`) ada di luar sandbox; BwrapSpawner menerjemahkan path guest ini ke
             // host lewat bind sesi. Driver hasil impor ada di /data, yang selalu di-bind ke sandbox.
@@ -180,7 +192,9 @@ object FlatpakWayland {
         opts.distinct().let { opts.clear(); opts.addAll(it) }
         val command = prog + " run " + opts.joinToString(" ") { q(it) } + rest
         val why = when {
+            xpp -> " (X++: tidak ada compositor Wayland, X11 lewat server X++)"
             requested != Mode.AUTO -> if (mode == Mode.WAYLAND) " (dipilih: Wayland dulu, X11 hanya cadangan)" else " (dipilih: X11/Xwayland)"
+            mode == Mode.X11 && !Cfg.desktopWayland -> " (otomatis: Display server desktop = Xwayland, tanpa Wayland)"
             mode == Mode.X11 -> " (otomatis: X11 + Xwayland DRI3 supaya OpenGL memakai Zink/Turnip, bukan llvmpipe)"
             else -> " (otomatis: Wayland, karena Turnip/Xwayland DRI3 tidak aktif)"
         }

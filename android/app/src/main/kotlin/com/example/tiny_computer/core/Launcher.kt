@@ -55,6 +55,25 @@ object Launcher {
     /** Desktop X++ sedang berjalan: tidak ada compositor Wayland (wayland-0) untuk aplikasi di dalamnya. */
     val xppDesktopActive: Boolean get() = guiStarted && desktopIsXpp
 
+    /**
+     * True bila sesi aplikasi Shortcut yang berdiri sendiri (tanpa desktop) dinyalakan di atas X++ native X server, bukan
+     * Xwayland. Ditetapkan saat sesi dibuat ([launchAppLocked]) dan dikembalikan ke false oleh [stopAppSession].
+     */
+    @Volatile var appSessionXpp = false
+
+    /**
+     * Display server yang dipakai aplikasi Shortcut berikutnya: SELALU mengikuti pengaturan Display server desktop.
+     *  - desktop sedang berjalan: ikut desktop itu ([desktopIsXpp]);
+     *  - sesi aplikasi sudah berjalan: ikut sesi itu ([appSessionXpp]); sesi tidak bisa berganti server di tengah jalan;
+     *  - selain itu: pengaturan saat ini ([Cfg.desktopXpp]), jadi X++ Vulkan/EGL/DisplayX/Old Display ([Cfg.xppBackend])
+     *    dipakai juga oleh sesi baru, bukan lagi selalu Xwayland.
+     */
+    fun shortcutXpp(): Boolean = when {
+        guiStarted -> desktopIsXpp
+        appSessionStarted -> appSessionXpp
+        else -> Cfg.desktopXpp
+    }
+
     /** True setelah perintah Xwayland + Xsession dikirim ke kontainer yang sedang berjalan. */
     // state Compose (bukan @Volatile biasa) supaya tombol "kembali ke desktop" muncul/hilang mengikuti status desktop
     var guiStarted by mutableStateOf(false)
@@ -1189,7 +1208,9 @@ fi
 
     private fun launchAppLocked(ctx: Context, appId: String) {
         val myEpoch = epoch
-        val script = ShortcutRunner.prepare(ctx, appId) ?: run {
+        // Display server aplikasi ini = pengaturan Display server desktop (X++ atau Xwayland/Wayland), ditetapkan sekali di sini
+        val xpp = shortcutXpp()
+        val script = ShortcutRunner.prepare(ctx, appId, xpp) ?: run {
             mainHandler.post {
                 if (appPhase == AppPhase.STARTING) appPhase = AppPhase.IDLE
                 onAppSessionEnded?.invoke(null)
@@ -1216,17 +1237,41 @@ fi
             appSessionSize = size
             val sLog = LaunchLog.begin("shortcut")
             appSessionLog = sLog
-            LaunchLog.write(sLog, "session", "sesi aplikasi Shortcut dimulai (Xwayland ${size.first}x${size.second}), dipicu oleh $appId")
+            if (xpp) {
+                // X++ native X server dari proses aplikasi (sama dengan Open desktop): mode tampilan = Cfg.xppBackend
+                // (Vulkan, EGL, DisplayX, Old Display). Harus menyala SEBELUM proot sesi dan aplikasi: soket X4 dibuat di sini.
+                val backendName = when (Cfg.xppBackend) {
+                    Cfg.XPP_VULKAN -> "Vulkan"
+                    Cfg.XPP_DISPLAYX -> "DisplayX"
+                    Cfg.XPP_OLD_DISPLAY -> "Old Display (EGL)"
+                    else -> "EGL"
+                }
+                LaunchLog.write(sLog, "session", "sesi aplikasi Shortcut dimulai (X++ $backendName ${size.first}x${size.second}), dipicu oleh $appId")
+                if (!XppHost.ensureStarted(ctx, size.first, size.second)) {
+                    val reason = XppHost.lastError ?: "unknown error"
+                    LaunchLog.write(sLog, "session", "X++ gagal dinyalakan: $reason")
+                    appSessionXpp = false
+                    mainHandler.post {
+                        android.widget.Toast.makeText(ctx.applicationContext, "X++ failed to start: $reason", android.widget.Toast.LENGTH_LONG).show()
+                    }
+                    // ditangani launchApp: fase kembali IDLE dan layar aplikasi ditutup
+                    error("X++ gagal dinyalakan: $reason")
+                }
+                appSessionXpp = true
+            } else {
+                appSessionXpp = false
+                LaunchLog.write(sLog, "session", "sesi aplikasi Shortcut dimulai (Xwayland ${size.first}x${size.second}), dipicu oleh $appId")
+            }
             // sesi yang dimulai aplikasi Wine (.exe) mulai tanpa window manager (layar penuh); aplikasi Linux menyalakannya lagi
             val withWm = !ShortcutRunner.isWineApp(appId)
             if (!withWm) LaunchLog.write(sLog, "session", "window manager dijeda (sesi dimulai aplikasi Wine, layar penuh)")
-            val session = spawnDetached(appProotScript(ctx, ShortcutRunner.prepareSession(ctx, size, withWm), killOnExit = true, log = sLog), "TinyAppSession")
+            val session = spawnDetached(appProotScript(ctx, ShortcutRunner.prepareSession(ctx, size, withWm, xpp), killOnExit = true, log = sLog), "TinyAppSession")
             appSession = session
             // Xwayland mati sendiri (crash): aplikasinya ikut putus, tutup sesi dan kembali ke Shortcut
             watch("tiny-session-wait") {
                 runCatching { session.waitFor() }
                 pids.remove(session)
-                LaunchLog.write(sLog, "session", "proot sesi aplikasi berakhir (Xwayland keluar)")
+                LaunchLog.write(sLog, "session", if (xpp) "proot sesi aplikasi berakhir (server X++ berhenti)" else "proot sesi aplikasi berakhir (Xwayland keluar)")
                 if (appSession === session) scheduleIdleCheck(0)
             }
             // proot aplikasi tidak lagi berhenti sendiri saat aplikasinya selesai (tanpa --kill-on-exit),
@@ -1313,6 +1358,12 @@ fi
         }
         // sandbox Flatpak hidup di luar pohon proot sesi; yang masih tersisa setelah masa tunggu dimatikan di sini
         if (graceful) BwrapSpawner.sandboxPids().forEach { killed += killTree(it) }
+        // Sesi Shortcut di atas X++: server X hidup di proses aplikasi, bukan di proot, jadi dimatikan di sini (setelah
+        // kliennya dikirimi sinyal) dan soketnya dihapus. Desktop X++ ([desktopIsXpp]) dimatikan oleh shutdownDesktop.
+        if (appSessionXpp) {
+            appSessionXpp = false
+            XppHost.stop()
+        }
         return killed
     }
 

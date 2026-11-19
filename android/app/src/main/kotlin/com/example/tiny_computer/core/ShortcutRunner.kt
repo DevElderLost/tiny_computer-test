@@ -128,8 +128,12 @@ object ShortcutRunner {
 
     private val ENV_KEY = Regex("[A-Za-z_][A-Za-z0-9_]*")
 
-    /** Isi skrip peluncur untuk satu aplikasi dengan pengaturannya. */
-    private fun script(ctx: Context, app: DesktopApps.App, s: ShortcutPrefs.Settings, id: String): String {
+    /**
+     * Isi skrip peluncur untuk satu aplikasi dengan pengaturannya. [xpp] = aplikasi berjalan di atas X++ native X server
+     * (pengaturan Display server desktop = X++; lihat [Launcher.shortcutXpp]): tidak ada compositor Wayland, jadi tidak ada
+     * variabel Wayland, dan Turnip/Zink memakai WSI software seperti desktop X++.
+     */
+    private fun script(ctx: Context, app: DesktopApps.App, s: ShortcutPrefs.Settings, id: String, xpp: Boolean): String {
         val sb = StringBuilder()
         sb.append("#!/bin/sh\n")
         sb.append("# Ditulis ulang oleh menu Shortcut Tiny Computer setiap kali aplikasi dijalankan.\n")
@@ -156,7 +160,12 @@ fi
 """.trimStart(),
         )
         sb.append("export DISPLAY=:4\n")
-        // sesi X (Xwayland milik desktop atau milik sesi aplikasi) bisa baru menyala: tunggu soketnya
+        if (xpp) {
+            // sama dengan desktop X++ (Launcher.guiCommandXpp): tanpa Wayland, kursor/masukan lewat event inti X
+            sb.append("unset WAYLAND_DISPLAY\n")
+            sb.append("export TINY_NO_WAYLAND=1 GDK_CORE_DEVICE_EVENTS=1 QT_XCB_NO_XI2=1\n")
+        }
+        // sesi X (Xwayland atau X++ milik desktop atau milik sesi aplikasi) bisa baru menyala: tunggu soketnya
         sb.append("i=0; while [ \$i -lt 150 ] && [ ! -S /tmp/.X11-unix/X4 ]; do sleep 0.2; i=\$((i+1)); done\n")
 
         // Aplikasi Wine? (dipakai untuk memilih jalur Wayland di bawah)
@@ -184,8 +193,8 @@ fi
 
         // Bawaan: semua aplikasi Shortcut (Linux dan .exe Wine) mendapat XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0
         // seperti Open desktop (Cfg.desktopWayland, bawaan aktif). Hanya dua variabel itu; pengaturan GPU dan env
-        // buatan pengguna di bawah tetap bisa menimpanya.
-        if (Cfg.desktopWayland && !Launcher.xppDesktopActive) {
+        // buatan pengguna di bawah tetap bisa menimpanya. Tidak untuk X++ (tidak ada compositor Wayland).
+        if (Cfg.desktopWayland && !xpp) {
             sb.append("if [ -S /tmp/wayland-0 ]; then export XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0; fi\n")
         }
         // grafis khusus aplikasi ini
@@ -200,7 +209,7 @@ fi
                 // LIBGL_KOPPER_DRI2 selalu: EGL di atas X11 butuh ini agar tidak jatuh ke llvmpipe saat DRI3Open ditolak
                 sb.append("export LIBGL_KOPPER_DRI2=true\n")
                 // X++ tidak punya DRI3 yang bisa dipakai Mesa biasa: WSI software (GPU merender, PutImage menampilkan)
-                if (!Cfg.dri3 || Launcher.xppDesktopActive) sb.append("export MESA_VK_WSI_DEBUG=sw\n")
+                if (!Cfg.dri3 || xpp) sb.append("export MESA_VK_WSI_DEBUG=sw\n")
             }
         }
         // Program Vulkan/SDL memakai WSI Wayland langsung ke compositor, bukan X11 lewat Xwayland (tanpa DRI3):
@@ -209,7 +218,8 @@ fi
         // dengan GPU default tetap lewat X11 dan Vulkan-nya gagal). Variabel ini hanya untuk proses aplikasi ini, tidak
         // diekspor ke seluruh guest (GTK/Qt/Firefox tetap X11 lewat GDK_BACKEND/QT_QPA_PLATFORM). vkcube/vkcubepp
         // mendapat `--wsi wayland` dari pembungkus [WsiWayland]. SDL_VIDEODRIVER tidak diatur untuk program .exe (Wine).
-        if (turnipOn && !Launcher.xppDesktopActive) {
+        // Mengikuti Display server desktop: hanya bila mode Wayland (Cfg.desktopWayland); mode Xwayland dan X++ tetap X11.
+        if (turnipOn && !xpp && Cfg.desktopWayland) {
             val sdl = if (isWine) "" else " SDL_VIDEODRIVER=wayland"
             sb.append("if [ -S /tmp/wayland-0 ]; then export XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0$sdl; fi\n")
         }
@@ -264,7 +274,7 @@ fi
         if (s.args.isNotBlank()) cmd += " " + s.args.trim()
         // Aplikasi Flathub (`flatpak run ...`): Wayland dulu, X11/Xwayland hanya cadangan, plus Turnip bila aktif.
         // `flatpak run` membersihkan lingkungan, jadi ini harus berupa opsi di baris perintah (lihat FlatpakWayland).
-        FlatpakWayland.rewrite(ctx, cmd, FlatpakWayland.mode(effectiveEnv(app, s)), turnipOn)?.let { r ->
+        FlatpakWayland.rewrite(ctx, cmd, FlatpakWayland.mode(effectiveEnv(app, s)), turnipOn, xpp)?.let { r ->
             cmd = r.command
             sb.append("echo ${q(r.note)}\n")
         }
@@ -286,7 +296,7 @@ exec sh -c "${'$'}TINY_CMD"
      * `/bin/sh <path>` di proot baru), atau null bila aplikasinya sudah tidak ada. Log ada di
      * `~/.vnc/shortcut-<id>.log`.
      */
-    fun prepare(ctx: Context, appId: String): String? {
+    fun prepare(ctx: Context, appId: String, xpp: Boolean = Launcher.shortcutXpp()): String? {
         val app = DesktopApps.find(appId)
         if (app == null) {
             Log.w(TAG, "aplikasi $appId tidak ditemukan")
@@ -294,7 +304,7 @@ exec sh -c "${'$'}TINY_CMD"
         }
         WsiWayland.install() // pembungkus vkcube/vkcubepp: --wsi wayland
         val id = safe(appId)
-        write("run-$id.sh", script(ctx, app, ShortcutPrefs.get(appId), id))
+        write("run-$id.sh", script(ctx, app, ShortcutPrefs.get(appId), id, xpp))
         return "$GUEST_DIR/run-$id.sh"
     }
 
@@ -305,20 +315,32 @@ exec sh -c "${'$'}TINY_CMD"
      * hidup selama X hidup dan, karena `--kill-on-exit`, window manager ikut berhenti bersamanya.
      * [withWm] false (sesi dimulai aplikasi Wine): window manager dijeda supaya game bisa layar penuh; aplikasi Linux
      * yang dijalankan kemudian menyalakannya lagi.
+     * [xpp] true (Display server desktop = X++): server X sudah menyala di proses aplikasi ([XppHost.ensureStarted]) dan
+     * mendengarkan di X4, jadi tidak ada Xwayland: soket X4 tidak dihapus, tidak menunggu compositor Wayland, tidak
+     * memakai xrandr, dan proot ini hanya menjaga window manager lalu berakhir bila soket X++ hilang (server dimatikan).
      */
-    fun prepareSession(ctx: Context, size: Pair<Int, Int>, withWm: Boolean = true): String {
+    fun prepareSession(ctx: Context, size: Pair<Int, Int>, withWm: Boolean = true, xpp: Boolean = false): String {
         val (w, h) = size
         // berkas penanda: penjaga window manager di skrip sesi tidak menyalakannya (aplikasi Wine juga membuatnya sendiri)
         val noWm = if (withWm) "" else ": > \"${'$'}HOME/.vnc/no-wm\"\n"
+        // Xwayland (bawaan) atau X++ (server di proses aplikasi): bagian skrip yang berbeda
+        val cleanSock = if (xpp) "rm -f /tmp/.X4-lock" else "rm -f /tmp/.X11-unix/X4 /tmp/.X4-lock"
+        val waitWayland = if (xpp) "" else "i=0; while [ \$i -lt 150 ] && [ ! -S /tmp/wayland-0 ]; do sleep 0.2; i=\$((i+1)); done\n"
+        val xrandrCond = if (xpp) "false" else "command -v xrandr >/dev/null 2>&1"
+        val serverTail = if (xpp) {
+            "i=0; while [ \$i -lt 150 ] && [ ! -S /tmp/.X11-unix/X4 ]; do sleep 0.2; i=\$((i+1)); done\n" +
+                "echo \"[tiny] sesi X++ aktif ${w}x$h\" > \"\$HOME/.vnc/xwayland.log\"\n" +
+                "while [ -S /tmp/.X11-unix/X4 ]; do sleep 2; done\n"
+        } else {
+            "XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0 ${Launcher.xwaylandEnv()}exec ${Launcher.xwaylandBin()} :4 -fullscreen -geometry ${w}x$h -noreset -ac +iglx -extension MIT-SHM > \"\$HOME/.vnc/xwayland.log\" 2>&1\n"
+        }
         write(
             SESSION_SCRIPT,
             """
 #!/bin/sh
 mkdir -p "${'$'}HOME/.vnc"
-command -v Xwayland >/dev/null 2>&1 || { echo "Xwayland belum terpasang"; exit 1; }
-rm -f /tmp/.X11-unix/X4 /tmp/.X4-lock
-i=0; while [ ${'$'}i -lt 150 ] && [ ! -S /tmp/wayland-0 ]; do sleep 0.2; i=${'$'}((i+1)); done
-rm -f "${'$'}HOME/.vnc/no-wm"
+${if (xpp) "" else "command -v Xwayland >/dev/null 2>&1 || { echo \"Xwayland belum terpasang\"; exit 1; }\n"}${cleanSock}
+${waitWayland}rm -f "${'$'}HOME/.vnc/no-wm"
 ${noWm}# window manager (title bar + tombol tutup/maksimalkan/kecilkan) untuk aplikasi Shortcut.
 # Berkas ~/.vnc/no-wm (dibuat aplikasi Wine) = window manager dijeda; aplikasi Linux menghapusnya agar WM menyala lagi.
 # - berjalan di bus D-Bus sendiri: xfwm4 butuh xfconf lewat D-Bus, tanpa itu langsung mati dan jendela
@@ -368,7 +390,7 @@ ${noWm}# window manager (title bar + tombol tutup/maksimalkan/kecilkan) untuk ap
 # Paksa mode layar = ${w}x$h bila xrandr ada (Xwayland rootful bisa menyala dengan mode lain); hasilnya dicatat.
 (
   i=0; while [ ${'$'}i -lt 150 ] && [ ! -S /tmp/.X11-unix/X4 ]; do sleep 0.2; i=${'$'}((i+1)); done
-  if command -v xrandr >/dev/null 2>&1; then
+  if ${xrandrCond}; then
     export DISPLAY=:4
     sleep 1
     out=${'$'}(xrandr 2>/dev/null | awk '/ connected/{print ${'$'}1; exit}')
@@ -376,8 +398,7 @@ ${noWm}# window manager (title bar + tombol tutup/maksimalkan/kecilkan) untuk ap
     xrandr --current >> "${'$'}HOME/.vnc/xrandr.log" 2>&1
   fi
 ) &
-XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0 ${Launcher.xwaylandEnv()}exec ${Launcher.xwaylandBin()} :4 -fullscreen -geometry ${w}x$h -noreset -ac +iglx -extension MIT-SHM > "${'$'}HOME/.vnc/xwayland.log" 2>&1
-""".trimStart(),
+${serverTail}""".trimStart(),
         )
         return "$GUEST_DIR/$SESSION_SCRIPT"
     }
