@@ -191,6 +191,18 @@ if [ -n "${'$'}TINY_LAUNCH_LOG" ]; then
         echo "[tiny] diag thr ${'$'}p/${'$'}{t##*/} ${'$'}(cat ${'$'}t/comm 2>/dev/null) state=${'$'}(awk '/^State:/{print ${'$'}2}' ${'$'}t/status 2>/dev/null) wchan=${'$'}(cat ${'$'}t/wchan 2>/dev/null) syscall=${'$'}(cut -d' ' -f1-3 ${'$'}t/syscall 2>/dev/null)"
       done
     done
+    # sampel CPU/context switch tiap thread PPSSPP: dua kali (15 dtk dan 5 dtk kemudian). Bila thread emu/render terus berputar
+    # (sleep 16 ms per frame) angka vol bertambah ratusan; bila benar-benar macet angkanya tidak berubah.
+    tiny_cpu_sample() {
+      for p in ${'$'}(ps -eo pid,comm 2>/dev/null | awk 'NR>1 && ${'$'}2 ~ /ld-linux|ppsspp|PPSSPP/ {print ${'$'}1}' | head -4); do
+        for t in /proc/${'$'}p/task/*; do
+          c=${'$'}(cat ${'$'}t/comm 2>/dev/null)
+          case "${'$'}c" in PoolW*) continue;; esac
+          echo "[tiny] diag cpu ${'$'}1 ${'$'}p/${'$'}{t##*/} ${'$'}c ticks=${'$'}(awk '{print ${'$'}14+${'$'}15}' ${'$'}t/stat 2>/dev/null) vol=${'$'}(awk '/^voluntary_ctxt_switches/{print ${'$'}2}' ${'$'}t/status 2>/dev/null)"
+        done
+      done
+    }
+    tiny_cpu_sample t15
     # backtrace kasar tiap thread: ambil sp dari /proc/PID/task/TID/syscall, baca stack lewat /proc/PID/mem, lalu tampilkan
     # nilai yang menunjuk ke kode (modul+offset). Menunjukkan di perpustakaan mana thread yang macet berada.
     for p in ${'$'}(ps -eo pid,comm 2>/dev/null | awk 'NR>1 && ${'$'}2 ~ /ld-linux|ppsspp|PPSSPP/ {print ${'$'}1}' | head -4); do
@@ -261,6 +273,9 @@ PYSTACK
     command -v xrandr >/dev/null 2>&1 && echo "[tiny] diag xrandr: ${'$'}(xrandr --current 2>&1 | head -8 | tr '\n' '|')"
     echo "[tiny] diag xpp-trace (80 baris terakhir, tanpa Unsupported grab dan REQ):"
     grep -v -e "Unsupported grab request" -e " REQ c=" -e " CLIENT " /tmp/xpp-trace.log 2>/dev/null | tail -n 80
+    sleep 5
+    tiny_cpu_sample t20
+    echo "[tiny] diag t20 PutImage-frame terakhir: ${'$'}(grep -c 'PutImage-frame' /tmp/xpp-trace.log 2>/dev/null) frame; request klien utama: ${'$'}(grep -c ' REQ c=0x3400000 ' /tmp/xpp-trace.log 2>/dev/null)"
   ) &
 fi
 """.trimStart(),
