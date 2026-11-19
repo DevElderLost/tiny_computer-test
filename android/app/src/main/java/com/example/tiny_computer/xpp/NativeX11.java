@@ -10,7 +10,11 @@ import android.view.Surface;
 public final class NativeX11 {
     private NativeX11() {}
 
-    /** Nomor backend renderer (parameter {@code backend} di {@link #nativeCreate}). 0 (Vulkan) tidak ada di build ini. */
+    /**
+     * Nomor backend renderer (parameter {@code backend} di {@link #nativeCreate}), sama dengan Winlator Ludashi.
+     * Vulkan memakai VulkanRendererContext (swapchain Vulkan) tanpa mesin frame generation.
+     */
+    public static final int BACKEND_VULKAN = 0;
     public static final int BACKEND_EGL = 1;
     public static final int BACKEND_DISPLAYX = 2;
 

@@ -66,6 +66,12 @@ jobs:
           yes | sdkmanager --licenses > /dev/null || true
           sdkmanager --install "ndk;27.0.12077973" "cmake;3.22.1"
 
+      # Shader backend Vulkan X++ (android/app/src/main/cpp/xpp/vulkan/*.vert|*.frag) di-compile saat build ke header SPIR-V.
+      # CMake memakai glslangValidator bila ada; bila tidak, glslc bawaan NDK (shader-tools). Langkah ini opsional.
+      - name: Install glslang-tools (shader Vulkan X++)
+        continue-on-error: true
+        run: sudo apt-get install -y glslang-tools
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:

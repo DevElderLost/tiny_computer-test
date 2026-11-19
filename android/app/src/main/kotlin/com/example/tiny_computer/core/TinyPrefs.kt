@@ -143,10 +143,23 @@ object Cfg {
         }
     /** True bila desktop memakai X++ (lihat [displayServer]). */
     val desktopXpp: Boolean get() = displayServer == DISPLAY_XPP
-    /** Backend renderer X++: 1 = EGL (GLES, semua perangkat), 2 = DisplayX (ASurfaceControl, Android 10+). Berlaku saat server X++ dibuat. */
+    /**
+     * Mode tampilan X++ (sama dengan daftar renderer Winlator Ludashi): [XPP_VULKAN] = Vulkan (swapchain Vulkan),
+     * [XPP_EGL] = EGL (GLES, semua perangkat), [XPP_DISPLAYX] = DisplayX (ASurfaceControl, Android 10+),
+     * [XPP_OLD_DISPLAY] = Old Display. Seperti di Winlator, Old Display pada X++ memakai backend EGL native
+     * dengan tampilan bawaan Fit. Berlaku saat server X++ dibuat.
+     */
+    const val XPP_VULKAN = 0
+    const val XPP_EGL = 1
+    const val XPP_DISPLAYX = 2
+    const val XPP_OLD_DISPLAY = 3
     var xppBackend: Int
-        get() = TinyPrefs.getInt("xppBackend", 1).let { if (it == 2) 2 else 1 }
-        set(v) = TinyPrefs.setInt("xppBackend", if (v == 2) 2 else 1)
+        get() = TinyPrefs.getInt("xppBackend", XPP_EGL).let { if (it in XPP_VULKAN..XPP_OLD_DISPLAY) it else XPP_EGL }
+        set(v) = TinyPrefs.setInt("xppBackend", if (v in XPP_VULKAN..XPP_OLD_DISPLAY) v else XPP_EGL)
+    /** Mode present Vulkan X++: true = MAILBOX (tanpa tearing, latensi rendah), false = FIFO (vsync). Hanya berlaku untuk [XPP_VULKAN]. */
+    var xppVulkanMailbox: Boolean
+        get() = TinyPrefs.getBool("xppVulkanMailbox", false)
+        set(v) = TinyPrefs.setBool("xppVulkanMailbox", v)
     /**
      * Compositor xfwm4 (blur/transparansi) dibiarkan menyala sesuai setelan XFCE saat Open desktop dimulai. Bawaan mati:
      * compositing dimatikan di awal sesi. Apa pun pilihannya, vblank_mode xfwm4 dipaksa off (lihat assets/tiny/xsession.sh):

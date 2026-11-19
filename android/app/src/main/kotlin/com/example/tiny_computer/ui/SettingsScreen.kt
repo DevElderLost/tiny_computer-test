@@ -177,9 +177,20 @@ fun SettingsScreen() {
                 var xppBackend by remember { mutableStateOf(Cfg.xppBackend) }
                 DeckChoiceRow(
                     stringResource(R.string.tc_ui_xpp_backend), stringResource(R.string.tc_ui_xpp_backend_hint),
-                    listOf(1 to "EGL (OpenGL ES)", 2 to "DisplayX (SurfaceControl)"),
+                    listOf(
+                        Cfg.XPP_VULKAN to "Vulkan",
+                        Cfg.XPP_EGL to "EGL (OpenGL ES)",
+                        Cfg.XPP_DISPLAYX to "DisplayX (SurfaceControl)",
+                        Cfg.XPP_OLD_DISPLAY to "Old Display (EGL)",
+                    ),
                     xppBackend,
                 ) { xppBackend = it; Cfg.xppBackend = it }
+                if (xppBackend == Cfg.XPP_VULKAN) {
+                    var mailbox by remember { mutableStateOf(Cfg.xppVulkanMailbox) }
+                    DeckSwitchRow(
+                        stringResource(R.string.tc_ui_xpp_vulkan_mailbox), stringResource(R.string.tc_ui_xpp_vulkan_mailbox_hint), mailbox,
+                    ) { mailbox = it; Cfg.xppVulkanMailbox = it }
+                }
             }
             DeckSwitchRow(stringResource(R.string.tc_ui_xfce_compositor), stringResource(R.string.tc_ui_xfce_compositor_hint), Cfg.xfceCompositor) { Cfg.xfceCompositor = it }
         }

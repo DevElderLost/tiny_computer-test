@@ -19,6 +19,10 @@ import kotlin.math.roundToInt
  * desktop dan hidup lebih lama dari layar desktop ([com.example.tiny_computer.display.DisplayActivity]): layar yang ditutup lalu
  * dibuka lagi hanya memasang Surface baru, klien X di dalam kontainer tidak terputus.
  *
+ * Mode tampilan ([Cfg.xppBackend]): Vulkan (swapchain Vulkan, VulkanRendererContext Winlator tanpa frame generation), EGL,
+ * DisplayX, dan Old Display (= backend EGL, seperti Winlator). Mode tampilan hanya mengatur cara layar digambar; tidak
+ * mengubah batasan DRI3 di bawah.
+ *
  * Batasan: DRI3/Present milik server ini memakai transport AHardwareBuffer khas Winlator, bukan dmabuf. Mesa biasa di Debian
  * tidak memakainya (jatuh ke software/XRender), jadi Vulkan/Turnip lewat X11 tidak berfungsi di mode ini.
  *
@@ -32,7 +36,8 @@ object XppHost {
     private var handle = 0L
     private var width = 0
     private var height = 0
-    private var backend = 0
+    private var backend = NativeX11.BACKEND_EGL
+    private var presentMode = 2
     private var boundSocket: String? = null
     private var surface: Surface? = null
     private var refreshHz = 60f
@@ -65,8 +70,16 @@ object XppHost {
      */
     fun ensureStarted(ctx: Context, w: Int, h: Int): Boolean = synchronized(lock) {
         val sock = socketFile()
-        val wantBackend = if (Cfg.xppBackend == 2) NativeX11.BACKEND_DISPLAYX else NativeX11.BACKEND_EGL
-        if (handle != 0L && width == w && height == h && backend == wantBackend && boundSocket == sock.absolutePath) {
+        // Vulkan -> backend 0, DisplayX -> 2; EGL dan Old Display -> EGL (Old Display pada X++ = EGL native, seperti Winlator).
+        val wantBackend = when (Cfg.xppBackend) {
+            Cfg.XPP_VULKAN -> NativeX11.BACKEND_VULKAN
+            Cfg.XPP_DISPLAYX -> NativeX11.BACKEND_DISPLAYX
+            else -> NativeX11.BACKEND_EGL
+        }
+        // VkPresentModeKHR: 1 = MAILBOX, 2 = FIFO. Hanya dipakai backend Vulkan.
+        val wantPresent = if (wantBackend == NativeX11.BACKEND_VULKAN && Cfg.xppVulkanMailbox) 1 else 2
+        if (handle != 0L && width == w && height == h && backend == wantBackend && presentMode == wantPresent &&
+            boundSocket == sock.absolutePath) {
             return true
         }
         stopLocked()
@@ -80,13 +93,14 @@ object XppHost {
             val flags = NativeX11.FLAG_NO_MIT_SHM or NativeX11.FLAG_NO_DRI3 or
                 if (wantBackend == NativeX11.BACKEND_DISPLAYX) NativeX11.FLAG_PERFORMANCE or NativeX11.FLAG_PRESENT_AT_REFRESH else 0
             val h0 = NativeX11.nativeCreate(
-                w, h, false, "", "", ctx.applicationInfo.nativeLibraryDir, 2, false, wantBackend, flags,
+                w, h, false, "", "", ctx.applicationInfo.nativeLibraryDir, wantPresent, false, wantBackend, flags,
             )
             if (h0 == 0L) throw IllegalStateException("nativeCreate returned 0")
             handle = h0
             width = w
             height = h
             backend = wantBackend
+            presentMode = wantPresent
             // jalur shm tidak dipakai (MIT-SHM tidak diiklankan), tetap diberikan karena parameter wajib
             NativeX11.nativeStart(h0, sock.absolutePath, File(sock.parentFile, ".xpp-shm").absolutePath)
             boundSocket = sock.absolutePath
@@ -94,7 +108,13 @@ object XppHost {
             curY = h / 2
             applyOptionsLocked(ctx)
             surface?.let { NativeX11.nativeSurface(h0, it) }
-            Log.i(TAG, "X++ aktif: ${w}x$h backend=${if (wantBackend == NativeX11.BACKEND_DISPLAYX) "DisplayX" else "EGL"} socket=${sock.path}")
+            val backendName = when (Cfg.xppBackend) {
+                Cfg.XPP_VULKAN -> if (wantPresent == 1) "Vulkan (MAILBOX)" else "Vulkan (FIFO)"
+                Cfg.XPP_DISPLAYX -> "DisplayX"
+                Cfg.XPP_OLD_DISPLAY -> "Old Display (EGL)"
+                else -> "EGL"
+            }
+            Log.i(TAG, "X++ aktif: ${w}x$h backend=$backendName socket=${sock.path}")
             true
         } catch (t: Throwable) {
             Log.e(TAG, "X++ gagal dinyalakan", t)
@@ -124,7 +144,8 @@ object XppHost {
         refreshHz = if (hz >= 1f) hz else 60f
         NativeX11.nativeRefreshRates(handle, intArrayOf(refreshHz.roundToInt()))
         NativeX11.nativeOptions(handle, false, true, Cfg.fpsLimit, refreshHz)
-        // Cfg.upscaler: 2 = Nearest. Filter lain memakai bilinear; efek lain milik compositor Wayland tidak ada di server ini.
+        // Cfg.upscaler: 2 = Nearest. Filter lain memakai bilinear (0 = linear, 1 = nearest di semua backend); efek lain milik
+        // compositor Wayland tidak ada di server ini. Mode stretch 0 = Fit (bawaan Old Display dan Vulkan).
         NativeX11.nativeVisualOptions(handle, if (Cfg.upscaler == 2) 1 else 0, 0, 0, 0.5f, false, null, 2, -1, 70, refreshHz, 0)
     }
 

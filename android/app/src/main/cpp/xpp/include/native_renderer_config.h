@@ -4,8 +4,8 @@
 namespace xorg {
 // Immutable startup options, initialized before the screen worker is created.
 struct NativeRendererConfig {
-    // Backend Vulkan tidak ikut dibawa ke Tiny Computer (butuh renderer Vulkan + LSFG/WFG milik Winlator);
-    // nilai Vulkan tetap ada supaya nomor backend dari JNI sama dengan Winlator dan jatuh ke EGL.
+    // Vulkan = VulkanRendererContext dari Winlator (xpp/vulkan/), tanpa mesin frame generation (stub).
+    // Nomor backend dari JNI sama dengan Winlator: 0 Vulkan, 1 EGL, 2 DisplayX.
     enum class Backend { Vulkan, EGL, DisplayX };
     Backend backend = Backend::EGL;
     bool trueDisplayX{}, performanceMode{true}, presentAtRefreshRate{true}, precisePresentation{};
