@@ -12,6 +12,10 @@
 # - TINY_XFCE_COMPOSITOR=1 (Pengaturan > "Allow XFCE compositor"): use_compositing dibiarkan sesuai setelan XFCE.
 # - TINY_KEEP_COMPOSITOR=1: sama, use_compositing tidak disentuh (setelan lama).
 # - TINY_KEEP_VBLANK=1: vblank_mode tidak disentuh dan penjaga tidak dipasang.
+# Ubuntu (/etc/os-release: ID=ubuntu atau ID_LIKE memuat ubuntu): jendela terminal tidak boleh muncul sendiri saat Open desktop.
+# Penyebabnya bisa tiga: (1) entri autostart terminal (/etc/xdg/autostart), (2) XFCE memulihkan sesi tersimpan yang berisi
+# terminal, (3) Xsession Debian/Ubuntu jatuh ke "failsafe" x-terminal-emulator bila tidak menemukan x-session-manager atau
+# x-window-manager. Ketiganya ditutup di bawah. TINY_UBUNTU_TERMINAL=1 mematikan perlakuan ini (perilaku lama).
 xfwm_xml="$HOME/.config/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml"
 
 # tiny_xfwm_prop NAMA TIPE NILAI: set satu properti /general di xfwm4.xml tanpa D-Bus. Menangani berkas kosong atau tanpa
@@ -71,7 +75,40 @@ export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}"
 export XDG_SESSION_TYPE=x11
 export DISPLAY="${DISPLAY:-:4}"
 
-if [ -f /etc/X11/xinit/Xsession ]; then
+# tiny_is_ubuntu: sistem Linux di kontainer ini Ubuntu (atau turunannya)?
+tiny_is_ubuntu() {
+	[ -r /etc/os-release ] || return 1
+	( . /etc/os-release 2>/dev/null; case " $ID $ID_LIKE " in *" ubuntu "*) exit 0 ;; esac; exit 1 )
+}
+
+tiny_noterm=0
+if [ "${TINY_UBUNTU_TERMINAL:-0}" != 1 ] && tiny_is_ubuntu; then
+	tiny_noterm=1
+	echo "[tiny] Ubuntu terdeteksi: terminal tidak dijalankan otomatis saat Open desktop (TINY_UBUNTU_TERMINAL=1 untuk mengizinkan)"
+	# (1) autostart: berkas pengguna dengan nama yang sama menimpa /etc/xdg/autostart; Hidden=true = tidak dijalankan.
+	# Berkas buatan pengguna sendiri (tanpa penanda) tidak ditimpa.
+	ad="$HOME/.config/autostart"
+	mkdir -p "$ad"
+	for t in xterm uxterm x-terminal-emulator gnome-terminal org.gnome.Terminal xfce4-terminal lxterminal qterminal \
+		konsole org.kde.konsole mate-terminal terminator tilix alacritty kitty; do
+		f="$ad/$t.desktop"
+		if [ ! -e "$f" ] || grep -q 'tiny-no-terminal' "$f" 2>/dev/null; then
+			printf '%s\n' '[Desktop Entry]' 'Type=Application' "Name=$t" 'Hidden=true' 'X-GNOME-Autostart-enabled=false' \
+				'# tiny-no-terminal' > "$f"
+		fi
+	done
+	# (2) sesi XFCE tersimpan yang berisi terminal dibuang supaya tidak dipulihkan; sesi tanpa terminal dibiarkan
+	for sf in "$HOME"/.cache/sessions/xfce4-session-* "$HOME"/.cache/sessions/*; do
+		[ -f "$sf" ] || continue
+		if grep -qiE 'terminal|xterm|konsole|tilix|terminator|alacritty|kitty' "$sf" 2>/dev/null; then
+			rm -f "$sf"
+			echo "[tiny] sesi tersimpan berisi terminal dibuang: ${sf##*/}"
+		fi
+	done
+fi
+
+# (3) Ubuntu: Xsession hanya dipakai bila ada x-session-manager; tanpa itu determine-startup memilih x-terminal-emulator
+if [ -f /etc/X11/xinit/Xsession ] && { [ "$tiny_noterm" != 1 ] || command -v x-session-manager >/dev/null 2>&1; }; then
 	exec bash /etc/X11/xinit/Xsession
 fi
 
@@ -87,10 +124,22 @@ for s in startxfce4 startlxqt startplasma-x11 mate-session startlxde cinnamon-se
 	fi
 done
 
-if [ -f /etc/X11/Xsession ]; then
+if [ -f /etc/X11/Xsession ] && { [ "$tiny_noterm" != 1 ] || command -v x-session-manager >/dev/null 2>&1 || command -v x-window-manager >/dev/null 2>&1; }; then
 	echo "[tiny] sesi desktop: /etc/X11/Xsession"
 	bash /etc/X11/Xsession
 	exit $?
+fi
+
+# Ubuntu tanpa desktop terpasang: cukup window manager saja, tanpa terminal failsafe
+if [ "$tiny_noterm" = 1 ]; then
+	for w in x-window-manager xfwm4 openbox metacity marco icewm fluxbox; do
+		command -v "$w" >/dev/null 2>&1 || continue
+		echo "[tiny] sesi minimal tanpa terminal: $w"
+		if [ -z "$DBUS_SESSION_BUS_ADDRESS" ] && command -v dbus-launch >/dev/null 2>&1; then
+			exec dbus-launch --exit-with-session "$w"
+		fi
+		exec "$w"
+	done
 fi
 
 echo "[tiny] tidak ada sesi desktop (startxfce4, startlxqt, ... atau /etc/X11/Xsession) di rootfs ini" >&2
