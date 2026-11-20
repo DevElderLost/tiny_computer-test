@@ -111,6 +111,13 @@ void XClient::SendEvent(xEvent& event) {
         if (counter < (noisy ? 20u : 400u)) {
             ++counter;
             const auto* words = reinterpret_cast<const u32*>(&event);
+            if (type >= KeyPress && type <= LeaveNotify) {
+                // Diagnosis: window tujuan (event) dan anak (child) event pointer/keyboard; xfwm4 mencari klien dari field ini.
+                Trace("EVT c=0x%x type=%u detail=%u w4=0x%x w8=0x%x ev=0x%x ch=0x%x st=0x%x", unsigned(rid_base), type,
+                      unsigned(event.u.u.detail), unsigned(words[1]), unsigned(words[2]),
+                      unsigned(event.u.keyButtonPointer.event), unsigned(event.u.keyButtonPointer.child),
+                      unsigned(event.u.keyButtonPointer.state));
+            } else
             Trace("EVT c=0x%x type=%u detail=%u w4=0x%x w8=0x%x", unsigned(rid_base), type, unsigned(event.u.u.detail),
                   unsigned(words[1]), unsigned(words[2]));
         }
