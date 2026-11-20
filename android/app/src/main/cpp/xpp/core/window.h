@@ -118,6 +118,9 @@ public:
 
     Property* GetProperty(u32 atom) const;
 
+    // Daftar atom properti window ini (untuk ListProperties).
+    std::vector<u32> GetPropertyAtoms() const;
+
     Property* AddProperty(u32 atom, u32 type, u8 format, u8 mode, const std::vector<u8>& data);
 
     bool ModifyProperty(u32 atom, u32 type, u8 format, u8 mode, const std::vector<u8>& data);

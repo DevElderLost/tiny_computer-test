@@ -26,6 +26,9 @@ XClient::XClient(XServer& server, int fd) : server(server), socket_fd(fd), input
 }
 
 XClient::~XClient() {
+    // Jejak diagnosis: klien mana yang menutup koneksi dan setelah request ke berapa. Aplikasi yang mati sendiri (galat
+    // protokol, SIGTRAP, dsb.) tampil di sini sebagai CLOSE tanpa jendela yang pernah di-map: itulah layar hitam.
+    if (TraceOnFast()) Trace("CLOSE c=0x%x last_seq=%u dead=%d", unsigned(rid_base), unsigned(sequence), int(is_dead));
     // Cancel transport I/O and join before the client/server can disappear.
     pendingImport.reset();
     server.SelectRawInput(this, false);

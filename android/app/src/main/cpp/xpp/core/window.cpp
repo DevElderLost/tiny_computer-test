@@ -176,6 +176,13 @@ Property* Window::GetProperty(u32 atom) const {
     return it->second.get();
 }
 
+std::vector<u32> Window::GetPropertyAtoms() const {
+    std::vector<u32> atoms;
+    atoms.reserve(properties.size());
+    for (const auto& it : properties) atoms.push_back(it.first);
+    return atoms;
+}
+
 Property* Window::AddProperty(u32 atom, u32 type, u8 format, u8 mode, const std::vector<u8>& data) {
     const auto property = std::make_shared<Property>(atom, type, format);
     property->ReplaceData(data);

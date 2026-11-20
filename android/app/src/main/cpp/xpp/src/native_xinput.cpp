@@ -4,6 +4,10 @@
 #include "core/window.h"
 #include "core/window_manager.h"
 #include "core/extension.h"
+#include "core/atom.h"
+#include "core/keyboard.h"
+#include "core/mouse.h"
+#include <algorithm>
 #include <array>
 #include <cstring>
 
@@ -93,8 +97,46 @@ void XClient::ProcXInput() {
         store(packet.data, 8, u16(2)); store(packet.data, 10, u16(2)); packet.data[12] = 1;
         reply(packet); return;
     }
-    case 2: // No XI1 tablets.
-        size(4); reply(packet); return;
+    case 2: { // XI1 ListInputDevices: daftar yang sama dengan XIQueryDevice (id 2 pointer, 3 keyboard, 4 slave pointer).
+        // Daftar kosong dulu membuat klien yang mencocokkan daftar XI1 dengan XIQueryDevice (mis. Chromium/Electron di
+        // DeviceDataManagerX11) tidak menemukan satu pun perangkat. Tata letak balasan seperti Xorg: semua xDeviceInfo,
+        // lalu semua class info, lalu semua nama (panjang 1 byte + teks, seluruh blok nama dibulatkan ke 4 byte).
+        size(4);
+        struct Info { u8 id, use, attached; const char* name; const char* type; bool pointer; };
+        const Info devices[] = {{2, 0, 3, "Virtual core pointer", "MOUSE", true},
+                                {3, 1, 2, "Virtual core keyboard", "KEYBOARD", false},
+                                {4, 4, 2, "Virtual slave pointer", "MOUSE", true}};
+        const u32 minKey = server.GetKeyboard().GetKeycodeMin(), maxKey = server.GetKeyboard().GetKeycodeMax();
+        Wire classes, names;
+        for (const auto& device : devices) {
+            packet.dword(Atom::Intern(device.type));
+            packet.byte(device.id); packet.byte(device.pointer ? 2 : 1); packet.byte(device.use); packet.byte(device.attached);
+            if (device.pointer) {
+                classes.byte(1); classes.byte(4); classes.word(7);               // ButtonClass, 7 tombol
+                classes.byte(2); classes.byte(32); classes.byte(2); classes.byte(0); // ValuatorClass, 2 sumbu, relatif
+                classes.dword(0);                                              // motion_buffer_size
+                for (int axis = 0; axis < 2; ++axis) { classes.dword(0); classes.dword(0); classes.dword(0); }
+            } else {
+                classes.byte(0); classes.byte(8); classes.byte(u8(minKey)); classes.byte(u8(maxKey)); // KeyClass
+                classes.word(u16(maxKey - minKey + 1)); classes.zeros(2);
+            }
+            const std::string name = device.name;
+            names.byte(u8(name.size()));
+            names.data.insert(names.data.end(), name.begin(), name.end());
+        }
+        names.zeros((-names.data.size()) & 3);
+        packet.data.insert(packet.data.end(), classes.data.begin(), classes.data.end());
+        packet.data.insert(packet.data.end(), names.data.begin(), names.data.end());
+        packet.data[8] = u8(sizeof(devices) / sizeof(devices[0]));
+        reply(packet); return;
+    }
+    case 36: { // XI1 ListDeviceProperties: tidak ada properti perangkat (num_atoms = 0); balasan wajib ada
+        size(8); const u8 device = request_buffer[4];
+        if (device < 2 || device > 4) badDevice(device);
+        reply(packet); return;
+    }
+    case 39: // XI1 GetDeviceProperty: properti tidak ada (type None, 0 item); balasan wajib ada
+        reply(packet); return;
     case 3: case 28: {
         size(8); const u8 device = request_buffer[4];
         if (device != 4) badDevice(device);
@@ -111,6 +153,44 @@ void XClient::ProcXInput() {
         if (major > 2 || version > 2) { major = 2; version = 2; }
         store(packet.data, 8, major); store(packet.data, 10, version);
         reply(packet); return;
+    }
+    case 40: { // XIQueryPointer: dulu BadRequest. SDL/GTK3/Qt memanggilnya; balasan wajib ada.
+        size(12);
+        const u32 windowId = dword(4); const u16 device = word(8);
+        if (device != 2 && device != 4) badDevice(device);
+        auto* window = GetResourceAs<Window>(windowId);
+        if (!window) throw BadWindowError(windowId);
+        auto* root = server.GetWindowManager().GetRootWindow();
+        auto& mouse = server.GetMouse();
+        const s32 rx = std::clamp<s32>(mouse.GetX(), 0, s32(root->GetWidth()) - 1);
+        const s32 ry = std::clamp<s32>(mouse.GetY(), 0, s32(root->GetHeight()) - 1);
+        const auto* under = root->WindowAtPoint(s16(rx), s16(ry));
+        const auto* child = under && under->GetParent() == window ? under : nullptr;
+        store(packet.data, 8, u32(root->id)); store(packet.data, 12, u32(child ? child->id : 0));
+        store(packet.data, 16, s32(rx * 65536)); store(packet.data, 20, s32(ry * 65536));   // FP1616
+        store(packet.data, 24, s32((rx - window->GetInRect().left) * 65536));
+        store(packet.data, 28, s32((ry - window->GetInRect().top) * 65536));
+        packet.byte(1); packet.byte(0); packet.word(1);   // same_screen, pad, buttons_len (1 kata)
+        packet.zeros(16);                                 // modifier base/latched/locked/effective
+        packet.zeros(4);                                  // group
+        packet.dword((mouse.GetButtons() >> 7) & 0xfe);   // topeng tombol (bit n = tombol n)
+        reply(packet); return;
+    }
+    case 56: // XIListProperties: tidak ada properti (num_properties = 0); balasan wajib ada
+        size(8); reply(packet); return;
+    case 59: // XIGetProperty: properti tidak ada (type None, 0 item); balasan wajib ada
+        reply(packet); return;
+    case 60: { // XIGetSelectedEvents: topeng yang dipilih klien ini (hanya window root yang disimpan)
+        size(8); const u32 windowId = dword(4);
+        if (!GetResourceAs<Window>(windowId)) throw BadWindowError(windowId);
+        u16 count{};
+        const auto selected = xiSelections.find(windowId);
+        if (selected != xiSelections.end()) {
+            for (const auto& [device, mask] : selected->second) {
+                ++count; packet.word(device); packet.word(1); packet.dword(mask);
+            }
+        }
+        store(packet.data, 8, count); reply(packet); return;
     }
     case 45:
         size(8); packet.data[8] = 1; store(packet.data, 10, u16(2)); reply(packet); return;
@@ -180,9 +260,16 @@ void XClient::ProcXInput() {
             ++count;
             const std::string name = device.name;
             packet.word(device.id); packet.word(device.use); packet.word(device.attachment);
-            packet.word(device.pointer ? 3 : 0); packet.word(name.size());
+            packet.word(device.pointer ? 3 : 1); packet.word(name.size());
             packet.byte(1); packet.byte(0); packet.name(name);
-            if (!device.pointer) continue;
+            if (!device.pointer) {
+                // XIKeyClass seperti Xorg: keyboard tanpa class apa pun tidak pernah ada di server asli.
+                const u32 minKey = server.GetKeyboard().GetKeycodeMin(), maxKey = server.GetKeyboard().GetKeycodeMax();
+                const u16 keys = u16(maxKey - minKey + 1);
+                packet.word(0); packet.word(u16(2 + keys)); packet.word(device.id); packet.word(keys);
+                for (u32 key = minKey; key <= maxKey; ++key) packet.dword(key);
+                continue;
+            }
             packet.word(1); packet.word(10); packet.word(4); packet.word(7);
             packet.dword((server.GetMouse().GetButtons() >> 7) & 0xfe);
             packet.zeros(7 * 4);

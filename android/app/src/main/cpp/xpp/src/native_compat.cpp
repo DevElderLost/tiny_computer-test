@@ -1,3 +1,6 @@
+#include <cstring>
+#include <vector>
+#include "core/exceptions.h"
 #include "core/trace.h"
 #include "core/xclient.h"
 #include "core/xclient_dispatch.h"
@@ -19,6 +22,14 @@ namespace xorg {
 void XClient::ProcCompat() {
     const auto* req = GetRequestData<xReq>();
     auto send = [this](auto& r) { r.type = X_Reply; r.sequenceNumber = sequence; WriteImmediately(&r, sizeof(r)); };
+    // Balasan mentah: 32 byte header (b[8..31] diisi pemanggil) + data tambahan; [extraWords] = panjang tambahan dalam kata 4 byte.
+    auto rawReply = [this](std::vector<u8>& b, u32 extraWords) {
+        b[0] = X_Reply;
+        const u16 seq = static_cast<u16>(sequence);
+        memcpy(&b[2], &seq, 2);
+        memcpy(&b[4], &extraWords, 4);
+        WriteImmediately(b.data(), b.size());
+    };
     switch (req->reqType) {
     case X_ChangeSaveSet: case X_CloseFont:
     case X_GrabKey: case X_UngrabKey:
@@ -209,6 +220,73 @@ void XClient::ProcCompat() {
         }
         return;
     }
+    // ---- Request yang dulu jatuh ke BadRequest. Klien Xlib (SDL, GTK2, Tk, banyak AppImage) memakai handler galat bawaan yang
+    // MEMATIKAN proses pada galat apa pun, sehingga aplikasi langsung hilang dan layar tinggal hitam; klien xcb yang menunggu
+    // balasan bisa tergantung. Di sini: request yang butuh balasan dijawab dengan balasan sah (kosong), galat yang memang
+    // benar menurut protokol dikirim dengan kode yang benar, dan request tanpa balasan diabaikan dengan jejak.
+    case X_ListProperties: {
+        CHECK_REQUEST_SIZE_STRICT(xResourceReq);
+        const auto id = GetRequestData<xResourceReq>()->id;
+        auto* window = GetResourceAs<Window>(id);
+        if (!window) throw BadWindowError(id);
+        const auto atoms = window->GetPropertyAtoms();
+        std::vector<u8> b(32 + atoms.size() * 4);
+        const u16 count = static_cast<u16>(atoms.size());
+        memcpy(&b[8], &count, 2);
+        for (size_t i = 0; i < atoms.size(); ++i) memcpy(&b[32 + i * 4], &atoms[i], 4);
+        rawReply(b, static_cast<u32>(atoms.size()));
+        return;
+    }
+    case X_GetMotionEvents: {
+        std::vector<u8> b(32); rawReply(b, 0); return;           // nEvents = 0
+    }
+    case X_ListHosts: {
+        std::vector<u8> b(32); rawReply(b, 0); return;           // kontrol akses mati, tanpa host
+    }
+    case X_GetFontPath: {
+        std::vector<u8> b(32); rawReply(b, 0); return;           // nPaths = 0
+    }
+    case X_ListInstalledColormaps: {
+        std::vector<u8> b(32); rawReply(b, 0); return;           // nColormaps = 0
+    }
+    case X_ListFontsWithInfo: {
+        std::vector<u8> b(60); rawReply(b, 7); return;           // balasan penutup (nameLength = 0): tidak ada font
+    }
+    case X_QueryColors: {
+        if (request_size < 8) throw BadLengthError();
+        const size_t n = (request_size - 8) / 4;
+        std::vector<u8> b(32 + n * 8);
+        const u16 count = static_cast<u16>(n);
+        memcpy(&b[8], &count, 2);
+        for (size_t i = 0; i < n; ++i) {
+            u32 pixel; memcpy(&pixel, request_buffer.data() + 8 + i * 4, 4);
+            const u16 rgb[3] = {u16(((pixel >> 16) & 0xff) * 257), u16(((pixel >> 8) & 0xff) * 257), u16((pixel & 0xff) * 257)};
+            memcpy(&b[32 + i * 8], rgb, 6);
+        }
+        rawReply(b, static_cast<u32>(n * 2));
+        return;
+    }
+    case X_QueryFont: case X_QueryTextExtents: {
+        // OpenFont tidak membuat sumber daya font, jadi tidak ada font yang bisa ditanyai. Galat yang benar adalah BadFont
+        // (XLoadQueryFont lalu mengembalikan NULL); BadRequest membuat aplikasi mati.
+        const auto id = GetRequestData<xResourceReq>()->id;
+        throw BadFontError(id);
+    }
+    case X_AllocNamedColor: case X_LookupColor: throw BadNameError(0);
+    case X_AllocColorCells: case X_AllocColorPlanes: throw BadAllocError();
+    case X_PolyPoint: case X_PolyRectangle: case X_PolyArc: case X_FillPoly: case X_PolyFillArc: case X_CopyPlane:
+    case X_PolyText8: case X_PolyText16: case X_ImageText8: case X_ImageText16: case X_CopyGC: case X_SetDashes:
+    case X_CirculateWindow: case X_RotateProperties: case X_ChangeActivePointerGrab: case X_ChangeKeyboardMapping:
+    case X_ChangeHosts: case X_SetAccessControl: case X_SetFontPath: case X_KillClient: case X_StoreColors:
+    case X_StoreNamedColor:
+        if (TraceOn()) {
+            static int traced_ignored = 0;
+            if (traced_ignored < 100) {
+                ++traced_ignored;
+                Trace("Request tanpa balasan belum didukung, diabaikan op=%u data=%u", unsigned(req->reqType), unsigned(req->data));
+            }
+        }
+        return;
     default: throw BadRequestError();
     }
 }
