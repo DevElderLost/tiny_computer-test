@@ -259,6 +259,10 @@ private:
     bool compositedDisplay{};
     bool PatchPresent(const sp<PresentTicket>&, const sp<PresentTicket>& previousDirect);
     bool IsWindowFiltered(Window*) const;
+    // Window milik window manager (bingkai dan bagian bingkai xfwm4): klien yang memegang SubstructureRedirect di root.
+    // Tanpa compositing, X asli mengabaikan alpha window depth 32, jadi window ini digambar opaque, bukan tembus pandang.
+    bool IsWmDecoration(Window*) const;
+    std::map<u32, int> decorLogged;   // diagnosis: berapa kali alpha window bingkai sudah dicatat (maks 3 per window)
     void Worker();
     bool PrepareIdle(const sp<PresentTicket>&);
     void Idle(const sp<PresentTicket>&);
