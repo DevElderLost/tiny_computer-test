@@ -14,6 +14,8 @@
 namespace xorg {
 namespace {
 constexpr u32 rawEvents = (1u << 15) | (1u << 16) | (1u << 17);
+// XI_KeyPress(2) .. XI_FocusOut(10)
+constexpr u32 xiDeviceEvents = 0x7fcu;
 
 template<class Buffer, typename T> void store(Buffer& buffer, size_t offset, T value) {
     memcpy(buffer.data() + offset, &value, sizeof(value));
@@ -67,6 +69,67 @@ void XClient::SendXIRawEvent(u16 type, u32 detail, s32 dx, s32 dy) {
         store(packet, 52, dx); store(packet, 60, dy);
     }
     WriteImmediately(packet.data(), type == 17 ? packet.size() : 32);
+}
+
+namespace {
+// Topeng tombol XI2: bit n = tombol n. State inti menyimpan Button1..5 di bit 8..12.
+u32 xiButtonMask(u32 state) { return (state >> 7) & 0x3e; }
+}
+
+// xXIDeviceEvent (80 byte + topeng tombol 4 byte): KeyPress/KeyRelease/ButtonPress/ButtonRelease/Motion.
+void XClient::SendXIDeviceEvent(u16 evtype, u16 deviceid, u16 sourceid, u32 detail, u32 root, u32 event, u32 child,
+                                s32 rootX, s32 rootY, s32 eventX, s32 eventY, u32 state) {
+    if (is_dead) return;
+    if (!xiOpcode) {
+        if (const auto* extension = server.GetExtensionManager().FindExtension("XInputExtension")) xiOpcode = extension->base;
+    }
+    std::array<u8, 84> packet{};
+    packet[0] = GenericEvent; packet[1] = xiOpcode;
+    store(packet, 2, sequence);
+    store(packet, 4, u32((packet.size() - 32) / 4));
+    store(packet, 8, evtype); store(packet, 10, deviceid);
+    store(packet, 12, server.GetTimestamp()); store(packet, 16, detail);
+    store(packet, 20, root); store(packet, 24, event); store(packet, 28, child);
+    store(packet, 32, s32(rootX * 65536)); store(packet, 36, s32(rootY * 65536));
+    store(packet, 40, s32(eventX * 65536)); store(packet, 44, s32(eventY * 65536));
+    store(packet, 48, u16(1));          // buttons_len (satu kata)
+    store(packet, 50, u16(0));          // valuators_len
+    store(packet, 52, sourceid);
+    // flags (56) = 0; mods: base, latched, locked, effective (modifier saja, tanpa bit tombol)
+    const u32 mods = state & 0xff;
+    store(packet, 60, mods); store(packet, 72, mods);
+    // group (76..79) = 0; topeng tombol menyusul setelah header 80 byte
+    u32 buttons = xiButtonMask(state);
+    if (evtype == 4 && detail >= 1 && detail < 8) buttons |= 1u << detail;
+    if (evtype == 5 && detail >= 1 && detail < 8) buttons &= ~(1u << detail);
+    store(packet, 80, buttons);
+    WriteImmediately(packet.data(), packet.size());
+}
+
+// xXIEnterEvent (72 byte + topeng tombol 4 byte): Enter/Leave/FocusIn/FocusOut.
+void XClient::SendXIEnterEvent(u16 evtype, u16 deviceid, u16 sourceid, u8 mode, u8 detail, u32 root, u32 event, u32 child,
+                               s32 rootX, s32 rootY, s32 eventX, s32 eventY, bool focus, u32 state) {
+    if (is_dead) return;
+    if (!xiOpcode) {
+        if (const auto* extension = server.GetExtensionManager().FindExtension("XInputExtension")) xiOpcode = extension->base;
+    }
+    std::array<u8, 76> packet{};
+    packet[0] = GenericEvent; packet[1] = xiOpcode;
+    store(packet, 2, sequence);
+    store(packet, 4, u32((packet.size() - 32) / 4));
+    store(packet, 8, evtype); store(packet, 10, deviceid);
+    store(packet, 12, server.GetTimestamp());
+    store(packet, 16, sourceid); packet[18] = mode; packet[19] = detail;
+    store(packet, 20, root); store(packet, 24, event); store(packet, 28, child);
+    store(packet, 32, s32(rootX * 65536)); store(packet, 36, s32(rootY * 65536));
+    store(packet, 40, s32(eventX * 65536)); store(packet, 44, s32(eventY * 65536));
+    packet[48] = 1;                     // same_screen
+    packet[49] = focus ? 1 : 0;
+    store(packet, 50, u16(1));          // buttons_len
+    const u32 mods = state & 0xff;
+    store(packet, 52, mods); store(packet, 64, mods);   // base dan effective; group (68..71) = 0
+    store(packet, 72, xiButtonMask(state));
+    WriteImmediately(packet.data(), packet.size());
 }
 
 void XClient::ProcXInput() {
@@ -232,14 +295,22 @@ void XClient::ProcXInput() {
             offset += size_t(words) * 4;
         }
         if (offset != request_size) throw BadLengthError();
-        // This subset delivers raw events only on the immortal root window.
-        if (window != server.GetWindowManager().GetRootWindow()->id) return;
+        // Event perangkat XI2 (Key/Button/Motion/Enter/Leave/Focus) dipilih per window dan dikirim oleh Window::*Notify.
+        // Dulu pilihan di window selain root dibuang, sehingga SDL3 (yang tidak memasang topeng inti untuk input
+        // bila XI2 ada) tidak pernah menerima mouse, keyboard, atau fokus.
+        auto* selectedWindow = GetResourceAs<Window>(window);
         auto& masks = xiSelections[window];
         for (const auto& [device, mask] : changes) {
             if (mask) masks[device] = mask;
             else masks.erase(device);
         }
+        u32 deviceMask = 0;
+        for (const auto& [device, mask] : masks) deviceMask |= mask & xiDeviceEvents;
         if (masks.empty()) xiSelections.erase(window);
+        selectedWindow->PutXIMask(this, deviceMask);
+        if (deviceMask) xiWindows.insert(selectedWindow);
+        else xiWindows.erase(selectedWindow);
+        if (window != server.GetWindowManager().GetRootWindow()->id) return;
         xiRawMask = 0;
         const auto root = xiSelections.find(server.GetWindowManager().GetRootWindow()->id);
         if (root != xiSelections.end()) for (u16 device : {0, 1, 2}) {

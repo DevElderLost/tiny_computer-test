@@ -42,6 +42,8 @@ XClient::~XClient() {
         it.first->RemoveEventListener(this);
     }
     event_windows.clear();
+    for (auto* window : xiWindows) window->RemoveXIListener(this);
+    xiWindows.clear();
     FreeOwnerResources();
     close(socket_fd);
 }

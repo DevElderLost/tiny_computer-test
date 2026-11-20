@@ -2,6 +2,7 @@
 
 #include <list>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include <thread>
 #include <atomic>
@@ -39,6 +40,13 @@ public:
     int Socket() const { return socket_fd; }
 
     void SendEvent(xEvent& event);
+    // XInput2 (native_xinput.cpp): event perangkat (Key/Button/Motion) dan event Enter/Leave/FocusIn/FocusOut XI2.
+    // Koordinat FP1616 sudah dalam piksel bulat; state = topeng state inti (tombol + modifier).
+    void SendXIDeviceEvent(u16 evtype, u16 deviceid, u16 sourceid, u32 detail, u32 root, u32 event, u32 child,
+                           s32 rootX, s32 rootY, s32 eventX, s32 eventY, u32 state);
+    void SendXIEnterEvent(u16 evtype, u16 deviceid, u16 sourceid, u8 mode, u8 detail, u32 root, u32 event, u32 child,
+                          s32 rootX, s32 rootY, s32 eventX, s32 eventY, bool focus, u32 state);
+    void ForgetXIWindow(Window* window) { xiWindows.erase(window); }
     void SendXIRawEvent(u16 type, u32 detail, s32 dx = 0, s32 dy = 0);
 
     XResource* GetResource(u32 id) const;
@@ -95,6 +103,7 @@ private:
     void ProcCompat();
     void ProcXInput();
     std::unordered_map<u32, std::unordered_map<u16, u32>> xiSelections;
+    std::unordered_set<Window*> xiWindows;   // window dengan topeng event perangkat XI2 milik klien ini
     u32 xiRawMask{};
     u8 xiOpcode{};
     std::vector<u8> pending_output;

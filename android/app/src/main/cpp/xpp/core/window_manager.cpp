@@ -738,6 +738,10 @@ void WindowManager::RemoveAllSubWindows(Window* window, std::vector<Window*>& wi
         client->RemoveEventWindow(window);
     }
     window->client_masks.clear();
+    for (auto [client, mask] : window->xi_masks) {
+        client->ForgetXIWindow(window);
+    }
+    window->xi_masks.clear();
     xEvent event{};
     event.u.destroyNotify.event = window->id;
     event.u.destroyNotify.window = window->id;

@@ -167,6 +167,33 @@ public:
 
     void RemoveEventListener(XClient* client) { client_masks.erase(client); }
 
+    // XInput2: topeng event perangkat XI2 per klien pada window ini (bit = 1 << evtype: 2 KeyPress ... 10 FocusOut).
+    // SDL3 (PPSSPP, dll.) memilih input mouse, keyboard, enter/leave dan fokus HANYA lewat XI2 dan tidak memasang
+    // topeng inti, jadi tanpa ini jendelanya tidak pernah menerima klik, tombol, atau fokus.
+    void PutXIMask(XClient* client, u32 mask) {
+        if (mask) xi_masks[client] = mask;
+        else xi_masks.erase(client);
+    }
+    void RemoveXIListener(XClient* client) { xi_masks.erase(client); }
+    u32 GetXIMask(XClient* client) const {
+        auto i = xi_masks.find(client);
+        return i == xi_masks.end() ? 0 : i->second;
+    }
+    bool HasXIListenerFor(u32 bits) const {
+        for (const auto& it : xi_masks) {
+            if (it.second & bits) return true;
+        }
+        return false;
+    }
+    template <typename Callback> void ForeachXIListeners(u32 bits, Callback&& callback) {
+        for (const auto& it : xi_masks) {
+            if (it.second & bits) callback(it.first);
+        }
+    }
+    // Kirim event perangkat XI2 (Key/Button/Motion) ke klien yang memilihnya pada window ini atau leluhur terdekat.
+    // Mengembalikan klien penerima supaya event inti yang sama tidak dikirim dobel (Xorg: XI2 menggantikan event inti).
+    std::vector<XClient*> XIDeviceNotify(u16 evtype, s32 x, s32 y, u32 detail, u32 state);
+
     void Move(s32 dx, s32 dy, s32 dw, s32 dh);
 
     void Reparent(XClient* caller_client, Window* new_parent, s32 x, s32 y);
@@ -238,6 +265,7 @@ private:
     u8 depth{};
     WindowAttributes attributes{};
     std::unordered_map<XClient*, u32> client_masks;
+    std::unordered_map<XClient*, u32> xi_masks;
     std::list<Window*> children;
     std::unordered_map<u32, sp<Property>> properties;
 };

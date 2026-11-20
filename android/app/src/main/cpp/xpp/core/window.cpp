@@ -8,6 +8,7 @@
 #include "core/exceptions.h"
 #include "core/pixmap.h"
 #include "core/drawable.h"
+#include "core/mouse.h"
 #include "core/window.h"
 #include "core/window_manager.h"
 #include "core/xclient.h"
@@ -481,7 +482,19 @@ void Window::FocusOutNotify(u32 detail, u32 mode) {
     event.u.focus.mode = mode;
     event.u.u.detail = detail;
     event.u.u.type = FocusOut;
-    ForeachEventListeners(FocusChangeMask, [&](XClient* client) { client->SendEvent(event); });
+    constexpr u32 xi_bit = 1u << 10;   // XI_FocusOut
+    if (HasXIListenerFor(xi_bit)) {
+        auto& mouse = window_manager.GetServer().GetMouse();
+        const s32 mx = mouse.GetX(), my = mouse.GetY();
+        ForeachXIListeners(xi_bit, [&](XClient* client) {
+            client->SendXIEnterEvent(10, 3, 3, u8(mode), u8(detail), window_manager.GetRootWindow()->id, id, 0, mx, my,
+                                     mx - in_rect.left, my - in_rect.top, true, window_manager.GetButtonMasks());
+        });
+    }
+    ForeachEventListeners(FocusChangeMask, [&](XClient* client) {
+        if (GetXIMask(client) & xi_bit) return;   // klien yang memilih XI_FocusOut tidak ikut menerima FocusOut inti
+        client->SendEvent(event);
+    });
 }
 
 void Window::FocusInNotify(u32 detail, u32 mode) {
@@ -493,7 +506,19 @@ void Window::FocusInNotify(u32 detail, u32 mode) {
     event.u.focus.mode = mode;
     event.u.u.detail = detail;
     event.u.u.type = FocusIn;
-    ForeachEventListeners(FocusChangeMask, [&](XClient* client) { client->SendEvent(event); });
+    constexpr u32 xi_bit = 1u << 9;   // XI_FocusIn
+    if (HasXIListenerFor(xi_bit)) {
+        auto& mouse = window_manager.GetServer().GetMouse();
+        const s32 mx = mouse.GetX(), my = mouse.GetY();
+        ForeachXIListeners(xi_bit, [&](XClient* client) {
+            client->SendXIEnterEvent(9, 3, 3, u8(mode), u8(detail), window_manager.GetRootWindow()->id, id, 0, mx, my,
+                                     mx - in_rect.left, my - in_rect.top, true, window_manager.GetButtonMasks());
+        });
+    }
+    ForeachEventListeners(FocusChangeMask, [&](XClient* client) {
+        if (GetXIMask(client) & xi_bit) return;   // klien yang memilih XI_FocusIn tidak ikut menerima FocusIn inti
+        client->SendEvent(event);
+    });
 }
 
 void Window::LeaveEnterNotify(s32 x, s32 y, Window* enter_window, u32 mode, XClient* only) {
@@ -545,7 +570,10 @@ void Window::PointerNotify(u32 type, s32 x, s32 y, u32 detail, Window* window, u
     }
     // EnterNotify dipilih lewat EnterWindowMask, LeaveNotify lewat LeaveWindowMask (dua bit berbeda di protokol X11).
     const u32 crossing_mask = type == LeaveNotify ? LeaveWindowMask : EnterWindowMask;
-    if (!HasEventListenerFor(crossing_mask)) {
+    const u16 xi_type = type == LeaveNotify ? 8 : 7;   // XI_Leave / XI_Enter
+    const u32 xi_bit = 1u << xi_type;
+    const bool has_xi = HasXIListenerFor(xi_bit);
+    if (!has_xi && !HasEventListenerFor(crossing_mask)) {
         return;
     }
     const Window* child = window->GetParent() == this ? window : nullptr;
@@ -570,9 +598,48 @@ void Window::PointerNotify(u32 type, s32 x, s32 y, u32 detail, Window* window, u
     event.u.enterLeave.flags = focus ? NotifyNonlinear : NotifyInferior;
     event.u.u.type = type;
 
+    if (has_xi) {
+        ForeachXIListeners(xi_bit, [&](XClient* client) {
+            if (only && client != only) return;
+            client->SendXIEnterEvent(xi_type, 2, 4, u8(mode), u8(detail), window_manager.GetRootWindow()->id, id,
+                                     child ? child->id : 0, x, y, x - out_rect.left, y - out_rect.top, focus,
+                                     window_manager.GetButtonMasks());
+        });
+    }
     ForeachEventListeners(crossing_mask, [&](XClient* client) {
+        if (GetXIMask(client) & xi_bit) return;   // XI2 menggantikan event inti untuk klien yang memilihnya
         if (!only || client == only) client->SendEvent(event);
     });
+}
+
+std::vector<XClient*> Window::XIDeviceNotify(u16 evtype, s32 x, s32 y, u32 detail, u32 state) {
+    std::vector<XClient*> sent;
+    const u32 bit = 1u << evtype;
+    const u32 core_mask = evtype == 2   ? KeyPressMask
+                          : evtype == 3 ? KeyReleaseMask
+                          : evtype == 4 ? ButtonPressMask
+                          : evtype == 5 ? ButtonReleaseMask
+                                        : PointerMotionMask;
+    auto event_window = this;
+    const Window* child{};
+    while (!event_window->IsMapped() || !event_window->HasXIListenerFor(bit)) {
+        if (!event_window->parent) {
+            return sent;
+        }
+        if (event_window->attributes.dont_propagate_mask & core_mask) {
+            return sent;
+        }
+        child = event_window;
+        event_window = event_window->parent;
+    }
+    const bool key = evtype <= 3;
+    const u32 root = window_manager.GetRootWindow()->id;
+    event_window->ForeachXIListeners(bit, [&](XClient* client) {
+        client->SendXIDeviceEvent(evtype, key ? 3 : 2, key ? 3 : 4, detail, root, event_window->id, child ? child->id : 0,
+                                  x, y, x - event_window->in_rect.left, y - event_window->in_rect.top, state);
+        sent.push_back(client);
+    });
+    return sent;
 }
 
 constexpr u32 ButtonEventMask(const u32 button_mask) {
@@ -594,6 +661,7 @@ constexpr u32 ButtonEventMask(const u32 button_mask) {
 }
 
 void Window::PointerMotionNotify(s32 x, s32 y, u32 button_mask, XClient* grab_client) {
+    const auto xi_clients = XIDeviceNotify(6, x, y, 0, button_mask);   // XI_Motion
     auto event_window = this;
     const Window* child{};
     const u32 mask = ButtonEventMask(button_mask);
@@ -627,6 +695,7 @@ void Window::PointerMotionNotify(s32 x, s32 y, u32 button_mask, XClient* grab_cl
     }
     event.u.u.detail = detail;
     event_window->ForeachEventListeners(mask, [&](XClient* client) {
+        if (std::find(xi_clients.begin(), xi_clients.end(), client) != xi_clients.end()) return;
         if (client == grab_client) {
             return;
         }
@@ -635,6 +704,7 @@ void Window::PointerMotionNotify(s32 x, s32 y, u32 button_mask, XClient* grab_cl
 }
 
 Window* Window::ButtonNotify(bool down, s32 x, s32 y, u32 button, XClient* grab_client, XClient** recipient) {
+    const auto xi_clients = XIDeviceNotify(down ? 4 : 5, x, y, button, window_manager.GetButtonMasks());   // XI_ButtonPress/Release
     u32 mask = down ? ButtonPressMask : ButtonReleaseMask;
     auto event_window = this;
     const Window* child{};
@@ -664,6 +734,7 @@ Window* Window::ButtonNotify(bool down, s32 x, s32 y, u32 button, XClient* grab_
     event.u.u.detail = button;
     event.u.u.type = down ? ButtonPress : ButtonRelease;
     event_window->ForeachEventListeners(mask, [&](XClient* client) {
+        if (std::find(xi_clients.begin(), xi_clients.end(), client) != xi_clients.end()) return;
         if (client == grab_client) {
             return;
         }
@@ -675,6 +746,7 @@ Window* Window::ButtonNotify(bool down, s32 x, s32 y, u32 button, XClient* grab_
 }
 
 bool Window::KeyNotify(bool down, s32 x, s32 y, u32 keycode, XClient* grab_client) {
+    const auto xi_clients = XIDeviceNotify(down ? 2 : 3, x, y, keycode, window_manager.GetButtonMasks());   // XI_KeyPress/Release
     u32 mask = down ? KeyPressMask : KeyReleaseMask;
     auto event_window = this;
     const Window* child{};
@@ -703,6 +775,7 @@ bool Window::KeyNotify(bool down, s32 x, s32 y, u32 keycode, XClient* grab_clien
     event.u.keyButtonPointer.sameScreen = true;
     event.u.u.type = down ? KeyPress : KeyRelease;
     event_window->ForeachEventListeners(mask, [&](XClient* client) {
+        if (std::find(xi_clients.begin(), xi_clients.end(), client) != xi_clients.end()) return;
         if (client == grab_client) {
             return;
         }
