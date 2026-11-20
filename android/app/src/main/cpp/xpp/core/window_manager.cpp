@@ -10,6 +10,8 @@
 #include "core/trace.h"
 #include "core/window.h"
 #include "core/window_manager.h"
+#include <cstdio>
+#include <string>
 #include "core/xclient.h"
 #include "core/xscreen.h"
 #include "native_screen.h"
@@ -839,6 +841,34 @@ void WindowManager::UngrabButton(XClient* client, Window* window, u8 button, u16
     });
 }
 
+// Jejak diagnosis pencarian grab pasif: menunjukkan apakah klik sampai ke WM (xfwm4) dan kalau tidak, kenapa.
+void WindowManager::TracePassiveGrabLookup(Window* pointer_window, u16 button, const PassiveButtonGrab* match) const {
+    if (passive_grabs.empty() || !TraceOnFast()) return;
+    static int traced = 0;
+    if (traced >= 120) return;
+    ++traced;
+    if (match) {
+        Trace("PassiveGrab cocok: button=%u state=0x%x pointerWin=0x%x -> grab window=0x%x button=%u mods=0x%x sync=%d", unsigned(button),
+              unsigned(GetButtonMasks()), unsigned(pointer_window->id), unsigned(match->window), unsigned(match->button),
+              unsigned(match->modifiers), int(match->pointer_sync));
+        return;
+    }
+    std::string chain;
+    for (Window* w = pointer_window; w; w = w->GetParent()) {
+        char buf[16];
+        std::snprintf(buf, sizeof(buf), "0x%x ", unsigned(w->id));
+        chain += buf;
+    }
+    Trace("PassiveGrab TIDAK cocok: button=%u state=0x%x grab_terdaftar=%zu rantai_window_di_bawah_pointer=[%s]", unsigned(button),
+          unsigned(GetButtonMasks()), passive_grabs.size(), chain.c_str());
+    int shown = 0;
+    for (const auto& g : passive_grabs) {
+        if (++shown > 8) break;
+        Trace("  grab: window=0x%x button=%u mods=0x%x sync=%d", unsigned(g.window), unsigned(g.button), unsigned(g.modifiers),
+              int(g.pointer_sync));
+    }
+}
+
 // Grab pasif yang paling dekat ke root (leluhur tertinggi) yang cocok menang, seperti X11.
 const WindowManager::PassiveButtonGrab* WindowManager::FindPassiveButtonGrab(Window* pointer_window, u16 button, u32 state) const {
     if (passive_grabs.empty()) return nullptr;
@@ -857,7 +887,12 @@ const WindowManager::PassiveButtonGrab* WindowManager::FindPassiveButtonGrab(Win
 }
 
 void WindowManager::AllowEvents(XClient* client, u8 mode) {
-    if (!passive_frozen || client != grab_pointer_client) return;
+    if (!passive_frozen || client != grab_pointer_client) {
+        // Normal pada jalur klik-untuk-fokus: klik sudah diteruskan ke klien tanpa membeku, jadi tidak ada yang perlu dilepas.
+        Trace("AllowEvents mode=%u diabaikan (beku=%d, pemegang_grab_pointer=%d)", unsigned(mode), int(passive_frozen),
+              int(client == grab_pointer_client));
+        return;
+    }
     if (mode == ReplayPointer) {
         ReplayFrozenPointer();
         return;
@@ -978,6 +1013,23 @@ Cursor* WindowManager::UpdatePointerPosition(s32 x, s32 y, u32 mode, bool notify
 void WindowManager::UpdatePointerButton(u16 button, bool down) {
     const s32 x = mouse.GetX();
     const s32 y = mouse.GetY();
+    // Status tombol untuk event ini menurut X11 (sebelum perubahan). Bersarang aman: nilai lama dipulihkan di akhir.
+    struct StatePin {
+        WindowManager& wm;
+        bool prev_pinned;
+        u32 prev_value;
+        StatePin(WindowManager& w, u32 value) : wm(w), prev_pinned(w.button_state_pinned), prev_value(w.button_state_pinned_value) {
+            w.button_state_pinned = true;
+            w.button_state_pinned_value = value;
+        }
+        ~StatePin() {
+            wm.button_state_pinned = prev_pinned;
+            wm.button_state_pinned_value = prev_value;
+        }
+    };
+    const u32 button_bit = (button >= 1 && button <= 7) ? (0x80u << button) : 0u;
+    const u32 live_state = mouse.GetButtons() | server.GetKeyboard().GetModifiersMask();
+    StatePin state_pin(*this, down ? (live_state & ~button_bit) : (live_state | button_bit));
     static int traced_buttons = 0;
     if (traced_buttons < 250 && TraceOn()) {
         ++traced_buttons;
@@ -994,7 +1046,9 @@ void WindowManager::UpdatePointerButton(u16 button, bool down) {
     if (!grab_pointer_window && down && !passive_skip) {
         // Grab tombol pasif (XGrabButton) milik WM: klien pemegang grab menerima klik lebih dulu.
         Window* under = GetPointerWindow(x, y);
-        if (const auto* grab = FindPassiveButtonGrab(under, button, GetButtonMasks())) {
+        const auto* grab = FindPassiveButtonGrab(under, button, GetButtonMasks());
+        TracePassiveGrabLookup(under, button, grab);
+        if (grab) {
             auto* gw = server.GetResource(grab->window);
             if (gw && gw->GetType() == XResourceType::Window) {
                 Window* grab_window = gw->As<Window>();
@@ -1005,6 +1059,10 @@ void WindowManager::UpdatePointerButton(u16 button, bool down) {
                 // WM diberi tahu dulu (fokus/raise), lalu klik langsung diteruskan ke klien lewat jalur normal di bawah.
                 // AllowEvents sesudahnya menjadi no-op karena tidak ada yang beku.
                 if (g.pointer_sync && (GetButtonMasks() & (Mod1Mask | Mod4Mask)) == 0) {
+                    if (TraceOnFast()) {
+                        Trace("PassiveGrab: klik-untuk-fokus, event ke WM window=0x%x (event_mask=0x%x ButtonPress%s); menunggu AllowEvents dari WM",
+                              unsigned(grab_window->id), unsigned(g.event_mask), (g.event_mask & ButtonPressMask) ? " termasuk" : " TIDAK termasuk");
+                    }
                     grab_window->GrabButtonNotify(true, x, y, button, g.client, g.event_mask, g.owner_events);
                     // lanjut ke pengiriman normal ke klien di bawah (tanpa grab pasif)
                 } else {
@@ -1089,6 +1147,7 @@ void WindowManager::OnKeyboardKeyChange(u32 keycode, bool down) {
 }
 
 u32 WindowManager::GetButtonMasks() const {
+    if (button_state_pinned) return button_state_pinned_value;
     return mouse.GetButtons() | server.GetKeyboard().GetModifiersMask();
 }
 

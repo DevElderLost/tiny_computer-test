@@ -3,7 +3,8 @@
 namespace xorg {
 // Jejak protokol untuk diagnosis. Aktif hanya selama berkas penanda `<dir>/.xpp-trace` ada (dibuat pengguna dengan
 // `touch /tmp/.xpp-trace` di dalam kontainer); isi jejak ditulis ke `<dir>/xpp-trace.log`. <dir> = folder tmp kontainer yang
-// diberikan aplikasi lewat variabel lingkungan XPP_TRACE_DIR. Pemeriksaan penanda dibatasi sekali per detik.
+// diberikan aplikasi lewat variabel lingkungan XPP_TRACE_DIR. Bila XPP_TRACE_LOG_DIR diisi (Download/Wayland-logs), jejak juga
+// disalin ke `<XPP_TRACE_LOG_DIR>/xpp-trace-<waktu>.log`. Pemeriksaan penanda dibatasi sekali per detik.
 bool TraceOn();
 // Sama dengan TraceOn() tetapi tanpa mutex di jalur panas (dipakai per request): status disegarkan paling sering sekali per detik.
 bool TraceOnFast();

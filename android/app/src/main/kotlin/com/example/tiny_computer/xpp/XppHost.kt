@@ -5,6 +5,7 @@ import android.util.Log
 import android.view.Surface
 import android.view.WindowManager
 import com.example.tiny_computer.core.Cfg
+import com.example.tiny_computer.core.LaunchLog
 import com.example.tiny_computer.core.TinyEnv
 import com.example.tiny_computer.display.DisplayFit
 import java.io.File
@@ -103,8 +104,13 @@ object XppHost {
         lastError = null
         try {
             sock.parentFile?.mkdirs()
-            // Jejak protokol (diagnosis): aktif selama berkas /tmp/.xpp-trace ada di kontainer; hasil di /tmp/xpp-trace.log
+            // Jejak protokol (diagnosis): aktif selama berkas /tmp/.xpp-trace ada di kontainer; hasil di /tmp/xpp-trace.log dan Download/Wayland-logs
             runCatching { android.system.Os.setenv("XPP_TRACE_DIR", TinyEnv.runtimeDir().toString(), true) }
+            // salinan jejak ikut ditulis ke Download/Wayland-logs (xpp-trace-<waktu>.log), folder yang sama dengan log shortcut/container
+            runCatching {
+                File(LaunchLog.DIR).mkdirs()
+                android.system.Os.setenv("XPP_TRACE_LOG_DIR", LaunchLog.DIR, true)
+            }
             // server tidak pernah menghapus soket yang masih ada; sisa soket dari proses sebelumnya dibuang di sini
             if (sock.exists()) sock.delete()
             val flags = NativeX11.FLAG_NO_MIT_SHM or NativeX11.FLAG_NO_DRI3 or

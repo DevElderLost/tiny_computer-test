@@ -150,9 +150,15 @@ private:
     bool frozen_release{};
     std::chrono::steady_clock::time_point frozen_since{};
     const PassiveButtonGrab* FindPassiveButtonGrab(Window* pointer_window, u16 button, u32 state) const;
+    void TracePassiveGrabLookup(Window* pointer_window, u16 button, const PassiveButtonGrab* match) const;
     void ReplayFrozenPointer();
     void CheckFrozenTimeout();
     bool grab_keyboard_synchronous{};
+    // Field `state` pada ButtonPress/ButtonRelease di X11 adalah status tombol SEBELUM event itu (press: tombol yang baru
+    // ditekan belum ada; release: tombol yang dilepas masih ada). Mouse sudah diperbarui sebelum event dikirim, jadi selama
+    // UpdatePointerButton nilai yang benar dipasang di sini dan dipakai GetButtonMasks().
+    bool button_state_pinned{};
+    u32 button_state_pinned_value{};
     u32 grab_event_mask{};
     struct CompositeRedirect { XClient* client; Window* window; u8 update; };
     std::vector<CompositeRedirect> composite_redirects;
