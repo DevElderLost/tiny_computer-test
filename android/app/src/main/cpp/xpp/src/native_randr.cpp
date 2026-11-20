@@ -21,7 +21,7 @@ void XClient::ProcRandR() {
     switch (req->data) {
     case X_RRQueryVersion: {
         CHECK_REQUEST_SIZE_STRICT(xRRQueryVersionReq);
-        xRRQueryVersionReply reply{}; reply.majorVersion = 1; reply.minorVersion = 2;
+        xRRQueryVersionReply reply{}; reply.majorVersion = 1; reply.minorVersion = 3;   // SDL3 mensyaratkan RandR >= 1.3, kalau tidak refresh rate display = 0
         send(reply); return;
     }
     case X_RRSelectInput: CHECK_REQUEST_SIZE_STRICT(xRRSelectInputReq); return;
@@ -134,6 +134,17 @@ void XClient::ProcRandR() {
         Write(&reply, sizeof(reply)); for (int i = 0; i < 3; ++i) Write(values, sizeof(values)); Flush(); return;
     }
     case X_RRSetCrtcGamma: CHECK_REQUEST_SIZE(xRRSetCrtcGammaReq); return;
+    // RandR 1.3: output utama dan panning (tidak ada panning).
+    case X_RRSetOutputPrimary: CHECK_REQUEST_SIZE_STRICT(xRRSetOutputPrimaryReq); return;
+    case X_RRGetOutputPrimary: {
+        CHECK_REQUEST_SIZE_STRICT(xRRGetOutputPrimaryReq);
+        xRRGetOutputPrimaryReply reply{}; reply.output = output; send(reply); return;
+    }
+    case X_RRGetPanning: {
+        CHECK_REQUEST_SIZE_STRICT(xRRGetPanningReq);
+        xRRGetPanningReply reply{}; reply.status = RRSetConfigSuccess; reply.length = (sizeof(reply) - 32) / 4;
+        reply.timestamp = timestamp; send(reply); return;
+    }
     default: throw BadRequestError();
     }
 }
