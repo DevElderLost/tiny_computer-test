@@ -145,6 +145,25 @@ void XClient::ProcRandR() {
         xRRGetPanningReply reply{}; reply.status = RRSetConfigSuccess; reply.length = (sizeof(reply) - 32) / 4;
         reply.timestamp = timestamp; send(reply); return;
     }
+    // RandR 1.3: transform CRTC. SDL3 (PPSSPP, dll) memanggil RRGetCrtcTransform (minor 27) saat init
+    // video; kalau dijawab BadRequest, handler error Xlib bawaan langsung exit() dan layar jadi hitam.
+    // Server ini tidak punya transform, jadi jawab matriks identitas (16.16 fixed point) tanpa filter.
+    case X_RRGetCrtcTransform: {
+        CHECK_REQUEST_SIZE_STRICT(xRRGetCrtcTransformReq);
+        if (GetRequestData<xRRGetCrtcTransformReq>()->crtc != crtc) throw BadValueError(0);
+        xRRGetCrtcTransformReply reply{};
+        reply.type = X_Reply; reply.sequenceNumber = sequence;
+        reply.length = (sizeof(reply) - 32) / 4;   // tanpa nama filter dan parameter
+        reply.pendingTransform.matrix11 = reply.pendingTransform.matrix22 = reply.pendingTransform.matrix33 = 0x10000;
+        reply.currentTransform.matrix11 = reply.currentTransform.matrix22 = reply.currentTransform.matrix33 = 0x10000;
+        reply.hasTransforms = 0;
+        WriteImmediately(&reply, sizeof(reply)); return;
+    }
+    case X_RRSetCrtcTransform: {
+        CHECK_REQUEST_SIZE(xRRSetCrtcTransformReq);
+        if (GetRequestData<xRRSetCrtcTransformReq>()->crtc != crtc) throw BadValueError(0);
+        return;   // transform tidak didukung: abaikan (tetap identitas)
+    }
     default: throw BadRequestError();
     }
 }
