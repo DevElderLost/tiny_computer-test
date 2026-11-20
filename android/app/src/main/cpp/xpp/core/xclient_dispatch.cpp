@@ -1071,8 +1071,8 @@ void XClient::ProcPolyFillRectangle() {
     const u32 tile_alpha = drawable->GetDepth() == 24 ? 0xff000000u : 0u;
     static_cast<NativeScreen&>(server.GetScreen()).MutateDrawable(drawable, [&] {
         for (u32 i = 0; i < count; i++) {
-            // Depth 32: pixel foreground sudah memuat alpha; selain itu alpha penuh.
-            const u32 background = drawable->GetDepth() == 32 ? gc->GetForeground() : (gc->GetForeground() | 0xff000000);
+            // Depth 32: alpha asli dipertahankan; foreground tanpa alpha (0x00RRGGBB dari operasi core) dijadikan opaque.
+            const u32 background = drawable->GetDepth() == 32 ? CoreOpaqueIfNoAlpha(gc->GetForeground()) : (gc->GetForeground() | 0xff000000);
             const Rect area{rectangles[i].x, rectangles[i].y, rectangles[i].x + int(rectangles[i].width),
                             rectangles[i].y + int(rectangles[i].height)};
             for (const Rect& c : gc->ApplyClip(area)) {
@@ -1086,7 +1086,8 @@ void XClient::ProcPolyFillRectangle() {
                     const s32 ty = ((c.top + y - tile_oy) % tile_h + tile_h) % tile_h;
                     for (s32 x = 0; x < w; ++x) {
                         const s32 tx = ((c.left + x - tile_ox) % tile_w + tile_w) % tile_w;
-                        out[size_t(y) * w + x] = tile[size_t(ty) * tile_w + tx] | tile_alpha;
+                        const u32 tp = tile[size_t(ty) * tile_w + tx];
+                        out[size_t(y) * w + x] = drawable->GetDepth() == 32 ? CoreOpaqueIfNoAlpha(tp) : (tp | tile_alpha);
                     }
                 }
                 drawable->WritePixels(reinterpret_cast<const u8*>(out.data()), 0, 0, c.left, c.top, w, h, u16(w));
@@ -1169,8 +1170,17 @@ void XClient::ProcPutImage() {
                 ASSERT(req->width * req->height * 4 <= data_len);
                 // Klip GC: cairo memasang XSetClipRectangles lalu satu PutImage untuk seluruh area pembatas.
                 const Rect area{req->dstX, req->dstY, req->dstX + int(req->width), req->dstY + int(req->height)};
+                std::vector<u32> fixed;
+                const u8* src = data;
+                if (drawable->GetDepth() == 32) {
+                    // Lihat CoreOpaqueIfNoAlpha: piksel tanpa alpha ke window ARGB dijadikan opaque.
+                    fixed.resize(size_t(req->width) * req->height);
+                    std::memcpy(fixed.data(), data, fixed.size() * 4);
+                    for (u32& px : fixed) px = CoreOpaqueIfNoAlpha(px);
+                    src = reinterpret_cast<const u8*>(fixed.data());
+                }
                 for (const Rect& c : gc->ApplyClip(area)) {
-                    drawable->WritePixels(data, c.left - req->dstX, c.top - req->dstY, c.left, c.top,
+                    drawable->WritePixels(src, c.left - req->dstX, c.top - req->dstY, c.left, c.top,
                                           c.right - c.left, c.bottom - c.top, req->width);
                 }
             } else if (depth == 8 && req->format == ZPixmap) {

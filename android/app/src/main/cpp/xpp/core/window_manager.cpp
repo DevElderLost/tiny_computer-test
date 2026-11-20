@@ -808,7 +808,17 @@ u32 WindowManager::GrabPointer(XClient* client,
     grab_pointer_synchronous = psync;
     grab_keyboard_synchronous = ksync;
 
+    // Pemegang grab pasif yang beku (mis. xfwm4 pada Alt+klik) memanggil XGrabPointer sendiri untuk memindah/mengubah ukuran
+    // window: grab aktif itu menggantikan beku. Tanpa ini timeout beku memutar ulang klik dan MELEPAS grab milik WM.
+    const bool was_frozen = passive_frozen;
+    const bool release_pending = frozen_release;
+    const u16 pending_button = frozen_button;
+    passive_frozen = false;
+    frozen_release = false;
+
     UpdatePointer(NotifyGrab);
+    // Lepasan tombol yang tertahan selama beku harus sampai ke WM, kalau tidak loop move/resize WM menunggu selamanya.
+    if (was_frozen && release_pending) UpdatePointerButton(pending_button, false);
     return Success;
 }
 
@@ -876,7 +886,7 @@ void WindowManager::ReplayFrozenPointer() {
 }
 
 void WindowManager::CheckFrozenTimeout() {
-    if (passive_frozen && std::chrono::steady_clock::now() - frozen_since > std::chrono::milliseconds(800)) {
+    if (passive_frozen && std::chrono::steady_clock::now() - frozen_since > std::chrono::milliseconds(150)) {
         Trace("Passive grab dibekukan terlalu lama; klik diputar ulang otomatis");
         ReplayFrozenPointer();
     }
@@ -989,21 +999,31 @@ void WindowManager::UpdatePointerButton(u16 button, bool down) {
             if (gw && gw->GetType() == XResourceType::Window) {
                 Window* grab_window = gw->As<Window>();
                 const PassiveButtonGrab g = *grab;
-                auto* confine = g.confine_window ? server.GetResource(g.confine_window) : nullptr;
-                auto* cur = g.cursor ? server.GetResource(g.cursor) : nullptr;
-                GrabPointer(g.client, grab_window,
-                            confine && confine->GetType() == XResourceType::Window ? confine->As<Window>() : nullptr,
-                            cur && cur->GetType() == XResourceType::Cursor ? cur->As<Cursor>() : nullptr, 0, g.event_mask,
-                            g.owner_events, g.pointer_sync, false);
-                grab_pointer_passive = true;
-                if (g.pointer_sync) {
-                    passive_frozen = true;
-                    frozen_button = button;
-                    frozen_release = false;
-                    frozen_since = std::chrono::steady_clock::now();
+                // Grab sinkron tanpa Alt/Super = klik-untuk-fokus/raise ala xfwm4 (Shift/Ctrl/NumLock/CapsLock tidak dihitung, itu klik untuk klien): WM menerima klik lebih dulu lalu memanggil
+                // AllowEvents(ReplayPointer). Server ini tidak boleh menunggu balasan itu: balasan xfwm4 terbukti tidak
+                // datang (log: tidak ada AllowEvents), sehingga setiap klik beku dan seluruh input window klien mati.
+                // WM diberi tahu dulu (fokus/raise), lalu klik langsung diteruskan ke klien lewat jalur normal di bawah.
+                // AllowEvents sesudahnya menjadi no-op karena tidak ada yang beku.
+                if (g.pointer_sync && (GetButtonMasks() & (Mod1Mask | Mod4Mask)) == 0) {
+                    grab_window->GrabButtonNotify(true, x, y, button, g.client, g.event_mask, g.owner_events);
+                    // lanjut ke pengiriman normal ke klien di bawah (tanpa grab pasif)
+                } else {
+                    auto* confine = g.confine_window ? server.GetResource(g.confine_window) : nullptr;
+                    auto* cur = g.cursor ? server.GetResource(g.cursor) : nullptr;
+                    GrabPointer(g.client, grab_window,
+                                confine && confine->GetType() == XResourceType::Window ? confine->As<Window>() : nullptr,
+                                cur && cur->GetType() == XResourceType::Cursor ? cur->As<Cursor>() : nullptr, 0, g.event_mask,
+                                g.owner_events, g.pointer_sync, false);
+                    grab_pointer_passive = true;
+                    if (g.pointer_sync) {
+                        passive_frozen = true;
+                        frozen_button = button;
+                        frozen_release = false;
+                        frozen_since = std::chrono::steady_clock::now();
+                    }
+                    grab_pointer_window->GrabButtonNotify(true, x, y, button, grab_pointer_client, g.event_mask, g.owner_events);
+                    return;
                 }
-                grab_pointer_window->GrabButtonNotify(true, x, y, button, grab_pointer_client, g.event_mask, g.owner_events);
-                return;
             }
         }
     }

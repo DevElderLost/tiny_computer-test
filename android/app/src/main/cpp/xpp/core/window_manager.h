@@ -142,7 +142,8 @@ private:
         u32 cursor;
     };
     std::vector<PassiveButtonGrab> passive_grabs;
-    // Setelah grab pasif sinkron aktif, antrean pointer "beku" sampai AllowEvents. Aman: dilepas otomatis bila WM terlambat.
+    // Grab pasif sinkron dengan modifier (Alt+klik, dsb.) membekukan antrean pointer sampai AllowEvents atau XGrabPointer dari
+    // pemegangnya; dilepas otomatis (150 ms) bila WM terlambat. Klik tanpa modifier (klik-untuk-fokus) tidak pernah membeku.
     bool passive_frozen{};
     bool passive_skip{};  // sedang memutar ulang klik: jangan cocokkan grab pasif lagi
     u16 frozen_button{};

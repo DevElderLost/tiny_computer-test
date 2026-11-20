@@ -10,6 +10,13 @@ namespace xorg {
 class Visual;
 class GraphicsContext;
 
+// Operasi gambar core X11 (FillRectangle, PutImage, CopyArea dari depth 24) tidak mengenal alpha: kliennya (mis. xfwm4)
+// menulis piksel 0x00RRGGBB ke window ARGB depth 32. X sungguhan menampilkannya opaque bila tidak ada compositor; di sini
+// piksel itu akan menjadi tembus pandang saat window dicampur alpha. Piksel premultiplied yang sah tidak pernah berupa
+// alpha 0 dengan RGB bukan nol, jadi bentuk itu dianggap opaque. Alpha asli (RENDER/cairo) dan 0x00000000 tetap utuh,
+// sehingga transparansi sungguhan dipertahankan.
+inline u32 CoreOpaqueIfNoAlpha(u32 p) { return ((p >> 24) == 0 && (p & 0x00ffffffu)) ? (p | 0xff000000u) : p; }
+
 class Drawable {
 public:
     Drawable(u16 width, u16 height, u8 depth, AHardwareBuffer* buffer);

@@ -75,6 +75,11 @@ void NativeDrawable::CopyAreaFrom(NativeDrawable& source, s16 sx, s16 sy, s16 dx
         // is strictly for CPU storage; no new mapping or GPU wait is introduced.
         std::vector<u8> copy(size_t(w) * h * 4);
         source.ReadPixels(copy.data(), sx, sy, w, h, w);
+        if (GetDepth() == 32 && source.GetDepth() != 32) {
+            // Sumber depth 24 (alpha tidak berarti) ke window ARGB: hasilnya opaque.
+            auto* px = reinterpret_cast<u32*>(copy.data());
+            for (size_t i = 0; i < size_t(w) * h; ++i) px[i] |= 0xff000000u;
+        }
         WritePixels(copy.data(), 0, 0, dx, dy, w, h, w);
         return;
     }
@@ -90,6 +95,13 @@ void NativeDrawable::CopyAreaFrom(NativeDrawable& source, s16 sx, s16 sy, s16 dx
         const int row = backwards ? rows - n - 1 : n;
         std::memmove(pixels->data() + size_t(top + row) * stride + size_t(left) * 4,
                      source.pixels->data() + size_t(sourceY + row) * source.stride + size_t(sourceX) * 4, bytes);
+    }
+    if (GetDepth() == 32 && source.GetDepth() != 32) {
+        // Sumber depth 24 (alpha tidak berarti) ke window ARGB: hasilnya opaque, bukan tembus pandang.
+        for (int row = 0; row < rows; ++row) {
+            auto* px = reinterpret_cast<u32*>(pixels->data() + size_t(top + row) * stride + size_t(left) * 4);
+            for (int i = 0; i < right - left; ++i) px[i] |= 0xff000000u;
+        }
     }
 }
 void NativeDrawable::FillRect(s16 x, s16 y, u16 w, u16 h, u32 color) {
