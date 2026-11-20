@@ -954,7 +954,9 @@ void Window::PaintBackground(s32 x, s32 y, s32 w, s32 h) {
     std::vector<u32> pixels(size_t(tw) * th);
     tile->ReadPixels(reinterpret_cast<u8*>(pixels.data()), 0, 0, u16(tw), u16(th), u16(tw));
     std::vector<u32> out(size_t(w) * h);
-    const u32 alpha = depth == 32 ? 0u : 0xff000000u;
+    // Alpha asli tile hanya dipertahankan bila tile juga depth 32; tile depth 24 (alpha tak berarti, biasanya 0) di window
+    // ARGB harus opaque, seperti CopyArea/PutImage di native_drawable.cpp.
+    const u32 alpha = (depth == 32 && tile->GetDepth() == 32) ? 0u : 0xff000000u;
     for (s32 j = 0; j < h; ++j) {
         const s32 ty = ((y + j + oy) % th + th) % th;
         for (s32 i = 0; i < w; ++i) {

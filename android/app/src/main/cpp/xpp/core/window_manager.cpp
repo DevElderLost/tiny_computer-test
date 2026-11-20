@@ -260,6 +260,18 @@ bool WindowManager::ConfigureWindow(XClient* caller_client,
 
         if (width != old_width || height != old_height) {
             window->RecreateDrawable();
+            // RecreateDrawable mengecat latar langsung ke drawable baru tanpa menandainya berisi. Window yang hanya
+            // berlatar (bagian bingkai xfwm4: CWBackPixmap diset saat 1x1, lalu di-Configure ke ukuran sebenarnya)
+            // tidak pernah menggambar lagi, jadi drawable barunya tetap "belum ada isi" dan window tidak pernah
+            // ditampilkan (border hitam). Tandai berisi bila latar memang dicat.
+            const auto& attrs = window->GetAttributes();
+            if (window->GetDrawable() && (attrs.back_pixel != 0 || attrs.back_tile || attrs.back_parent_relative)) {
+                static_cast<NativeDrawable*>(window->GetDrawable())->PublishContent();
+                if (TraceOnFast())
+                    Trace("RESIZE-PUBLISH w=0x%x %ux%u depth=%u tile=%d parentrel=%d", window->id, unsigned(width),
+                          unsigned(height), unsigned(window->GetDepth()), int(attrs.back_tile != nullptr),
+                          int(attrs.back_parent_relative));
+            }
             window->exposed = false;
         }
         changed = true;

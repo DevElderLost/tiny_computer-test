@@ -169,14 +169,6 @@ bool NativeScreen::IsWindowFiltered(Window* w) const {
         return value.find(name) != std::string_view::npos;
     });
 }
-bool NativeScreen::IsWmDecoration(Window* w) const {
-    if (!w || w->IsRoot()) return false;
-    Window* root = w;
-    while (root->GetParent()) root = root->GetParent();
-    XClient* wm = nullptr;
-    root->ForeachEventListeners(SubstructureRedirectMask, [&](XClient* c) { wm = c; return true; });
-    return wm && w->GetClient() == wm;
-}
 void NativeScreen::UpdateExternal(u32 id, u64 generation, sp<NativeExternalFrame> frame) {
     // Called under XServer::Lock, just like PresentPixmap.
     auto* resource = server.GetResource(id);
@@ -230,8 +222,7 @@ sp<NativeDrawable> NativeScreen::ShapedCopy(Window* w, const sp<NativeDrawable>&
                 for (int x = std::max(r.x1, 0); x < std::min(r.x2, int(width)); ++x) inside[size_t(y) * width + x] = 1;
         }
         // Depth 24: alpha penuh di dalam bentuk. Depth 32: alpha asli window dipertahankan di dalam bentuk.
-        // Window milik WM (bingkai xfwm4) selalu opaque di dalam bentuk: alpha 0 dari cat bingkai tidak boleh membuatnya hilang.
-        const u32 alpha = (source->GetDepth() == 32 && !IsWmDecoration(w)) ? 0u : 0xff000000u;
+        const u32 alpha = source->GetDepth() == 32 ? 0u : 0xff000000u;
         for (size_t i = 0; i < pixels.size(); ++i) pixels[i] = inside[i] ? (pixels[i] | alpha) : 0u;
         entry.copy->WritePixels(reinterpret_cast<const u8*>(pixels.data()), 0, 0, 0, 0, width, height, width);
         entry.copy->PublishContent();
@@ -264,25 +255,9 @@ void NativeScreen::Collect(Window* w, Scene& frame, bool ancestorsMapped) {
                 !d->HardwareBuffer()) {
                 if (auto copy = ShapedCopy(w, d)) shown = std::move(copy);
             }
-            // Window depth 32 (visual ARGB, premultiplied) digambar dengan blending alpha, bukan opaque, kecuali window
-            // milik WM: bingkai xfwm4 memakai visual ARGB milik klien tetapi harus tampak penuh (compositor mati).
-            const bool wmDecor = IsWmDecoration(w);
-            if (wmDecor && d->GetDepth() == 32 && TraceOnFast() && decorLogged[w->id] < 3) {
-                // Diagnosis: berapa piksel bingkai yang beralpha 0 (tembus pandang bila digambar dengan blending).
-                const size_t total = size_t(d->GetWidth()) * d->GetHeight();
-                if (total && total <= 1000000) {
-                    std::vector<u32> px(total);
-                    d->ReadPixels(reinterpret_cast<u8*>(px.data()), 0, 0, d->GetWidth(), d->GetHeight(), d->GetWidth());
-                    size_t zero = 0, full = 0;
-                    for (u32 p : px) { const u32 a8 = p >> 24; if (a8 == 0) ++zero; else if (a8 == 0xff) ++full; }
-                    Trace("DECOR w=0x%x %ux%u depth=32 alpha0=%zu alpha255=%zu total=%zu shaped=%d forced_opaque=1",
-                          w->id, unsigned(d->GetWidth()), unsigned(d->GetHeight()), zero, full, total,
-                          int(w->ShapeBounding() || w->ShapeClip()));
-                    ++decorLogged[w->id];
-                }
-            }
+            // Window depth 32 (visual ARGB, premultiplied) digambar dengan blending alpha, bukan opaque.
             frame.entries.push_back({shown, i == direct.end() ? nullptr : i->second, shown->Pixels(), shown->Revision(),
-                    rect.left, rect.top, shown == d && (d->GetDepth() != 32 || wmDecor), w->id, int(w->GetWidth()), int(w->GetHeight()), {}});
+                    rect.left, rect.top, shown == d && d->GetDepth() != 32, w->id, int(w->GetWidth()), int(w->GetHeight()), {}});
             if (external != externalFrames.end()) {
                 frame.entries.back().ticket.reset();
                 frame.entries.back().external = external->second.frame;
