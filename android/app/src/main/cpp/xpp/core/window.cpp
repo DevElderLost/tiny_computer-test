@@ -542,19 +542,22 @@ void Window::LeaveEnterNotify(s32 x, s32 y, Window* enter_window, u32 mode, XCli
         }
         enter_window->PointerNotify(EnterNotify, x, y, NotifyAncestor, enter_window, mode, only);
     } else {
-        PointerNotify(LeaveNotify, x, y, NotifyNonlinear, this, 0, only);
+        // Ancestor bersama (LCA) dicari dulu. Dulu LCA tidak pernah terisi bila kedua window bersaudara (title <-> tombol <->
+        // klien di dalam bingkai xfwm4): bingkai dan root menerima EnterNotify NonlinearVirtual palsu tiap pointer pindah
+        // antar bagian bingkai, dan xfwm4 salah melacak window di bawah pointer.
         const Window* lca{};
-        std::stack<Window*> stack;
-        for (auto w = parent; w != enter_window->parent; w = w->parent) {
+        for (auto w = parent; w; w = w->parent) {
             if (w->IsAncestorOf(enter_window)) {
                 lca = w;
                 break;
             }
-            // Leave NonlinearVirtual dikirim ke setiap window di antara window ini dan ancestor bersama (bukan ke `this`
-            // berulang-ulang, yang membuat klien XI2/GTK/GPUI menerima Leave ganda pada window yang sama).
+        }
+        PointerNotify(LeaveNotify, x, y, NotifyNonlinear, this, 0, only);
+        std::stack<Window*> stack;
+        for (auto w = parent; w && w != lca; w = w->parent) {
             w->PointerNotify(LeaveNotify, x, y, NotifyNonlinearVirtual, this, mode, only);
         }
-        for (auto w = enter_window->parent; w != lca; w = w->parent) {
+        for (auto w = enter_window->parent; w && w != lca; w = w->parent) {
             stack.push(w);
         }
         while (!stack.empty()) {
@@ -578,7 +581,14 @@ void Window::PointerNotify(u32 type, s32 x, s32 y, u32 detail, Window* window, u
     if (!has_xi && !HasEventListenerFor(crossing_mask)) {
         return;
     }
-    const Window* child = window->GetParent() == this ? window : nullptr;
+    // Field child/subwindow = anak window ini yang berada di jalur menuju `window` (bukan hanya bila `window` anak langsung).
+    const Window* child{};
+    for (const Window* c = window; c && c != this; c = c->GetParent()) {
+        if (c->GetParent() == this) {
+            child = c;
+            break;
+        }
+    }
     Window* focus_window = window_manager.GetFocuseWindow();
     bool focus{};
     if (focus_window != nullptr) {

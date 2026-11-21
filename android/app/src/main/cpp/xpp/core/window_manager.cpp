@@ -1054,6 +1054,20 @@ void WindowManager::UpdatePointerButton(u16 button, bool down) {
               unsigned(GetPointerWindow(x, y)->id), grab_pointer_window ? unsigned(grab_pointer_window->id) : 0u,
               int(grab_pointer_passive));
     }
+    if (down && TraceOnFast()) {
+        // Diagnosis: topeng event tiap window di rantai pointer (siapa yang mendengar ButtonPress) dan pemegang tiap topeng.
+        static int traced_masks = 0;
+        if (traced_masks < 60) {
+            ++traced_masks;
+            std::string line;
+            for (Window* w = GetPointerWindow(x, y); w; w = w->GetParent()) {
+                char buf[48];
+                std::snprintf(buf, sizeof(buf), "0x%x:mask=0x%x ", unsigned(w->id), unsigned(w->GetAllEventMasks()));
+                line += buf;
+            }
+            Trace("ButtonChain %s", line.c_str());
+        }
+    }
     CheckFrozenTimeout();
     if (passive_frozen) {
         // Antrean pointer beku sampai WM memanggil AllowEvents; lepasan tombol disimpan.
