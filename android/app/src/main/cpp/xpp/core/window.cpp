@@ -614,7 +614,7 @@ void Window::PointerNotify(u32 type, s32 x, s32 y, u32 detail, Window* window, u
     });
 }
 
-std::vector<XClient*> Window::XIDeviceNotify(u16 evtype, s32 x, s32 y, u32 detail, u32 state) {
+std::vector<XClient*> Window::XIDeviceNotify(u16 evtype, s32 x, s32 y, u32 detail, u32 state, Window** event_window_out) {
     std::vector<XClient*> sent;
     const u32 bit = 1u << evtype;
     const u32 core_mask = evtype == 2   ? KeyPressMask
@@ -641,7 +641,15 @@ std::vector<XClient*> Window::XIDeviceNotify(u16 evtype, s32 x, s32 y, u32 detai
                                   x, y, x - event_window->in_rect.left, y - event_window->in_rect.top, state);
         sent.push_back(client);
     });
+    if (event_window_out && !sent.empty()) *event_window_out = event_window;
     return sent;
+}
+
+bool Window::SendXIGrabEvent(XClient* client, u16 evtype, s32 x, s32 y, u32 detail, u32 state) {
+    if (!client || !(GetXIMask(client) & (1u << evtype))) return false;
+    client->SendXIDeviceEvent(evtype, 2, 4, detail, window_manager.GetRootWindow()->id, id, 0, x, y, x - in_rect.left,
+                              y - in_rect.top, state);
+    return true;
 }
 
 constexpr u32 ButtonEventMask(const u32 button_mask) {
@@ -706,11 +714,19 @@ void Window::PointerMotionNotify(s32 x, s32 y, u32 button_mask, XClient* grab_cl
 }
 
 Window* Window::ButtonNotify(bool down, s32 x, s32 y, u32 button, XClient* grab_client, XClient** recipient) {
-    const auto xi_clients = XIDeviceNotify(down ? 4 : 5, x, y, button, window_manager.GetButtonMasks());   // XI_ButtonPress/Release
+    Window* xi_window{};
+    const auto xi_clients = XIDeviceNotify(down ? 4 : 5, x, y, button, window_manager.GetButtonMasks(), &xi_window);   // XI_ButtonPress/Release
     u32 mask = down ? ButtonPressMask : ButtonReleaseMask;
     auto event_window = this;
     const Window* child{};
     while (!event_window->IsMapped() || !event_window->HasEventListenerFor(mask)) {
+        // Window ini dipilih klien lewat XI2 dan tidak ada pendengar inti di sini: event sudah terkirim, propagasi berhenti
+        // (seperti X sungguhan). Dulu event inti terus naik ke frame window WM, sehingga grab implisit jatuh ke xfwm4 dan
+        // klien XI2 (Zed/GPUI) tidak pernah menerima ButtonRelease: tombol yang bereaksi saat mouse-up tidak bekerja.
+        if (xi_window && event_window == xi_window && !xi_clients.empty()) {
+            if (recipient) *recipient = xi_clients.front();
+            return xi_window;
+        }
         if (!event_window->parent) {
             return nullptr;
         }
@@ -744,6 +760,10 @@ Window* Window::ButtonNotify(bool down, s32 x, s32 y, u32 button, XClient* grab_
         sent_window = event_window;
         if (recipient) *recipient = client;
     });
+    if (xi_window && event_window == xi_window && !xi_clients.empty()) {
+        if (recipient) *recipient = xi_clients.front();
+        sent_window = xi_window;
+    }
     return sent_window;
 }
 
@@ -829,6 +849,7 @@ void Window::GrabButtonNotify(bool down,
     event.u.keyButtonPointer.sameScreen = true;
     event.u.u.detail = button;
     event.u.u.type = down ? ButtonPress : ButtonRelease;
+    if (SendXIGrabEvent(grab_client, down ? 4 : 5, x, y, button, window_manager.GetButtonMasks())) return;
     if (owner_events && RouteGrabEvent(event, mask, grab_client)) return;
     if (event_mask & mask) grab_client->SendEvent(event);
 }
@@ -891,6 +912,7 @@ void Window::GrabPointerMoveNotify(
         Trace("grab-motion grab_window=0x%x x=%d y=%d grab_mask=0x%x owner=%d delivered_mask=0x%x", unsigned(id), int(x), int(y),
               unsigned(event_mask), int(owner_events), unsigned(mask));
     }
+    if (SendXIGrabEvent(grab_client, 6, x, y, 0, button_mask)) return;   // XI_Motion
     if (owner_events && RouteGrabEvent(event, normalMask, grab_client)) return;
     if (mask) grab_client->SendEvent(event);
 }

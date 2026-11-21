@@ -192,7 +192,11 @@ public:
     }
     // Kirim event perangkat XI2 (Key/Button/Motion) ke klien yang memilihnya pada window ini atau leluhur terdekat.
     // Mengembalikan klien penerima supaya event inti yang sama tidak dikirim dobel (Xorg: XI2 menggantikan event inti).
-    std::vector<XClient*> XIDeviceNotify(u16 evtype, s32 x, s32 y, u32 detail, u32 state);
+    // event_window_out (opsional) diisi window tempat event XI2 benar-benar dikirim (nullptr bila tidak ada penerima).
+    std::vector<XClient*> XIDeviceNotify(u16 evtype, s32 x, s32 y, u32 detail, u32 state, Window** event_window_out = nullptr);
+    // Selama grab pointer (implisit maupun eksplisit) klien pemegang grab yang memilih event XI2 di window grab harus
+    // menerima Button/Motion sebagai event XI2, bukan event inti. Mengembalikan true bila terkirim.
+    bool SendXIGrabEvent(XClient* client, u16 evtype, s32 x, s32 y, u32 detail, u32 state);
 
     void Move(s32 dx, s32 dy, s32 dw, s32 dh);
 
