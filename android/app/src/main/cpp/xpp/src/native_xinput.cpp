@@ -76,24 +76,34 @@ namespace {
 u32 xiButtonMask(u32 state) { return (state >> 7) & 0x3e; }
 }
 
-// xXIDeviceEvent (80 byte + topeng tombol 4 byte): KeyPress/KeyRelease/ButtonPress/ButtonRelease/Motion.
+// xXIDeviceEvent (80 byte + topeng tombol 4 byte [+ topeng valuator 4 byte + nilai sumbu]):
+// KeyPress/KeyRelease/ButtonPress/ButtonRelease/Motion.
+//
+// Event perangkat pointer HARUS membawa topeng valuator seperti Xorg (valuators_len = 1 kata; pada Motion bit 0 dan 1
+// menyala dan disusul dua nilai FP3232 untuk sumbu X/Y). Dulu valuators_len = 0, sehingga klien yang membaca
+// `valuator_mask[0]` langsung (GPUI/Zed lewat x11rb) kena index-out-of-bounds dan Zed mati di gerakan kursor pertama.
+// Keyboard tidak punya valuator, jadi valuators_len tetap 0 untuk Key*.
 void XClient::SendXIDeviceEvent(u16 evtype, u16 deviceid, u16 sourceid, u32 detail, u32 root, u32 event, u32 child,
                                 s32 rootX, s32 rootY, s32 eventX, s32 eventY, u32 state) {
     if (is_dead) return;
     if (!xiOpcode) {
         if (const auto* extension = server.GetExtensionManager().FindExtension("XInputExtension")) xiOpcode = extension->base;
     }
-    std::array<u8, 84> packet{};
+    const bool pointerEvent = evtype >= 4 && evtype <= 6;   // XI_ButtonPress/ButtonRelease/Motion
+    const bool motionEvent = evtype == 6;
+    // 80 header + 4 topeng tombol + (4 topeng valuator) + (2 x FP3232 nilai sumbu, hanya Motion)
+    const size_t packetSize = 84 + (pointerEvent ? 4 : 0) + (motionEvent ? 16 : 0);
+    std::array<u8, 104> packet{};
     packet[0] = GenericEvent; packet[1] = xiOpcode;
     store(packet, 2, sequence);
-    store(packet, 4, u32((packet.size() - 32) / 4));
+    store(packet, 4, u32((packetSize - 32) / 4));
     store(packet, 8, evtype); store(packet, 10, deviceid);
     store(packet, 12, server.GetTimestamp()); store(packet, 16, detail);
     store(packet, 20, root); store(packet, 24, event); store(packet, 28, child);
     store(packet, 32, s32(rootX * 65536)); store(packet, 36, s32(rootY * 65536));
     store(packet, 40, s32(eventX * 65536)); store(packet, 44, s32(eventY * 65536));
     store(packet, 48, u16(1));          // buttons_len (satu kata)
-    store(packet, 50, u16(0));          // valuators_len
+    store(packet, 50, u16(pointerEvent ? 1 : 0));   // valuators_len (kata topeng valuator)
     store(packet, 52, sourceid);
     // flags (56) = 0; mods: base, latched, locked, effective (modifier saja, tanpa bit tombol)
     const u32 mods = state & 0xff;
@@ -103,7 +113,16 @@ void XClient::SendXIDeviceEvent(u16 evtype, u16 deviceid, u16 sourceid, u32 deta
     if (evtype == 4 && detail >= 1 && detail < 8) buttons |= 1u << detail;
     if (evtype == 5 && detail >= 1 && detail < 8) buttons &= ~(1u << detail);
     store(packet, 80, buttons);
-    WriteImmediately(packet.data(), packet.size());
+    if (pointerEvent) {
+        // Topeng valuator menyusul setelah topeng tombol: Motion menyalakan sumbu 0 (X) dan 1 (Y).
+        store(packet, 84, u32(motionEvent ? 3 : 0));
+        if (motionEvent) {
+            // FP3232 = bagian bulat (s32) + pecahan (u32). Nilai sumbu = posisi pointer di layar.
+            store(packet, 88, s32(rootX)); store(packet, 92, u32(0));
+            store(packet, 96, s32(rootY)); store(packet, 100, u32(0));
+        }
+    }
+    WriteImmediately(packet.data(), packetSize);
 }
 
 // xXIEnterEvent (72 byte + topeng tombol 4 byte): Enter/Leave/FocusIn/FocusOut.

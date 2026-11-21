@@ -550,7 +550,9 @@ void Window::LeaveEnterNotify(s32 x, s32 y, Window* enter_window, u32 mode, XCli
                 lca = w;
                 break;
             }
-            PointerNotify(LeaveNotify, x, y, NotifyNonlinearVirtual, this, mode, only);
+            // Leave NonlinearVirtual dikirim ke setiap window di antara window ini dan ancestor bersama (bukan ke `this`
+            // berulang-ulang, yang membuat klien XI2/GTK/GPUI menerima Leave ganda pada window yang sama).
+            w->PointerNotify(LeaveNotify, x, y, NotifyNonlinearVirtual, this, mode, only);
         }
         for (auto w = enter_window->parent; w != lca; w = w->parent) {
             stack.push(w);
