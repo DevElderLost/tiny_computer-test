@@ -179,8 +179,14 @@ void XClient::ProcNormalRequest() {
 #endif
     // Jejak diagnosis (hanya bila /tmp/.xpp-trace ada): 4000 request pertama tiap klien. Untuk opcode ekstensi (>=128)
     // `data` adalah nomor request ekstensi. Dipakai untuk melihat apa yang diminta aplikasi sebelum macet.
-    if (traceRequests < 4000 && TraceOnFast()) {
-        ++traceRequests;
+    // Tambahan: 1,5 detik setelah tiap klik pointer, SEMUA request klien (kecuali PutImage/GetGeometry yang membanjiri)
+    // tetap dicatat walau jatah 4000 habis. Dengan ini terlihat apakah WM (xfwm4) membalas klik: GrabPointer,
+    // AllowEvents, ConfigureWindow, dst. Dibatasi 6000 baris agar berkas trace tidak membengkak.
+    static int afterClickTraced = 0;
+    const bool afterClick = traceRequests >= 4000 && afterClickTraced < 6000 && opcode != X_PutImage &&
+                            opcode != X_GetGeometry && TraceOnFast() && server.GetWindowManager().PointerButtonRecently(1500);
+    if ((traceRequests < 4000 && TraceOnFast()) || afterClick) {
+        if (afterClick) ++afterClickTraced; else ++traceRequests;
         Trace("REQ c=0x%x seq=%u op=%u data=%u len=%zu", unsigned(rid_base), unsigned(sequence), unsigned(opcode),
               unsigned(req->data), request_size);
     }
@@ -357,6 +363,14 @@ void XClient::ProcQueryExtension() {
         reply.major_opcode = extension->base;
         reply.first_event = extension->event_base;
         reply.first_error = extension->error_base;
+    }
+    if (TraceOnFast()) {
+        static int traced = 0;
+        if (traced < 400) {
+            ++traced;
+            Trace("QueryExtension c=0x%x %s present=%d opcode=%u", unsigned(rid_base), name.c_str(), int(reply.present),
+                  unsigned(reply.major_opcode));
+        }
     }
     WriteImmediately(&reply, sizeof(reply));
 }

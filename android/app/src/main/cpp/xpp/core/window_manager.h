@@ -102,6 +102,11 @@ public:
     Cursor* UpdatePointerPosition(s32 x, s32 y, u32 mode, bool notify);
 
     void UpdatePointerButton(u16 button, bool down);
+    // Diagnosis: true bila tombol pointer berubah dalam `ms` milidetik terakhir (dipakai trace REQ setelah klik).
+    bool PointerButtonRecently(int ms) const {
+        return last_pointer_button_.time_since_epoch().count() != 0 &&
+               std::chrono::steady_clock::now() - last_pointer_button_ < std::chrono::milliseconds(ms);
+    }
 
     void OnPointerMove(s32 x, s32 y);
 
@@ -112,6 +117,7 @@ public:
     u32 GetButtonMasks() const;
 
 private:
+    std::chrono::steady_clock::time_point last_pointer_button_{};
     XServer& server;
     Mouse& mouse;
     bool has_window_mapped{};

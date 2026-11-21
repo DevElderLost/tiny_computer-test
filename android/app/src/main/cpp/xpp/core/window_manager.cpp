@@ -1027,6 +1027,7 @@ Cursor* WindowManager::UpdatePointerPosition(s32 x, s32 y, u32 mode, bool notify
 }
 
 void WindowManager::UpdatePointerButton(u16 button, bool down) {
+    last_pointer_button_ = std::chrono::steady_clock::now();
     const s32 x = mouse.GetX();
     const s32 y = mouse.GetY();
     // Status tombol untuk event ini menurut X11 (sebelum perubahan). Bersarang aman: nilai lama dipulihkan di akhir.
