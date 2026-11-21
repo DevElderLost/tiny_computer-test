@@ -350,7 +350,8 @@ void XClient::ProcQueryExtension() {
     const bool hidden = (server.RendererConfig().disableShm && name == "MIT-SHM") ||
                         (server.RendererConfig().disableDri3 && name == "DRI3") ||
                         (server.RendererConfig().disableRender && name == "RENDER") ||
-                        (server.RendererConfig().disableComposite && name == "Composite");
+                        (server.RendererConfig().disableComposite && name == "Composite") ||
+                        (server.RendererConfig().disableXkb && name == "XKEYBOARD");
     if (const auto extension = hidden ? nullptr : server.GetExtensionManager().FindExtension(name)) {
         reply.present = xTrue;
         reply.major_opcode = extension->base;

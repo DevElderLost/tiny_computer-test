@@ -102,6 +102,7 @@ private:
     void ProcRandR();
     void ProcCompat();
     void ProcXInput();
+    void ProcXkb();
     std::unordered_map<u32, std::unordered_map<u16, u32>> xiSelections;
     std::unordered_set<Window*> xiWindows;   // window dengan topeng event perangkat XI2 milik klien ini
     u32 xiRawMask{};

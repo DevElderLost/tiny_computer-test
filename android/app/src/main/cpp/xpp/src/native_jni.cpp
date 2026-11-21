@@ -102,6 +102,7 @@ extern "C" JNIEXPORT jlong JNICALL JNI_NAME(nativeCreate)(JNIEnv* env, jclass, j
         config.disableDri3 = (flags & 32) != 0;
         config.disableRender = (flags & 64) != 0;
         config.disableComposite = (flags & 128) != 0;
+        config.disableXkb = (flags & 256) != 0;
         auto server = std::make_shared<xorg::XServer>(nullptr, xorg::ScreenInfo(width, height, 4),
                 validation == JNI_TRUE, std::move(config));
         std::lock_guard lock(sessions_mutex); jlong handle = next_session++;

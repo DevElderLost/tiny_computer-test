@@ -187,11 +187,12 @@ void XClient::ProcCompat() {
         Write(&r, sizeof(r)); Write(name.data(), name.size()); WritePad((-name.size()) & 3); Flush(); return;
     }
     case X_ListExtensions: {
-        std::vector<std::string> names = {"BIG-REQUESTS", "MIT-SHM", "DRI3", "Present", "SYNC", "RANDR", "GLX", "Composite", "RENDER", "DAMAGE", "XFIXES", "SHAPE", "XInputExtension"};
+        std::vector<std::string> names = {"BIG-REQUESTS", "MIT-SHM", "DRI3", "Present", "SYNC", "RANDR", "GLX", "Composite", "RENDER", "DAMAGE", "XFIXES", "SHAPE", "XInputExtension", "XKEYBOARD"};
         if (server.RendererConfig().disableShm) names.erase(std::find(names.begin(), names.end(), "MIT-SHM"));
         if (server.RendererConfig().disableDri3) names.erase(std::find(names.begin(), names.end(), "DRI3"));
         if (server.RendererConfig().disableRender) names.erase(std::find(names.begin(), names.end(), "RENDER"));
         if (server.RendererConfig().disableComposite) names.erase(std::find(names.begin(), names.end(), "Composite"));
+        if (server.RendererConfig().disableXkb) names.erase(std::find(names.begin(), names.end(), "XKEYBOARD"));
         std::vector<u8> bytes; for (auto& n : names) { bytes.push_back(n.size()); bytes.insert(bytes.end(), n.begin(), n.end()); }
         xListExtensionsReply r{}; r.type = X_Reply; r.sequenceNumber = sequence;
         r.nExtensions = names.size(); r.length = (bytes.size()+3)/4;

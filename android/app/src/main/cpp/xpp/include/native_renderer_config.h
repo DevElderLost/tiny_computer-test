@@ -23,6 +23,8 @@ struct NativeRendererConfig {
     // Composite tidak diiklankan: hanya sebagian kecil requestnya yang ada (RedirectSubwindows dan lainnya tidak), sedangkan
     // compositor xfwm4 memanggilnya lalu mati dengan BadImplementation. Tanpa Composite xfwm4 berjalan tanpa compositing.
     bool disableComposite{};
+    // XKEYBOARD tidak diiklankan (saklar darurat): klien kembali ke keyboard inti seperti sebelum ekstensi ini ada.
+    bool disableXkb{};
     std::string driverPath, libraryName, nativeLibDir;
     bool swapRB = false;
     int presentMode = 2; // VK_PRESENT_MODE_FIFO_KHR

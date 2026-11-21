@@ -32,6 +32,8 @@ ExtensionManager::ExtensionManager() {
     AddExtension("XFIXES", [](XClient* c) { c->ProcXFixes(); }, 2, 1);
     AddExtension("SHAPE", [](XClient* c) { c->ProcShape(); }, 1, 0);
     AddExtension("XInputExtension", [](XClient* c) { c->ProcXInput(); }, 17, 5);
+    // XKEYBOARD 1.0: 1 event (XkbEventCode), 1 galat (BadKeyboard). Dibutuhkan winit/xkbcommon-x11/GTK3/Qt/SDL2.
+    AddExtension("XKEYBOARD", [](XClient* c) { c->ProcXkb(); }, 1, 1);
 }
 
 ExtensionManager::~ExtensionManager() {}
