@@ -18,6 +18,21 @@ object ShortcutRunner {
     private const val GUEST_DIR = "/home/tiny/.local/share/tiny/shortcuts"
     private const val SESSION_SCRIPT = "app-session.sh"
 
+    /** Berkas (di ~/.vnc guest) yang ditulis skrip aplikasi setelah desktop sesi Shortcut siap; dihapus Launcher sebelum peluncuran. */
+    const val DESKTOP_READY_FILE = "shortcut-desktop-ready"
+
+    private val DESKTOP_WAIT: String = """
+i=0
+while [ ${'$'}i -lt 200 ]; do
+  if pgrep -x xfwm4 >/dev/null 2>&1 && { pgrep -x xfdesktop >/dev/null 2>&1 || pgrep -x xfce4-panel >/dev/null 2>&1; }; then break; fi
+  [ -e "${'$'}HOME/.vnc/desktop-failed" ] && break
+  sleep 0.2; i=${'$'}((i+1))
+done
+sleep 1
+echo "[tiny] desktop sesi Shortcut: xfwm4=${'$'}(pgrep -x xfwm4 | head -1) panel=${'$'}(pgrep -x xfce4-panel | head -1) xfdesktop=${'$'}(pgrep -x xfdesktop | head -1) (${'$'}i x 0,2 dtk)"
+: > "${'$'}HOME/.vnc/$DESKTOP_READY_FILE"
+""".trimStart()
+
     private fun hostDir() = File(TinyEnv.dataPath, "tiny/shortcuts").apply { mkdirs() }
 
     private fun safe(id: String) = id.replace(Regex("[^A-Za-z0-9._-]"), "_")
@@ -159,7 +174,7 @@ tiny_need_lib libxkbcommon-x11.so.0 libxkbcommon-x11-0
      * (pengaturan Display server desktop = X++; lihat [Launcher.shortcutXpp]): tidak ada compositor Wayland, jadi tidak ada
      * variabel Wayland, dan Turnip/Zink memakai WSI software seperti desktop X++.
      */
-    private fun script(ctx: Context, app: DesktopApps.App, s: ShortcutPrefs.Settings, id: String, xpp: Boolean): String {
+    private fun script(ctx: Context, app: DesktopApps.App, s: ShortcutPrefs.Settings, id: String, xpp: Boolean, desktop: Boolean): String {
         val sb = StringBuilder()
         sb.append("#!/bin/sh\n")
         sb.append("# Ditulis ulang oleh menu Shortcut Tiny Computer setiap kali aplikasi dijalankan.\n")
@@ -396,6 +411,11 @@ fi
         }
         // sesi X (Xwayland atau X++ milik desktop atau milik sesi aplikasi) bisa baru menyala: tunggu soketnya
         sb.append("i=0; while [ \$i -lt 150 ] && [ ! -S /tmp/.X11-unix/X4 ]; do sleep 0.2; i=\$((i+1)); done\n")
+        // Sesi Shortcut berisi desktop XFCE lengkap ([prepareSession] desktop=true): aplikasi baru dibuka setelah window manager
+        // dan panel/wallpaper hidup (maks 40 detik), supaya jendelanya tidak muncul di layar kosong lalu tertimpa wallpaper,
+        // dan supaya bus D-Bus milik sesi XFCE sudah ada untuk dipakai aplikasi (pencarian di bawah). Berkas penanda
+        // ~/.vnc/shortcut-desktop-ready dibaca Launcher untuk layar progres.
+        if (desktop) sb.append(DESKTOP_WAIT)
 
         // Aplikasi Wine? (dipakai untuk memilih jalur Wayland di bawah)
         val prog = effectiveCommand(app, s).substringBefore(' ').substringAfterLast('/')
@@ -414,7 +434,8 @@ fi
         val ppssppNoWm = xpp &&
             (app.id.contains("ppsspp", ignoreCase = true) || effectiveCommand(app, s).contains("ppsspp", ignoreCase = true)) &&
             effectiveEnv(app, s).lineSequence().none { it.trim() == "TINY_PPSSPP_WM=1" }
-        if (!Launcher.guiStarted) {
+        // Desktop XFCE lengkap: window manager-nya milik sesi XFCE dan tidak dijeda (aplikasi Wine/PPSSPP berjalan sebagai window biasa).
+        if (!Launcher.guiStarted && !desktop) {
             if (isWine || ppssppNoWm) {
                 if (ppssppNoWm && !isWine) sb.append("echo \"[tiny] X++: window manager dijeda untuk PPSSPP (TINY_PPSSPP_WM=1 = nyalakan lagi)\"\n")
                 sb.append(": > \"\$HOME/.vnc/no-wm\"\n")
@@ -589,7 +610,7 @@ exec sh -c "${'$'}TINY_CMD"
      * `/bin/sh <path>` di proot baru), atau null bila aplikasinya sudah tidak ada. Log ada di
      * `~/.vnc/shortcut-<id>.log`.
      */
-    fun prepare(ctx: Context, appId: String, xpp: Boolean = Launcher.shortcutXpp()): String? {
+    fun prepare(ctx: Context, appId: String, xpp: Boolean = Launcher.shortcutXpp(), desktop: Boolean = Launcher.shortcutDesktop()): String? {
         val app = DesktopApps.find(appId)
         if (app == null) {
             Log.w(TAG, "aplikasi $appId tidak ditemukan")
@@ -597,7 +618,7 @@ exec sh -c "${'$'}TINY_CMD"
         }
         WsiWayland.install() // pembungkus vkcube/vkcubepp: --wsi wayland
         val id = safe(appId)
-        write("run-$id.sh", script(ctx, app, ShortcutPrefs.get(appId), id, xpp))
+        write("run-$id.sh", script(ctx, app, ShortcutPrefs.get(appId), id, xpp, desktop))
         return "$GUEST_DIR/run-$id.sh"
     }
 
@@ -612,8 +633,49 @@ exec sh -c "${'$'}TINY_CMD"
      * mendengarkan di X4, jadi tidak ada Xwayland: soket X4 tidak dihapus, tidak menunggu compositor Wayland, tidak
      * memakai xrandr, dan proot ini hanya menjaga window manager lalu berakhir bila soket X++ hilang (server dimatikan).
      */
-    fun prepareSession(ctx: Context, size: Pair<Int, Int>, withWm: Boolean = true, xpp: Boolean = false): String {
+    fun prepareSession(ctx: Context, size: Pair<Int, Int>, withWm: Boolean = true, xpp: Boolean = false, desktop: Boolean = false): String {
         val (w, h) = size
+        // [desktop] true: setelah server X menyala, sesi XFCE penuh (Xsession yang sama dengan Open desktop: xfwm4, panel, wallpaper)
+        // dijalankan di DISPLAY=:4. Hanya desktopnya; aplikasi yang dipilih dijalankan terpisah ([script]) sehingga cuma satu
+        // aplikasi yang berjalan. Window manager ringan di bawah hanya jadi cadangan bila sesi XFCE gagal (tidak ada XFCE di rootfs).
+        if (desktop) runCatching {
+            val vnc = File(TinyEnv.containerDir(), "home/tiny/.vnc").apply { mkdirs() }
+            File(vnc, "tiny-session.sh").writeText(Rootfs.asset(ctx, "tiny/xsession.sh"))
+            File(vnc, DESKTOP_READY_FILE).delete()
+            File(vnc, "desktop-failed").delete()
+        }
+        val xsEnv = buildString {
+            if (!xpp) append(Launcher.waylandSessionEnv())
+            if (Cfg.xfceCompositor) append("TINY_XFCE_COMPOSITOR=1 ")
+            append("TINY_SHORTCUT_SESSION=1 ")
+        }
+        val xsGpu = if (xpp) {
+            (if (Cfg.turnip) "export ${Launcher.turnipOpt(ctx)} LIBGL_KOPPER_DRI2=true MESA_VK_WSI_DEBUG=sw\n" else "") +
+                "export TINY_NO_WAYLAND=1 GDK_CORE_DEVICE_EVENTS=1 QT_XCB_NO_XI2=1\nunset WAYLAND_DISPLAY\n"
+        } else ""
+        val desktopBlock = if (!desktop) "" else """
+(
+  i=0; while [ ${'$'}i -lt 150 ] && [ ! -S /tmp/.X11-unix/X4 ]; do sleep 0.2; i=${'$'}((i+1)); done
+  [ -S /tmp/.X11-unix/X4 ] || { : > "${'$'}HOME/.vnc/desktop-failed"; exit 1; }
+  export DISPLAY=:4
+  ${xsGpu.trimEnd().replace("\n", "\n  ")}
+  if [ -n "${'$'}TINY_LAUNCH_LOG" ] && [ -w "${'$'}TINY_LAUNCH_LOG" ]; then
+    env DISPLAY=:4 ${xsEnv}bash "${'$'}HOME/.vnc/tiny-session.sh" xinit/Xsession 2>&1 | tee "${'$'}HOME/.vnc/x.log" >> "${'$'}TINY_LAUNCH_LOG"
+  else
+    env DISPLAY=:4 ${xsEnv}bash "${'$'}HOME/.vnc/tiny-session.sh" xinit/Xsession > "${'$'}HOME/.vnc/x.log" 2>&1
+  fi
+  : > "${'$'}HOME/.vnc/desktop-failed"
+) &
+"""
+        // pada sesi desktop window manager ringan menunggu xfwm4 milik XFCE; baru dipakai bila sesi XFCE gagal
+        val wmWait = if (!desktop) "" else """
+  i=0
+  while [ ${'$'}i -lt 300 ]; do
+    pgrep -x xfwm4 >/dev/null 2>&1 && exit 0
+    [ -e "${'$'}HOME/.vnc/desktop-failed" ] && { echo "[wm] sesi XFCE gagal; memakai window manager ringan" >> "${'$'}WMLOG"; break; }
+    sleep 0.2; i=${'$'}((i+1))
+  done
+""".trimEnd()
         // berkas penanda: penjaga window manager di skrip sesi tidak menyalakannya (aplikasi Wine juga membuatnya sendiri)
         val noWm = if (withWm) "" else ": > \"${'$'}HOME/.vnc/no-wm\"\n"
         // Xwayland (bawaan) atau X++ (server di proses aplikasi): bagian skrip yang berbeda
@@ -660,6 +722,7 @@ ${noWm}# window manager (title bar + tombol tutup/maksimalkan/kecilkan) untuk ap
   WMLOG="${'$'}HOME/.vnc/wm.log"
   : > "${'$'}WMLOG"
   echo "[wm] env: GDK_CORE_DEVICE_EVENTS=${'$'}{GDK_CORE_DEVICE_EVENTS:-unset} QT_XCB_NO_XI2=${'$'}{QT_XCB_NO_XI2:-unset} WAYLAND_DISPLAY=${'$'}{WAYLAND_DISPLAY:-unset}" >> "${'$'}WMLOG"
+${wmWait}
   tries=0
   idle=0
   while [ ${'$'}tries -lt 20 ]; do
@@ -695,7 +758,7 @@ ${noWm}# window manager (title bar + tombol tutup/maksimalkan/kecilkan) untuk ap
     sleep 1
   done
 ) &
-# Paksa mode layar = ${w}x$h bila xrandr ada (Xwayland rootful bisa menyala dengan mode lain); hasilnya dicatat.
+${desktopBlock}# Paksa mode layar = ${w}x$h bila xrandr ada (Xwayland rootful bisa menyala dengan mode lain); hasilnya dicatat.
 (
   i=0; while [ ${'$'}i -lt 150 ] && [ ! -S /tmp/.X11-unix/X4 ]; do sleep 0.2; i=${'$'}((i+1)); done
   if ${xrandrCond}; then

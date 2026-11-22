@@ -62,6 +62,24 @@ object Launcher {
     @Volatile var appSessionXpp = false
 
     /**
+     * True bila sesi aplikasi Shortcut yang berdiri sendiri menyalakan DESKTOP XFCE lengkap (xfwm4 + panel + wallpaper, lewat
+     * Xsession seperti Open desktop) dan hanya aplikasi yang dipilih yang dijalankan di dalamnya ([Cfg.shortcutDesktop]).
+     * Ditetapkan di [launchAppLocked], dikembalikan ke false oleh [stopAppSession].
+     */
+    @Volatile var appSessionDesktop = false
+
+    /**
+     * Apakah aplikasi Shortcut berikutnya berjalan di desktop XFCE lengkap. Desktop yang dibuka lewat Open desktop sudah punya
+     * panel dan wallpaper sendiri (false: tidak ada sesi tambahan). Sesi aplikasi yang berjalan menetapkan pilihannya sendiri.
+     */
+    fun shortcutDesktop(): Boolean = when {
+        guiStarted -> false
+        sessionStale() -> Cfg.shortcutDesktop
+        appSessionStarted -> appSessionDesktop
+        else -> Cfg.shortcutDesktop
+    }
+
+    /**
      * Display server yang dipakai aplikasi Shortcut berikutnya: SELALU mengikuti pengaturan Display server desktop.
      *  - desktop sedang berjalan: ikut desktop itu ([desktopIsXpp]);
      *  - sesi aplikasi sudah berjalan: ikut sesi itu ([appSessionXpp]); sesi tidak bisa berganti server di tengah jalan;
@@ -83,7 +101,7 @@ object Launcher {
      * oleh [launchAppLocked]. Sesi yang masih punya aplikasi berjalan tidak disentuh.
      */
     fun sessionStale(): Boolean =
-        !guiStarted && appSessionStarted && appSessionXpp != Cfg.desktopXpp && !appsBusy()
+        !guiStarted && appSessionStarted && (appSessionXpp != Cfg.desktopXpp || appSessionDesktop != Cfg.shortcutDesktop) && !appsBusy()
 
     /** True setelah perintah Xwayland + Xsession dikirim ke kontainer yang sedang berjalan. */
     // state Compose (bukan @Volatile biasa) supaya tombol "kembali ke desktop" muncul/hilang mengikuti status desktop
@@ -813,6 +831,11 @@ export PROOT_LOADER_32=${'$'}DATA_DIR/applib/libproot-loader32.so""".trimIndent(
      * Xwayland berjalan rootful (satu jendela xdg-toplevel di compositor) lalu sesi X11
      * Debian (`/etc/X11/xinit/Xsession`, tak berubah) dijalankan di DISPLAY=:4.
      */
+    internal fun waylandSessionEnv(): String = if (Cfg.desktopWayland) {
+        "XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0 SDL_VIDEODRIVER=wayland,x11 " +
+            "GDK_BACKEND=x11 QT_QPA_PLATFORM=xcb MOZ_ENABLE_WAYLAND=0 ELECTRON_OZONE_PLATFORM_HINT=x11 CLUTTER_BACKEND=x11 "
+    } else ""
+
     fun guiCommand(ctx: Context, replaceAppSession: Boolean = false): String {
         if (desktopIsXpp) return guiCommandXpp(ctx)
         val (w, h) = displaySize(ctx)
@@ -821,10 +844,7 @@ export PROOT_LOADER_32=${'$'}DATA_DIR/applib/libproot-loader32.so""".trimIndent(
         // hanya dipasang pada proses Xsession (bukan shell terminal), dan toolkit lain dipaku ke X11 supaya
         // GTK/Qt/Firefox/Electron tidak ikut pindah ke Wayland (compositor tanpa wlr-layer-shell).
         // SDL: "wayland,x11" = Wayland dulu, X11 sebagai cadangan.
-        val sessionEnv = if (Cfg.desktopWayland) {
-            "XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0 SDL_VIDEODRIVER=wayland,x11 " +
-                "GDK_BACKEND=x11 QT_QPA_PLATFORM=xcb MOZ_ENABLE_WAYLAND=0 ELECTRON_OZONE_PLATFORM_HINT=x11 CLUTTER_BACKEND=x11 "
-        } else ""
+        val sessionEnv = waylandSessionEnv()
         // compositor xfwm4: dibaca assets/tiny/xsession.sh (vblank_mode selalu off; use_compositing dibiarkan bila menyala)
         val compEnv = if (Cfg.xfceCompositor) "TINY_XFCE_COMPOSITOR=1 " else ""
         // sesi aplikasi dari menu Shortcut memegang display :4; hentikan dulu sebelum desktop memakainya
@@ -1242,7 +1262,9 @@ fi
         }
         // Display server aplikasi ini = pengaturan Display server desktop (X++ atau Xwayland/Wayland), ditetapkan sekali di sini
         val xpp = shortcutXpp()
-        val script = ShortcutRunner.prepare(ctx, appId, xpp) ?: run {
+        // Desktop XFCE lengkap (panel + wallpaper) atau sesi minimal lama; ditetapkan sekali per sesi aplikasi
+        val deskMode = shortcutDesktop()
+        val script = ShortcutRunner.prepare(ctx, appId, xpp, deskMode) ?: run {
             mainHandler.post {
                 if (appPhase == AppPhase.STARTING) appPhase = AppPhase.IDLE
                 onAppSessionEnded?.invoke(null)
@@ -1294,10 +1316,13 @@ fi
                 appSessionXpp = false
                 LaunchLog.write(sLog, "session", "sesi aplikasi Shortcut dimulai (Xwayland ${size.first}x${size.second}), dipicu oleh $appId")
             }
-            // sesi yang dimulai aplikasi Wine (.exe) mulai tanpa window manager (layar penuh); aplikasi Linux menyalakannya lagi
-            val withWm = !ShortcutRunner.isWineApp(appId)
+            appSessionDesktop = deskMode
+            // sesi yang dimulai aplikasi Wine (.exe) mulai tanpa window manager (layar penuh); aplikasi Linux menyalakannya lagi.
+            // Desktop XFCE lengkap selalu memakai window manager-nya sendiri.
+            val withWm = deskMode || !ShortcutRunner.isWineApp(appId)
             if (!withWm) LaunchLog.write(sLog, "session", "window manager dijeda (sesi dimulai aplikasi Wine, layar penuh)")
-            val session = spawnDetached(appProotScript(ctx, ShortcutRunner.prepareSession(ctx, size, withWm, xpp), killOnExit = true, log = sLog), "TinyAppSession")
+            if (deskMode) LaunchLog.write(sLog, "session", "desktop XFCE lengkap dinyalakan; hanya $appId yang dijalankan di dalamnya")
+            val session = spawnDetached(appProotScript(ctx, ShortcutRunner.prepareSession(ctx, size, withWm, xpp, deskMode), killOnExit = true, log = sLog), "TinyAppSession")
             appSession = session
             // Xwayland mati sendiri (crash): aplikasinya ikut putus, tutup sesi dan kembali ke Shortcut
             watch("tiny-session-wait") {
@@ -1339,9 +1364,12 @@ fi
         // selesai (RUNNING) setelah keduanya, proot aplikasi mati (gagal start, ditangani auto-close), atau 40 detik
         watch("tiny-ready-poll") {
             val sock = File(TinyEnv.runtimeDir(), ".X11-unix/X4")
-            val end = SystemClock.elapsedRealtime() + 40_000
+            // desktop XFCE: layar progres bertahan sampai skrip aplikasi menandai desktop siap (wallpaper + panel tampil)
+            val ready = File(TinyEnv.containerDir(), "home/tiny/.vnc/${ShortcutRunner.DESKTOP_READY_FILE}")
+            val end = SystemClock.elapsedRealtime() + if (deskMode) 70_000 else 40_000
             while (SystemClock.elapsedRealtime() < end && appPhase == AppPhase.STARTING && myEpoch == epoch && proc.isAlive) {
                 if (!sock.exists()) advanceStage(1)
+                else if (deskMode && !ready.exists()) advanceStage(2)
                 else if (!appsBusy()) advanceStage(2)
                 else break
                 Thread.sleep(200)
@@ -1379,6 +1407,7 @@ fi
         val appRoots = guests.mapNotNull { pids[it] }.filter { it > 0 }
         appSession?.let { guests += it }
         appSession = null
+        appSessionDesktop = false
         // Xwayland + window manager (proot sesi) tetap hidup selama fase ini: aplikasi butuh X untuk menutup jendelanya.
         if (graceful) runCatching { closeGracefully(appRoots, log) }.onFailure { Log.w("Launcher", "closeGracefully", it) }
         stopStage(2)

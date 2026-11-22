@@ -65,6 +65,28 @@ def children(w):
     return out
 
 
+class ClassHint(ctypes.Structure):
+    _fields_ = [("res_name", c_char_p), ("res_class", c_char_p)]
+
+
+x.XGetClassHint.restype = c_int
+x.XGetClassHint.argtypes = [c_void_p, c_ulong, P(ClassHint)]
+
+# Komponen desktop XFCE (sesi Shortcut berisi desktop lengkap): bukan aplikasi, tidak boleh diminta menutup.
+DESKTOP_CLASSES = (b"xfce4-panel", b"xfdesktop", b"xfwm4", b"xfce4-session", b"whiskermenu", b"xfce4-notifyd")
+
+
+def is_desktop_component(w):
+    h = ClassHint()
+    try:
+        if not x.XGetClassHint(d, w, ctypes.byref(h)):
+            return False
+        names = ((h.res_name or b"").lower(), (h.res_class or b"").lower())
+        return any(k in n for n in names for k in DESKTOP_CLASSES)
+    except Exception:
+        return False
+
+
 def wants_delete(w):
     protos, n = P(c_ulong)(), c_int()
     if not x.XGetWMProtocols(d, w, ctypes.byref(protos), ctypes.byref(n)):
@@ -93,6 +115,8 @@ count = 0
 def walk(w, depth):
     global count
     if depth > 0 and wants_delete(w):
+        if is_desktop_component(w):
+            return
         if close(w):
             count += 1
         return

@@ -144,10 +144,20 @@ tiny_is_ubuntu() {
 	( . /etc/os-release 2>/dev/null; case " $ID $ID_LIKE " in *" ubuntu "*) exit 0 ;; esac; exit 1 )
 }
 
+# TINY_SHORTCUT_SESSION=1: desktop ini dinyalakan oleh menu Shortcut dan hanya boleh menjalankan SATU aplikasi (yang dipilih,
+# dijalankan terpisah oleh ShortcutRunner). Jadi tidak ada terminal otomatis di distro mana pun dan sesi XFCE tersimpan
+# (yang bisa memulihkan aplikasi lain) dibuang seluruhnya.
+tiny_shortcut=0
+if [ "${TINY_SHORTCUT_SESSION:-0}" = 1 ]; then
+	tiny_shortcut=1
+	rm -rf "$HOME"/.cache/sessions/* 2>/dev/null
+	echo "[tiny] sesi desktop dari Shortcut: tanpa pemulihan sesi dan tanpa terminal otomatis"
+fi
+
 tiny_noterm=0
-if [ "${TINY_UBUNTU_TERMINAL:-0}" != 1 ] && tiny_is_ubuntu; then
+if [ "$tiny_shortcut" = 1 ] || { [ "${TINY_UBUNTU_TERMINAL:-0}" != 1 ] && tiny_is_ubuntu; }; then
 	tiny_noterm=1
-	echo "[tiny] Ubuntu terdeteksi: terminal tidak dijalankan otomatis saat Open desktop (TINY_UBUNTU_TERMINAL=1 untuk mengizinkan)"
+	[ "$tiny_shortcut" = 1 ] || echo "[tiny] Ubuntu terdeteksi: terminal tidak dijalankan otomatis saat Open desktop (TINY_UBUNTU_TERMINAL=1 untuk mengizinkan)"
 	# (1) autostart: berkas pengguna dengan nama yang sama menimpa /etc/xdg/autostart; Hidden=true = tidak dijalankan.
 	# Berkas buatan pengguna sendiri (tanpa penanda) tidak ditimpa.
 	ad="$HOME/.config/autostart"

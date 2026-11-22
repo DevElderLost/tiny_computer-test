@@ -187,6 +187,7 @@ fun SettingsScreen() {
                 ) { xppBackend = it; Cfg.xppBackend = it }
             }
             DeckSwitchRow(stringResource(R.string.tc_ui_xfce_compositor), stringResource(R.string.tc_ui_xfce_compositor_hint), Cfg.xfceCompositor) { Cfg.xfceCompositor = it }
+            DeckSwitchRow(stringResource(R.string.tc_ui_shortcut_desktop), stringResource(R.string.tc_ui_shortcut_desktop_hint), Cfg.shortcutDesktop) { Cfg.shortcutDesktop = it }
         }
 
         DeckGroup(stringResource(R.string.tc_group_logs)) {

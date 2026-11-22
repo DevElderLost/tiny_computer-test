@@ -407,6 +407,8 @@
     <string name="tc_ui_desktop_wayland">Wayland for Vulkan apps in the desktop</string>
     <string name="tc_ui_xfce_compositor">Allow XFCE compositor (blur, transparency)</string>
     <string name="tc_ui_xfce_compositor_hint">Keeps the xfwm4 compositor on when the desktop starts. Its vertical sync (vblank) is always forced off, because the GLX/Zink or xpresent sync path never completes on Xwayland without DRM and leaves a black screen. Compositing itself runs on the CPU (XRender); xfwm4 has no Vulkan backend. When off, the compositor still starts disabled but can be switched on in Window Manager Tweaks. Applies on next desktop start.</string>
+    <string name="tc_ui_shortcut_desktop">Shortcut opens the full desktop</string>
+    <string name="tc_ui_shortcut_desktop_hint">An app started from Shortcut runs inside the XFCE desktop (wallpaper, panel, window manager) instead of a single window on a black screen. Only the chosen app is started; the desktop closes when the app exits. Turn off for the old minimal session. Applies on the next Shortcut session.</string>
     <string name="tc_ui_desktop_wayland_hint">Open desktop exports WAYLAND_DISPLAY so SDL/Vulkan apps draw straight to the compositor (X11 via Xwayland has no DRI3 and fails on Turnip). GTK, Qt, Firefox and Electron stay on X11. Applies on next desktop start.</string>
     <string name="tc_group_logs">Logs</string>
     <string name="tc_ui_launch_log">Launch log (.txt)</string>

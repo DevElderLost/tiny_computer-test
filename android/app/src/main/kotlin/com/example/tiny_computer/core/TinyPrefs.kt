@@ -164,6 +164,14 @@ object Cfg {
     var xfceCompositor: Boolean
         get() = TinyPrefs.getBool("xfceCompositor", false)
         set(v) = TinyPrefs.setBool("xfceCompositor", v)
+    /**
+     * Shortcut membuka DESKTOP LENGKAP (xfwm4 + panel + wallpaper XFCE, lewat Xsession yang sama dengan Open desktop) tetapi
+     * hanya menjalankan aplikasi yang dipilih, bukan satu jendela di atas layar hitam. Bawaan aktif. Mati = perilaku lama
+     * (hanya server X + window manager ringan). Berlaku untuk sesi Shortcut berikutnya.
+     */
+    var shortcutDesktop: Boolean
+        get() = TinyPrefs.getBool("shortcutDesktop", true)
+        set(v) = TinyPrefs.setBool("shortcutDesktop", v)
     /** Catat peluncuran aplikasi/.exe (Shortcut + Open desktop) ke Download/Wayland-logs, satu berkas per sesi proot. */
     var launchLog: Boolean
         get() = TinyPrefs.getBool("launchLog", false)
