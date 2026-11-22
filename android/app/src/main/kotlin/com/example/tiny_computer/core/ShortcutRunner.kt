@@ -590,6 +590,14 @@ exec sh -c "${'$'}TINY_CMD"
         val cleanSock = if (xpp) "rm -f /tmp/.X4-lock" else "rm -f /tmp/.X11-unix/X4 /tmp/.X4-lock"
         val waitWayland = if (xpp) "" else "i=0; while [ \$i -lt 150 ] && [ ! -S /tmp/wayland-0 ]; do sleep 0.2; i=\$((i+1)); done\n"
         val xrandrCond = if (xpp) "false" else "command -v xrandr >/dev/null 2>&1"
+        // Window manager sesi Shortcut di atas X++ harus punya lingkungan yang sama dengan xfwm4 milik Open desktop
+        // (Launcher.guiCommandXpp): tanpa Wayland dan dengan event inti X untuk pointer. Sebelumnya hanya skrip aplikasi
+        // yang mengekspor GDK_CORE_DEVICE_EVENTS/QT_XCB_NO_XI2, sedangkan xfwm4 sesi Shortcut berjalan tanpa keduanya
+        // (beda dengan xfwm4 Open desktop), sehingga bingkai jendela tampil tetapi tidak bisa digeser, ditutup,
+        // dimaksimalkan, atau dikecilkan. Xwayland tidak membutuhkannya. Nilainya dicatat di wm.log.
+        val wmEnv = if (xpp) {
+            "unset WAYLAND_DISPLAY\nexport TINY_NO_WAYLAND=1 GDK_CORE_DEVICE_EVENTS=1 QT_XCB_NO_XI2=1\n"
+        } else ""
         val serverTail = if (xpp) {
             "i=0; while [ \$i -lt 150 ] && [ ! -S /tmp/.X11-unix/X4 ]; do sleep 0.2; i=\$((i+1)); done\n" +
                 "echo \"[tiny] sesi X++ aktif ${w}x$h\" > \"\$HOME/.vnc/xwayland.log\"\n" +
@@ -613,8 +621,10 @@ ${noWm}# window manager (title bar + tombol tutup/maksimalkan/kecilkan) untuk ap
 (
   i=0; while [ ${'$'}i -lt 150 ] && [ ! -S /tmp/.X11-unix/X4 ]; do sleep 0.2; i=${'$'}((i+1)); done
   export DISPLAY=:4
+  ${wmEnv.trimEnd().replace("\n", "\n  ")}
   WMLOG="${'$'}HOME/.vnc/wm.log"
   : > "${'$'}WMLOG"
+  echo "[wm] env: GDK_CORE_DEVICE_EVENTS=${'$'}{GDK_CORE_DEVICE_EVENTS:-unset} QT_XCB_NO_XI2=${'$'}{QT_XCB_NO_XI2:-unset} WAYLAND_DISPLAY=${'$'}{WAYLAND_DISPLAY:-unset}" >> "${'$'}WMLOG"
   tries=0
   idle=0
   while [ ${'$'}tries -lt 20 ]; do
