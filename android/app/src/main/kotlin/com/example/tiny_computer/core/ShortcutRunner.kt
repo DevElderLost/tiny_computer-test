@@ -177,6 +177,8 @@ if [ -n "${'$'}TINY_LAUNCH_LOG" ]; then
     echo "[tiny] diag X++ (15 dtk): soket=${'$'}(ls /tmp/.X11-unix 2>&1 | tr '\n' ' ')"
     command -v xdpyinfo >/dev/null 2>&1 && xdpyinfo 2>&1 | grep -E 'number of extensions|dimensions:|^    (GLX|RANDR|XInputExtension|Present|DRI3|XFIXES|Composite)$' | head -12
     command -v xwininfo >/dev/null 2>&1 && xwininfo -root -tree 2>&1 | head -30
+    echo "[tiny] diag shortcut env xfwm4: ${'$'}(tr '\0' '\n' < /proc/${'$'}(pgrep -x xfwm4 | head -1)/environ 2>/dev/null | grep -E '^(GDK|QT_|GTK|XDG|DBUS|WAYLAND|DISPLAY|SESSION|DESKTOP|TINY)' | tr '\n' ' ')"
+    echo "[tiny] diag shortcut proses WM/sesi: ${'$'}(ps -eo comm 2>/dev/null | grep -E '^(xfwm4|xfsettingsd|xfce4-session|xfdesktop|xfce4-panel)${'$'}' | sort -u | tr '\n' ' ')"
     # status peta (Map State) tiap window tingkat atas: window yang dibuat tetapi tidak pernah di-map tidak tampil (layar hitam)
     for w in ${'$'}(xwininfo -root -children 2>/dev/null | awk '/^ +0x[0-9a-f]+ /{print ${'$'}1}' | head -20); do
       echo "[tiny] diag win ${'$'}w ${'$'}(xwininfo -id ${'$'}w 2>/dev/null | awk -F': +' '/Map State|Override Redirect State|Depth/{printf "%s=%s ", ${'$'}1, ${'$'}2}')"

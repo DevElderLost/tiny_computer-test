@@ -876,6 +876,19 @@ export GDK_CORE_DEVICE_EVENTS=1 QT_XCB_NO_XI2=1
 ${gpuEnv}rm -f /tmp/.X4-lock
 for i in ${'$'}(seq 1 150); do [ -S /tmp/.X11-unix/X4 ] && break; sleep 0.2; done
 [ -S /tmp/.X11-unix/X4 ] || echo "X++ socket /tmp/.X11-unix/X4 not found"
+# Jejak protokol X++ untuk Open desktop (hanya bila Pengaturan > Logs > Launch log menyala): sama dengan sesi Shortcut
+# (ShortcutRunner.script). Server X++ menulis /tmp/xpp-trace.log dan salinannya xpp-trace-<waktu>.log di Download/Wayland-logs
+# selama berkas /tmp/.xpp-trace ada. Dipakai membandingkan perilaku xfwm4 saat window digeser di desktop dan di Shortcut.
+if [ -n "${'$'}TINY_LAUNCH_LOG" ] && [ -w "${'$'}TINY_LAUNCH_LOG" ]; then
+  : > /tmp/xpp-trace.log 2>/dev/null
+  : > /tmp/.xpp-trace 2>/dev/null
+  (
+    sleep 20
+    echo "[tiny] diag desktop (20 dtk): proses WM/sesi: ${'$'}(ps -eo comm 2>/dev/null | grep -E '^(xfwm4|xfsettingsd|xfce4-session|xfdesktop|xfce4-panel)${'$'}' | sort -u | tr '\n' ' ')"
+    echo "[tiny] diag desktop env xfwm4: ${'$'}(tr '\0' '\n' < /proc/${'$'}(pgrep -x xfwm4 | head -1)/environ 2>/dev/null | grep -E '^(GDK|QT_|GTK|XDG|DBUS|WAYLAND|DISPLAY|SESSION|DESKTOP|TINY)' | tr '\n' ' ')"
+    command -v xwininfo >/dev/null 2>&1 && DISPLAY=:4 xwininfo -root -tree 2>&1 | head -40
+  ) >> "${'$'}TINY_LAUNCH_LOG" 2>&1 &
+fi
 if [ -n "${'$'}TINY_LAUNCH_LOG" ] && [ -w "${'$'}TINY_LAUNCH_LOG" ]; then
 (DISPLAY=:4 ${compEnv}bash "${'$'}HOME/.vnc/tiny-session.sh" xinit/Xsession 2>&1 | tee "${'$'}HOME/.vnc/x.log" >> "${'$'}TINY_LAUNCH_LOG") &
 else
