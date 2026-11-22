@@ -23,7 +23,8 @@ ExtensionManager::ExtensionManager() {
     AddExtension("DRI3", [](XClient* c) { c->ProcDRI3(); }, 0, 0);
     AddExtension("Present", [](XClient* c) { c->ProcPresent(); }, 0, 0);
     AddExtension("SYNC", [](XClient* c) { c->ProcSync(); }, 0, 1);
-    AddExtension("RANDR", [](XClient* c) { c->ProcRandR(); }, 2, 0);
+    // RandR 1.6: 2 event (ScreenChangeNotify, Notify) dan 5 galat (BadRROutput, BadRRCrtc, BadRRMode, BadRRProvider, BadRRLease).
+    AddExtension("RANDR", [](XClient* c) { c->ProcRandR(); }, 2, 5);
     AddExtension("GLX", [](XClient* c) { c->ProcGLX(); }, 0, 14);
     // Match public Ludashi's Composite 0.1 window-redirection subset.
     AddExtension("Composite", [](XClient* c) { c->ProcComposite(); }, 0, 0);

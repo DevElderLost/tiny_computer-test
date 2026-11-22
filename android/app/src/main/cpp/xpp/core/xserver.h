@@ -96,6 +96,10 @@ public:
     void RemoveResource(u32 id);
 
     u32 GetTimestamp() const;
+    // Dipanggil dari thread server (di bawah kunci server), mis. untuk mengirim event RandR ke klien yang memilihnya.
+    template <typename F> void ForEachClient(F&& f) {
+        for (auto& entry : clients) f(*entry.second);
+    }
     void SelectRawInput(XClient* client, bool enabled);
     void SendRawMotion(s32 dx, s32 dy);
     void SendRawButton(u16 button, bool down);

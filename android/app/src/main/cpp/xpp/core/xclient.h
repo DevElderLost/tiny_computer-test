@@ -47,6 +47,8 @@ public:
     void SendXIEnterEvent(u16 evtype, u16 deviceid, u16 sourceid, u8 mode, u8 detail, u32 root, u32 event, u32 child,
                           s32 rootX, s32 rootY, s32 eventX, s32 eventY, bool focus, u32 state);
     void ForgetXIWindow(Window* window) { xiWindows.erase(window); }
+    // RandR RRSelectInput: window id -> topeng event (RRScreenChangeNotifyMask dst.) yang dipilih klien ini.
+    std::unordered_map<u32, u16>& RandrSelections() { return randrSelections; }
     void SendXIRawEvent(u16 type, u32 detail, s32 dx = 0, s32 dy = 0);
 
     XResource* GetResource(u32 id) const;
@@ -103,6 +105,7 @@ private:
     void ProcCompat();
     void ProcXInput();
     void ProcXkb();
+    std::unordered_map<u32, u16> randrSelections;
     std::unordered_map<u32, std::unordered_map<u16, u32>> xiSelections;
     std::unordered_set<Window*> xiWindows;   // window dengan topeng event perangkat XI2 milik klien ini
     u32 xiRawMask{};
