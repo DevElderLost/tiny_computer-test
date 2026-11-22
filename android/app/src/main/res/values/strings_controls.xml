@@ -86,6 +86,7 @@
     <string name="wl_color_hex">Color (RRGGBB)</string>
     <string name="wl_range">Range</string>
     <string name="wl_orientation">Orientation</string>
+    <string name="wl_columns">Columns</string>
     <string name="wl_horizontal">Horizontal</string>
     <string name="wl_vertical">Vertical</string>
     <string name="wl_toggle_switch">Toggle switch</string>

@@ -486,11 +486,11 @@ private fun ElementFields(e: Element, rev: Int, touch: () -> Unit, commit: () ->
             stringResource(R.string.wl_range), e.range ?: Element.Range.FROM_A_TO_Z, Element.Range.entries.toList(),
             { it.name.removePrefix("FROM_").replace("_TO_", "-").replace('_', ' ') },
         ) {
-            if (it != e.range) {
-                e.range = it
-                e.bindings = Array(it.max) { i -> Element.rangeBinding(it, i) }
-                commit()
-            }
+            if (it != e.range) { e.range = it; commit() }
+        }
+        // jumlah kolom yang tampak (3..8); sisanya digulir dengan menggeser jari, seperti Winlator
+        Choice(stringResource(R.string.wl_columns), e.bindings.size, (3..8).toList(), { it.toString() }) {
+            if (it != e.bindings.size) { e.bindings = Array(it) { Binding.NONE }; commit() }
         }
         val horizontal = stringResource(R.string.wl_horizontal)
         val vertical = stringResource(R.string.wl_vertical)

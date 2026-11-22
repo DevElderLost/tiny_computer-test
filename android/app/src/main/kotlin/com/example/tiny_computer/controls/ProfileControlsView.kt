@@ -7,11 +7,13 @@ import android.graphics.Path
 import android.graphics.RectF
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
 import kotlin.math.abs
+import kotlin.math.floor
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
@@ -36,7 +38,7 @@ class ProfileControlsView(
 ) : View(context) {
 
     var profile: Profile? = null
-        set(value) { field = value; releaseAll(); selected = null; invalidate() }
+        set(value) { field = value; releaseAll(); rangeScroll.clear(); selected = null; invalidate() }
 
     /** Elemen terpilih di editor. */
     var selected: Element? = null
@@ -71,10 +73,21 @@ class ProfileControlsView(
         var startX = 0f; var startY = 0f
         var lastX = 0f; var lastY = 0f
         var thumbX = 0f; var thumbY = 0f
-        var cell = -1
         var releaseTask: Runnable? = null
         val active = BooleanArray(8)
+        // editor: selisih sentuhan terhadap titik tengah elemen
+        var offX = 0f; var offY = 0f
+        // tombol rentang: geser = gulir, ketuk = tekan huruf di bawah jari (seperti RangeScroller Winlator)
+        var scrolling = false
+        var rBinding = Binding.NONE
+        var rPressed = false
+        var downTime = 0L
+        var lastPos = 0f
+        var pressTask: Runnable? = null
     }
+
+    /** Offset gulir (`currentOffset` Winlator) tiap tombol rentang; bertahan antar sentuhan. */
+    private val rangeScroll = HashMap<Element, Float>()
 
     private val touches = HashMap<Int, Touch>()
     private val toggled = HashSet<Element>()
@@ -174,7 +187,10 @@ class ProfileControlsView(
                 if (editing) {
                     selected = e
                     onSelect(e)
-                    if (e != null) touches[id] = Touch(e, id).also { it.lastX = x; it.lastY = y }
+                    if (e != null) touches[id] = Touch(e, id).also {
+                        it.lastX = x; it.lastY = y; it.startX = x; it.startY = y
+                        it.offX = x - e.x * width; it.offY = y - e.y * height
+                    }
                     return true
                 }
                 if (e == null) {
@@ -293,13 +309,11 @@ class ProfileControlsView(
     private fun editMove(t: Touch, x: Float, y: Float) {
         val e = t.e
         if (width <= 0 || height <= 0) return
-        // geser mengikuti jari, ke kelipatan grid 1% lebar supaya rapi seperti editor Winlator
-        val gx = snap
-        val nx = (e.x * width + (x - t.lastX))
-        val ny = (e.y * height + (y - t.lastY))
+        // Elemen mengikuti jari tanpa putus dan tanpa snap ke grid sama sekali: posisi = sentuhan dikurangi selisih
+        // awal terhadap titik tengah elemen.
+        e.x = ((x - t.offX) / width).coerceIn(0f, 1f)
+        e.y = ((y - t.offY) / height).coerceIn(0f, 1f)
         t.lastX = x; t.lastY = y
-        e.x = (Math.round(nx / gx) * gx / width).coerceIn(0f, 1f)
-        e.y = (Math.round(ny / gx) * gx / height).coerceIn(0f, 1f)
     }
 
     private fun bind(t: Touch, i: Int, on: Boolean) {
@@ -318,7 +332,7 @@ class ProfileControlsView(
                 if (e.toggleSwitch && e in toggled) return
                 for (i in e.bindings.indices) bind(t, i, true)
             }
-            Element.Type.RANGE_BUTTON -> rangeMove(t, x, y)
+            Element.Type.RANGE_BUTTON -> rangeDown(t, x, y)
             else -> move(t, x, y)
         }
     }
@@ -401,16 +415,74 @@ class ProfileControlsView(
         axis(3, if (dx < 0) dx else 0f)
     }
 
+    // ---- tombol rentang (port RangeScroller Winlator)
+
+    private fun rangeOf(e: Element) = e.range ?: Element.Range.FROM_A_TO_Z
+    private fun rangeCount(e: Element) = max(1, e.bindings.size)
+    private fun rangeCell(e: Element): Float {
+        val b = bounds(e, RectF())
+        return max(b.width(), b.height()) / rangeCount(e)
+    }
+
+    /** Offset gulir 0..ukuran gulir (`getScrollOffset` Winlator). */
+    private fun rangeOffset(e: Element): Float {
+        val size = rangeCell(e) * rangeOf(e).max
+        var o = -(rangeScroll[e] ?: 0f) % size
+        if (o < 0) o += size
+        return o
+    }
+
+    /** Huruf/angka/F/NP di bawah titik ([x],[y]) (`getBindingByPosition` Winlator). */
+    private fun rangeBindingAt(e: Element, x: Float, y: Float): Binding {
+        val b = bounds(e, RectF())
+        val range = rangeOf(e)
+        val off = (if (e.orientation == 1) y - b.top else x - b.left) - (rangeScroll[e] ?: 0f)
+        var index = floor((off / rangeCell(e)) % range.max).toInt()
+        if (index < 0) index += range.max
+        return Element.rangeBinding(range, index)
+    }
+
+    private fun rangeDown(t: Touch, x: Float, y: Float) {
+        val e = t.e
+        t.scrolling = false
+        t.rPressed = false
+        t.rBinding = rangeBindingAt(e, x, y)
+        t.downTime = SystemClock.uptimeMillis()
+        t.lastPos = if (e.orientation == 1) y else x
+        t.pressTask?.let { main.removeCallbacks(it) }
+        // tahan lebih dari 200 md = tombol ditahan; ketuk singkat ditangani saat jari diangkat
+        val task = Runnable {
+            if (!t.scrolling && !t.rPressed) { t.rPressed = true; dispatcher?.handle(t.rBinding, true) }
+        }
+        t.pressTask = task
+        main.postDelayed(task, 200)
+    }
+
     private fun rangeMove(t: Touch, x: Float, y: Float) {
         val e = t.e
-        val b = bounds(e, RectF())
-        val n = e.bindings.size
-        val cell = if (e.orientation == 1) ((y - b.top) / b.height() * n).toInt() else ((x - b.left) / b.width() * n).toInt()
-        val c = cell.coerceIn(0, n - 1)
-        if (c == t.cell) return
-        if (t.cell >= 0) dispatcher?.handle(e.bindings[t.cell], false)
-        t.cell = c
-        dispatcher?.handle(e.bindings[c], true)
+        val pos = if (e.orientation == 1) y else x
+        val delta = pos - t.lastPos
+        if (!t.scrolling && abs(delta) >= 10f) {
+            t.scrolling = true
+            t.pressTask?.let { main.removeCallbacks(it) }
+        }
+        if (t.scrolling) {
+            rangeScroll[e] = (rangeScroll[e] ?: 0f) + delta
+            t.lastPos = pos
+        }
+    }
+
+    private fun rangeUp(t: Touch) {
+        t.pressTask?.let { main.removeCallbacks(it) }
+        val b = t.rBinding
+        val tap = SystemClock.uptimeMillis() - t.downTime < 200
+        if (tap && !t.scrolling && !t.rPressed) {
+            dispatcher?.handle(b, true)
+            main.postDelayed({ dispatcher?.handle(b, false) }, 30)
+        } else if (t.rPressed) {
+            dispatcher?.handle(b, false)
+        }
+        t.rPressed = false
     }
 
     private fun up(t: Touch) {
@@ -424,7 +496,7 @@ class ProfileControlsView(
                     else toggled.add(e)
                 } else for (i in e.bindings.indices) bind(t, i, false)
             }
-            Element.Type.RANGE_BUTTON -> if (t.cell >= 0) dispatcher?.handle(e.bindings[t.cell], false)
+            Element.Type.RANGE_BUTTON -> rangeUp(t)
             else -> for (i in e.bindings.indices) bind(t, i, false)
         }
     }
@@ -608,28 +680,39 @@ class ProfileControlsView(
             }
             Element.Type.RANGE_BUTTON -> {
                 val radius = sn * 0.9f * sc
-                val n = e.bindings.size
+                val n = rangeCount(e)
+                val range = rangeOf(e)
+                val vertical = e.orientation == 1
                 val minText = sn * 2f * sc
                 val stroke = max(1f, sn * 0.16f * sc)
-                val cur = if (pointer) touches.values.firstOrNull { it.e === e }?.cell ?: -1 else -1
+                val elementSize = rangeCell(e)
+                val offset = rangeOffset(e)
+                val rt = if (pointer) touches.values.firstOrNull { it.e === e } else null
                 softRoundRect(c, e, b.left, b.top, b.right, b.bottom, radius, active)
                 c.save()
                 path.reset()
                 path.addRoundRect(b, radius, radius, Path.Direction.CW)
                 c.clipPath(path)
-                for (i in 0 until n) {
-                    val vertical = e.orientation == 1
-                    val cell = if (vertical) b.height() / n else b.width() / n
-                    val cx = if (vertical) b.centerX() else b.left + cell * (i + 0.5f)
-                    val cy = if (vertical) b.top + cell * (i + 0.5f) else b.centerY()
-                    val pressed = i == cur
-                    if (pressed) {
-                        setup(Paint.Style.FILL, wa(e, theme, 150), 0f)
-                        if (vertical) c.drawRect(b.left, cy - cell * 0.5f, b.right, cy + cell * 0.5f, paint)
-                        else c.drawRect(cx - cell * 0.5f, b.top, cx + cell * 0.5f, b.bottom, paint)
+                var from = floor((offset / elementSize) % range.max).toInt()
+                if (from < 0) from += range.max
+                val begin = if (vertical) b.top else b.left
+                val end = if (vertical) b.bottom else b.right
+                var start = begin - offset % elementSize
+                for (k in 0..n) {
+                    val index = (from + k) % range.max
+                    if (start < end && start + elementSize > begin) {
+                        val pressed = rt != null && !rt.scrolling && rt.rBinding == Element.rangeBinding(range, index)
+                        if (pressed) {
+                            setup(Paint.Style.FILL, wa(e, theme, 150), 0f)
+                            if (vertical) c.drawRect(b.left, start, b.right, start + elementSize, paint)
+                            else c.drawRect(start, b.top, start + elementSize, b.bottom, paint)
+                        }
+                        val tx = if (vertical) b.centerX() else start + elementSize * 0.5f
+                        val ty = if (vertical) start + elementSize * 0.5f else b.centerY()
+                        val maxW = if (vertical) b.width() - stroke * 2 else elementSize - stroke * 2
+                        centeredText(c, e, rangeText(e, index), tx, ty, maxW, minText, if (pressed) white else theme)
                     }
-                    val maxW = if (vertical) b.width() - stroke * 2 else cell - stroke * 2
-                    centeredText(c, e, rangeText(e, i), cx, cy, maxW, minText, if (pressed) white else theme)
+                    start += elementSize
                 }
                 c.restore()
             }
@@ -740,12 +823,11 @@ class ProfileControlsView(
     }
 
     /** `getRangeTextForIndex` Winlator. */
-    private fun rangeText(e: Element, i: Int): String = when (e.range) {
+    private fun rangeText(e: Element, i: Int): String = when (rangeOf(e)) {
         Element.Range.FROM_A_TO_Z -> (65 + i).toChar().toString()
         Element.Range.FROM_0_TO_9 -> ((i + 1) % 10).toString()
         Element.Range.FROM_F1_TO_F12 -> "F${i + 1}"
         Element.Range.FROM_NP0_TO_NP9 -> "NP${(i + 1) % 10}"
-        null -> bindingText(e, i)
     }
 
     private fun drawFab(c: Canvas) {

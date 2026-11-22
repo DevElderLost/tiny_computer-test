@@ -51,7 +51,8 @@ class Element(
             Type.TRACKPAD -> arrayOf(Binding.GAMEPAD_RIGHT_THUMB_UP, Binding.GAMEPAD_RIGHT_THUMB_RIGHT, Binding.GAMEPAD_RIGHT_THUMB_DOWN, Binding.GAMEPAD_RIGHT_THUMB_LEFT)
             Type.RANGE_BUTTON -> {
                 if (range == null) range = Range.FROM_A_TO_Z
-                Array(range!!.max.coerceAtMost(26)) { i -> rangeBinding(range!!, i) }
+                // jumlah isi = jumlah kolom yang tampak (bawaan 4 seperti Winlator); huruf dihitung dari posisi gulir
+                Array(4) { Binding.NONE }
             }
             Type.BUTTON -> arrayOf(Binding.NONE, Binding.NONE, Binding.NONE, Binding.NONE)
         }
@@ -86,10 +87,15 @@ class Element(
     companion object {
         const val DEAD_ZONE = 0.15f
 
-        fun rangeBinding(range: Range, index: Int): Binding {
-            val all = Binding.entries
-            return all[(all.indexOf(range.first) + index).coerceIn(0, all.size - 1)]
-        }
+        /** Binding untuk sel ke-[index] dalam [range] (sama dengan `getBindingByPosition` Winlator). */
+        fun rangeBinding(range: Range, index: Int): Binding = Binding.fromString(
+            when (range) {
+                Range.FROM_A_TO_Z -> "KEY_" + (65 + index).toChar()
+                Range.FROM_0_TO_9 -> "KEY_" + ((index + 1) % 10)
+                Range.FROM_F1_TO_F12 -> "KEY_F" + (index + 1)
+                Range.FROM_NP0_TO_NP9 -> "KEY_KP_" + ((index + 1) % 10)
+            },
+        )
 
         fun fromJson(o: JSONObject): Element? = runCatching {
             Element(Type.valueOf(o.getString("type")), Shape.valueOf(o.optString("shape", "CIRCLE"))).apply {
@@ -111,6 +117,8 @@ class Element(
                 stickRadiusRatio = o.optDouble("stickRadiusRatio", 0.14).toFloat()
                 // elemen tanpa 4 binding (tombol lama) tetap aman dibaca di mana pun
                 if (bindings.isEmpty()) bindings = arrayOf(Binding.NONE)
+                // tombol rentang: isi = jumlah kolom (3..8). Profil lama menyimpan satu isi per huruf (sangat panjang)
+                if (type == Type.RANGE_BUTTON && bindings.size !in 3..8) bindings = Array(4) { Binding.NONE }
             }
         }.getOrNull()
     }
@@ -261,12 +269,40 @@ object ProfileStore {
     fun setFloatingPos(c: Context, x: Float, y: Float) = prefs(c).edit().putFloat("fabX", x).putFloat("fabY", y).apply()
 
     fun profiles(c: Context): List<Profile> {
+        seedDefaults(c)
         val list = (dir(c).listFiles { f -> f.name.startsWith("controls-") && f.name.endsWith(".icp") } ?: emptyArray())
             .mapNotNull { f -> runCatching { Profile.fromJson(JSONObject(f.readText())) }.getOrNull() }
             .sortedBy { it.id }
         if (list.isNotEmpty()) return list
-        // pertama kali: satu profil contoh supaya layar tidak kosong
+        // pertama kali: satu profil kosong supaya selalu ada profil aktif
         return listOf(createDefault(c))
+    }
+
+    /** Profil bawaan Winlator yang ikut dipasang sekali: nama berkas di assets. */
+    private val DEFAULT_ASSETS = listOf(
+        "inputcontrols/default/rts.icp",
+        "inputcontrols/default/pc-gamepad.icp",
+        "inputcontrols/default/virtual-gamepad.icp",
+    )
+
+    /**
+     * Pasang profil "Default" kosong (bila belum ada profil) dan profil bawaan Winlator (RTS, PC Gamepad, Virtual
+     * Gamepad) satu kali saja; profil yang sudah ada tidak diubah, dan profil yang dihapus pengguna tidak dipasang lagi.
+     */
+    private fun seedDefaults(c: Context) {
+        val p = prefs(c)
+        if (p.getBoolean("defaultsSeeded", false)) return
+        p.edit().putBoolean("defaultsSeeded", true).apply()
+        val existing = (dir(c).listFiles { f -> f.name.startsWith("controls-") && f.name.endsWith(".icp") } ?: emptyArray())
+            .mapNotNull { f -> runCatching { Profile.fromJson(JSONObject(f.readText())) }.getOrNull() }
+        if (existing.isEmpty()) createDefault(c)
+        val names = existing.map { it.name }.toSet()
+        for (asset in DEFAULT_ASSETS) {
+            val json = runCatching { c.assets.open(asset).bufferedReader().use { it.readText() } }.getOrNull() ?: continue
+            val name = runCatching { JSONObject(json).optString("name") }.getOrDefault("")
+            if (name in names) continue
+            import(c, json)
+        }
     }
 
     fun get(c: Context, id: Int): Profile? =
@@ -305,20 +341,9 @@ object ProfileStore {
         return p
     }
 
-    /** Profil bawaan: stik WASD kiri, tombol mouse kanan, beberapa tombol keyboard, d-pad gamepad dan tombol A/B/X/Y. */
+    /** Profil bawaan: "Default" tanpa tombol sama sekali (profil lain tinggal dipilih atau dibuat di editor). */
     private fun createDefault(c: Context): Profile {
         val p = Profile(1, "Default")
-        fun btn(x: Float, y: Float, text: String, b: Binding, shape: Element.Shape = Element.Shape.CIRCLE) =
-            Element(Element.Type.BUTTON, shape).apply { this.x = x; this.y = y; this.text = text; bindings = arrayOf(b) }
-        p.elements += Element(Element.Type.STICK).apply { applyType(type); x = 0.14f; y = 0.70f }
-        p.elements += Element(Element.Type.D_PAD).apply { applyType(type); x = 0.30f; y = 0.78f }
-        p.elements += btn(0.90f, 0.78f, "A", Binding.GAMEPAD_BUTTON_A)
-        p.elements += btn(0.95f, 0.64f, "B", Binding.GAMEPAD_BUTTON_B)
-        p.elements += btn(0.85f, 0.64f, "X", Binding.GAMEPAD_BUTTON_X)
-        p.elements += btn(0.90f, 0.50f, "Y", Binding.GAMEPAD_BUTTON_Y)
-        p.elements += btn(0.08f, 0.40f, "LMB", Binding.MOUSE_LEFT_BUTTON, Element.Shape.ROUND_RECT)
-        p.elements += btn(0.18f, 0.40f, "RMB", Binding.MOUSE_RIGHT_BUTTON, Element.Shape.ROUND_RECT)
-        p.elements += btn(0.30f, 0.40f, "ESC", Binding.KEY_ESC, Element.Shape.ROUND_RECT)
         p.save(c)
         setActiveId(c, p.id)
         return p
