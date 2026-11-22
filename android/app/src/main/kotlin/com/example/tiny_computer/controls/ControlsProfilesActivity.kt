@@ -293,7 +293,7 @@ class ControlsProfilesActivity : ComponentActivity() {
         dialog?.invoke()
     }
 
-    private fun connectedPads(): List<InputDevice> = InputDevice.getDeviceIds().mapNotNull { InputDevice.getDevice(it) }.filter {
+    private fun connectedPads(): List<InputDevice> = InputDevice.getDeviceIds().toList().mapNotNull { InputDevice.getDevice(it) }.filter {
         it.sources and InputDevice.SOURCE_GAMEPAD == InputDevice.SOURCE_GAMEPAD ||
             it.sources and InputDevice.SOURCE_JOYSTICK == InputDevice.SOURCE_JOYSTICK
     }
