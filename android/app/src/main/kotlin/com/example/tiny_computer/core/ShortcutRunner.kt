@@ -597,6 +597,11 @@ exec sh -c "${'$'}TINY_CMD"
         // yang mengekspor GDK_CORE_DEVICE_EVENTS/QT_XCB_NO_XI2, sedangkan xfwm4 sesi Shortcut berjalan tanpa keduanya
         // (beda dengan xfwm4 Open desktop), sehingga bingkai jendela tampil tetapi tidak bisa digeser, ditutup,
         // dimaksimalkan, atau dikecilkan. Xwayland tidak membutuhkannya. Nilainya dicatat di wm.log.
+        // Compositor xfwm4 sesi Shortcut: bawaannya mati (--compositor=off). Bila "Allow XFCE compositor" menyala dan server
+        // X++, xfwm4 dijalankan dengan compositor menyala seperti xfwm4 Open desktop (Launcher.guiCommandXpp memakai
+        // TINY_XFCE_COMPOSITOR=1). Jejak desktop yang window-nya bisa digeser memakai compositor menyala, sedangkan xfwm4
+        // Shortcut (compositor mati) tidak menanggapi klik di bingkai; ini cara menguji apakah compositor penyebabnya.
+        val wmCompArg = if (xpp && Cfg.xfceCompositor) "--compositor=on" else "--compositor=off"
         val wmEnv = if (xpp) {
             "unset WAYLAND_DISPLAY\nexport TINY_NO_WAYLAND=1 GDK_CORE_DEVICE_EVENTS=1 QT_XCB_NO_XI2=1\n"
         } else ""
@@ -641,8 +646,8 @@ ${noWm}# window manager (title bar + tombol tutup/maksimalkan/kecilkan) untuk ap
     for wm in xfwm4 openbox metacity marco icewm fluxbox; do
       command -v ${'$'}wm >/dev/null 2>&1 || continue
       args=
-      [ "${'$'}wm" = xfwm4 ] && args=--compositor=off
-      echo "[wm] mulai ${'$'}wm" >> "${'$'}WMLOG"
+      [ "${'$'}wm" = xfwm4 ] && args=${wmCompArg}
+      echo "[wm] mulai ${'$'}wm ${'$'}args" >> "${'$'}WMLOG"
       if command -v dbus-launch >/dev/null 2>&1; then
         dbus-launch --exit-with-session ${'$'}wm ${'$'}args >> "${'$'}WMLOG" 2>&1 &
       else
