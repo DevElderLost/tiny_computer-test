@@ -21,6 +21,8 @@ import java.nio.file.LinkOption
  *  - libasound2-plugins: plugin ALSA `pulse` (aplikasi ALSA/PortAudio seperti Audacity bisa merekam dari
  *                        mikrofon virtual PulseAudio dan memutar lewat pulse)
  *  - alsa-utils        : `aplay` / `arecord` / `alsamixer` untuk menguji suara
+ *  - libxkbcommon-x11-0: pustaka keyboard xkb untuk klien X11 (winit/Rust seperti PhotoCraft, Qt xcb). Tanpa ini aplikasi
+ *                        keluar sendiri sebelum membuat window: layar tetap hitam dan sesi Shortcut berakhir.
  * Semuanya dipasang ONLINE lewat apt (butuh internet sekali, saat instalasi pertama). Hanya paket yang
  * BELUM terpasang yang dipasang, sehingga peluncuran berikutnya tidak butuh internet.
  */
@@ -36,6 +38,7 @@ object ExtraSetup {
         "libxkbregistry0" to "usr/lib/aarch64-linux-gnu/libxkbregistry.so.0",
         "libasound2-plugins" to "usr/lib/aarch64-linux-gnu/alsa-lib/libasound_module_pcm_pulse.so",
         "alsa-utils" to "usr/bin/aplay",
+        "libxkbcommon-x11-0" to "usr/lib/aarch64-linux-gnu/libxkbcommon-x11.so.0",
     )
 
     /** Paket yang belum ada di kontainer saat ini; dibaca langsung dari rootfs, tanpa menjalankan apa pun. */

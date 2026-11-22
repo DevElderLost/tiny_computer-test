@@ -129,6 +129,32 @@ object ShortcutRunner {
     private val ENV_KEY = Regex("[A-Za-z_][A-Za-z0-9_]*")
 
     /**
+     * Skrip pemeriksa pustaka sistem yang dibutuhkan AppImage X11 tetapi tidak selalu ada di rootfs (terutama sistem hasil
+     * import, yang tidak melewati [ExtraSetup]). Tanpa `libxkbcommon-x11.so.0`, aplikasi berbasis winit (PhotoCraft) menolak
+     * mulai dan keluar dengan kode 0 sebelum membuat window: layar hitam, lalu sesi berakhir sendiri. Pustaka dicari di
+     * direktori umum dan cache ldconfig; bila kurang, dipasang lewat apt (butuh internet; hasilnya tercatat di log shortcut).
+     */
+    private fun libGuardScript(): String = """
+tiny_need_lib() {
+  _so="${'$'}1"; _pkg="${'$'}2"
+  _has() {
+    for _d in /usr/lib/aarch64-linux-gnu /lib/aarch64-linux-gnu /usr/lib /usr/lib64 /lib; do [ -e "${'$'}_d/${'$'}_so" ] && return 0; done
+    { ldconfig -p || /sbin/ldconfig -p; } 2>/dev/null | grep -q "${'$'}_so"
+  }
+  _has && return 0
+  echo "[tiny] pustaka ${'$'}_so tidak ada; memasang paket ${'$'}_pkg"
+  if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+    export DEBIAN_FRONTEND=noninteractive
+    timeout 120 sudo -n apt-get install -y "${'$'}_pkg" >/dev/null 2>&1 ||
+      { timeout 120 sudo -n apt-get update >/dev/null 2>&1 && timeout 180 sudo -n apt-get install -y "${'$'}_pkg" >/dev/null 2>&1; }
+  fi
+  if _has; then echo "[tiny] paket ${'$'}_pkg terpasang"
+  else echo "[tiny] PERINGATAN: ${'$'}_so masih tidak ada (internet mati?). Aplikasi bisa keluar sebelum menampilkan window. Pasang manual: sudo apt install ${'$'}_pkg"; fi
+}
+tiny_need_lib libxkbcommon-x11.so.0 libxkbcommon-x11-0
+""".trimStart()
+
+    /**
      * Isi skrip peluncur untuk satu aplikasi dengan pengaturannya. [xpp] = aplikasi berjalan di atas X++ native X server
      * (pengaturan Display server desktop = X++; lihat [Launcher.shortcutXpp]): tidak ada compositor Wayland, jadi tidak ada
      * variabel Wayland, dan Turnip/Zink memakai WSI software seperti desktop X++.
@@ -468,6 +494,8 @@ fi
             // tercatat di log shortcut: tempat konfigurasi aplikasi ini dan apakah bisa ditulis
             sb.append("mkdir -p \"\$HOME/.config\" \"\$HOME/.local/share\" \"\$HOME/.cache\" 2>/dev/null\n")
             sb.append("echo \"[tiny] AppImage: HOME=\$HOME cwd=\$(pwd) ~/.config bisa ditulis: \$([ -w \"\$HOME/.config\" ] && echo ya || echo TIDAK)\"\n")
+            // pustaka X11 yang wajib ada sebelum aplikasi dijalankan (lihat libGuardScript)
+            if (!isWine) sb.append(libGuardScript())
             // dialog berkas (Import shader/mod dst.) memanggil zenity/kdialog: catat apa yang tersedia untuk diagnosis
             sb.append("echo \"[tiny] dialog berkas: zenity=\$(command -v zenity || echo TIDAK ADA) kdialog=\$(command -v kdialog || echo TIDAK ADA) DISPLAY=\$DISPLAY WAYLAND_DISPLAY=\$WAYLAND_DISPLAY GDK_BACKEND=\$GDK_BACKEND SDL_VIDEODRIVER=\$SDL_VIDEODRIVER\"\n")
         }
