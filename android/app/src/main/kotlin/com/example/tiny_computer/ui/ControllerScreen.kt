@@ -31,7 +31,8 @@ import androidx.compose.ui.unit.sp
 import com.droiddeck.launcher.input.ControllerPrefs
 import com.example.tiny_computer.R
 import com.example.tiny_computer.controller.ControllerEditorActivity
-import com.example.tiny_computer.controls.ControlsProfilesActivity
+import com.example.tiny_computer.controls.WinlatorControlsGroup
+import com.example.tiny_computer.controls.WinlatorControlsPage
 import com.example.tiny_computer.core.Cfg
 import com.example.tiny_computer.core.Startup
 import com.example.tiny_computer.core.TinyEnv
@@ -58,6 +59,7 @@ fun ControllerScreen() {
     var opacity by remember { mutableIntStateOf((Cfg.padOverlayOpacity * 100).roundToInt().coerceIn(OPACITY_RANGE.first, OPACITY_RANGE.last)) }
     var size by remember { mutableIntStateOf((Cfg.padOverlayScale * 100).roundToInt().coerceIn(SIZE_RANGE.first, SIZE_RANGE.last)) }
     var mappingOpen by remember { mutableStateOf(false) }
+    var winOpen by remember { mutableStateOf(false) }
     var gyro by remember { mutableStateOf(ControllerPrefs.gyroEnabled(ctx)) }
     var gyroTarget by remember { mutableStateOf(ControllerPrefs.gyroTarget(ctx)) }
     var gyroSens by remember { mutableIntStateOf(ControllerPrefs.gyroSensitivity(ctx)) }
@@ -86,6 +88,11 @@ fun ControllerScreen() {
     LaunchedEffect(gyroSens) {
         delay(150)
         if (ControllerPrefs.gyroSensitivity(ctx) != gyroSens) ControllerPrefs.setGyroSensitivity(ctx, gyroSens)
+    }
+
+    if (winOpen) {
+        WinlatorControlsPage(onBack = { winOpen = false })
+        return
     }
 
     if (mappingOpen) {
@@ -177,13 +184,7 @@ fun ControllerScreen() {
                 DeckSliderRow(stringResource(R.string.tc_ctrl_trackpad_speed), null, trackpadSpeed, 1..10) { trackpadSpeed = it }
             }
         }
-        DeckGroup(stringResource(R.string.wl_title)) {
-            DeckRow(stringResource(R.string.wl_title), stringResource(R.string.wl_title_hint)) {
-                DeckButton(stringResource(R.string.wl_open), primary = false) {
-                    ctx.startActivity(Intent(ctx, ControlsProfilesActivity::class.java))
-                }
-            }
-        }
+        WinlatorControlsGroup { winOpen = true }
         DeckGroup(stringResource(R.string.ctrl_layout)) {
             DeckRow(
                 stringResource(R.string.ctrl_layout),

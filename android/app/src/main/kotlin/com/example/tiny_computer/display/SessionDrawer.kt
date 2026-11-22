@@ -72,7 +72,6 @@ import androidx.compose.ui.unit.sp
 import com.example.tiny_computer.R
 import com.example.tiny_computer.controller.ControllerEditorActivity
 import com.example.tiny_computer.controls.ControlsEditorActivity
-import com.example.tiny_computer.controls.ControlsProfilesActivity
 import com.example.tiny_computer.controls.ProfileStore
 import com.example.tiny_computer.core.Cfg
 import com.example.tiny_computer.core.ReshadeShaders
@@ -338,8 +337,8 @@ private fun InputPage(state: DisplayUiState, onPadOverlayChange: (Boolean) -> Un
 }
 
 /**
- * Controller gaya Winlator (profil): saklar mode, pilihan profil aktif, tombol mengambang, editor tata letak, dan
- * manajer profil (controller eksternal, impor/ekspor). Disimpan di [ProfileStore]; DisplayActivity memuat ulang sendiri.
+ * Controller gaya Winlator (profil): saklar mode, pilihan profil aktif, tombol mengambang, dan editor tata letak.
+ * Manajer profil (controller eksternal, impor/ekspor) ada di Pengaturan > Controller. Disimpan di [ProfileStore]; DisplayActivity memuat ulang sendiri.
  */
 @Composable
 private fun ProfileGroup() {
@@ -367,9 +366,6 @@ private fun ProfileGroup() {
                 DrawerActionButton(stringResource(R.string.wl_edit_layout), Icons.Outlined.Edit, pal.onBackground, {
                     // menu menutup agar layar editor terlihat; profil yang sedang dipakai yang diedit
                     ctx.startActivity(Intent(ctx, ControlsEditorActivity::class.java).putExtra(ControlsEditorActivity.EXTRA_PROFILE, ProfileStore.activeId(ctx)))
-                })
-                DrawerActionButton(stringResource(R.string.wl_manage_profiles), Icons.Outlined.Settings, pal.onBackground, {
-                    ctx.startActivity(Intent(ctx, ControlsProfilesActivity::class.java))
                 })
             }
         }

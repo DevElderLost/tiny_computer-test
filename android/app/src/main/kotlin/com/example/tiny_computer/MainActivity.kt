@@ -56,6 +56,13 @@ class MainActivity : ComponentActivity() {
         if (hasFocus) hideSystemBars()
     }
 
+    // penetapan tombol controller fisik (Pengaturan > Controller > profil): tombol/sumbu dicatat, bukan menavigasi layar
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean =
+        com.example.tiny_computer.controls.ControllerCapture.onKey(event) || super.dispatchKeyEvent(event)
+
+    override fun dispatchGenericMotionEvent(event: android.view.MotionEvent): Boolean =
+        com.example.tiny_computer.controls.ControllerCapture.onMotion(event) || super.dispatchGenericMotionEvent(event)
+
     override fun onResume() {
         super.onResume()
         hideSystemBars()

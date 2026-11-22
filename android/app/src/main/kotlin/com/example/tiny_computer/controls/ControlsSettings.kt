@@ -2,29 +2,22 @@ package com.example.tiny_computer.controls
 
 import android.content.Intent
 import android.net.Uri
-import android.os.Bundle
 import android.view.InputDevice
-import android.view.KeyEvent
-import android.view.MotionEvent
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -33,8 +26,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.example.tiny_computer.R
 import com.example.tiny_computer.ui.DeckActionRow
 import com.example.tiny_computer.ui.DeckButton
@@ -45,114 +41,126 @@ import com.example.tiny_computer.ui.DeckRow
 import com.example.tiny_computer.ui.DeckSliderRow
 import com.example.tiny_computer.ui.DeckToggleRow
 import com.example.tiny_computer.ui.ScreenTitle
-import com.example.tiny_computer.ui.TinyTheme
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
 /**
- * Manajer controller gaya Winlator: saklar mode profil + tombol mengambang, daftar profil (pilih, edit di editor,
- * ganti nama, duplikat, impor/ekspor `.icp`, hapus), pengaturan profil (kecepatan kursor, warna), dan controller
- * eksternal per profil (port `InputControlsFragment` + `ExternalControllerBindingsActivity` Winlator).
- *
- * Penetapan tombol fisik: saat [capture] terisi, tombol/sumbu controller berikutnya dicatat (dispatchKeyEvent /
- * dispatchGenericMotionEvent di bawah) alih-alih dipakai menavigasi layar.
+ * Pengaturan controller gaya Winlator, tinggal di Pengaturan > Controller (ControllerScreen) bersama controller
+ * DroidDeck: potret dan lanskap memakai komponen Deck* yang sama. Hanya editor tata letak yang layar penuh (seperti
+ * editor DroidDeck).
  */
-class ControlsProfilesActivity : ComponentActivity() {
-    private var capture: ((Int) -> Unit)? = null
-    private var capturedDevice: InputDevice? = null
-    private var axisArmed = true
-    private var resumeRev by mutableIntStateOf(0)
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContent {
-            TinyTheme {
-                Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-                    ProfilesRoot(setCapture = { capturedDevice = null; capture = it }, lastDevice = { capturedDevice })
-                }
+/** Penangkap tombol/sumbu controller fisik untuk penetapan binding; diisi halaman, dipicu MainActivity. */
+object ControllerCapture {
+    @Volatile var callback: ((Int) -> Unit)? = null
+
+    /** True bila event dipakai (tombol/sumbu controller dicatat). */
+    fun onKey(e: android.view.KeyEvent): Boolean {
+        val cb = callback ?: return false
+        val code = ExternalControllerHandler.captureKey(e) ?: return false
+        callback = null
+        cb(code)
+        return true
+    }
+
+    fun onMotion(e: android.view.MotionEvent): Boolean {
+        val cb = callback ?: return false
+        val code = ExternalControllerHandler.captureAxis(e) ?: return false
+        callback = null
+        cb(code)
+        return true
+    }
+}
+
+/** Grup di halaman Controller: saklar mode, profil aktif, tombol mengambang, editor, dan pintu ke manajer profil. */
+@Composable
+fun WinlatorControlsGroup(onManage: () -> Unit) {
+    val ctx = LocalContext.current
+    var enabled by remember { mutableStateOf(ProfileStore.enabled(ctx)) }
+    var fab by remember { mutableStateOf(ProfileStore.floatingButton(ctx)) }
+    var ext by remember { mutableStateOf(ProfileStore.externalEnabled(ctx)) }
+    var active by remember { mutableIntStateOf(ProfileStore.active(ctx).id) }
+    val profiles = remember { ProfileStore.profiles(ctx) }
+    DeckGroup(stringResource(R.string.wl_title)) {
+        DeckToggleRow(stringResource(R.string.wl_enable), stringResource(R.string.wl_enable_hint), enabled) {
+            enabled = it; ProfileStore.setEnabled(ctx, it)
+        }
+        if (enabled) {
+            DeckChoiceRow(stringResource(R.string.wl_profile), null, profiles.map { it.id to it.name }, active) {
+                active = it; ProfileStore.setActiveId(ctx, it)
             }
-        }
-    }
-
-    override fun onResume() {
-        super.onResume()
-        resumeRev++
-    }
-
-    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        val cb = capture
-        if (cb != null) {
-            val code = ExternalControllerHandler.captureKey(event)
-            if (code != null) { capturedDevice = event.device; capture = null; cb(code); return true }
-            // tombol lain (mis. Back) tetap membatalkan lewat UI; hanya tombol controller yang dicatat
-        }
-        return super.dispatchKeyEvent(event)
-    }
-
-    override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
-        val cb = capture
-        if (cb != null) {
-            val code = ExternalControllerHandler.captureAxis(event)
-            if (code != null && axisArmed) { capturedDevice = event.device; capture = null; cb(code); return true }
-        }
-        return super.dispatchGenericMotionEvent(event)
-    }
-
-    private enum class Page { LIST, DETAIL, CONTROLLER }
-
-    @Composable
-    private fun ProfilesRoot(setCapture: (((Int) -> Unit)?) -> Unit, lastDevice: () -> InputDevice?) {
-        val ctx = LocalContext.current
-        var rev by remember { mutableIntStateOf(0) }
-        var page by remember { mutableStateOf(Page.LIST) }
-        var openId by remember { mutableIntStateOf(0) }
-        var openController by remember { mutableStateOf<String?>(null) }
-        var enabled by remember { mutableStateOf(ProfileStore.enabled(ctx)) }
-        var fab by remember { mutableStateOf(ProfileStore.floatingButton(ctx)) }
-        var ext by remember { mutableStateOf(ProfileStore.externalEnabled(ctx)) }
-        var dialog by remember { mutableStateOf<(@Composable () -> Unit)?>(null) }
-        // resumeRev naik tiap layar ini kembali tampil (mis. dari editor): daftar dibaca ulang
-        val list = remember(rev, resumeRev) { ProfileStore.profiles(ctx) }
-        val activeId = remember(rev, resumeRev) { ProfileStore.active(ctx).id }
-
-        val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
-            if (uri == null) return@rememberLauncherForActivityResult
-            val text = runCatching { ctx.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() } }.getOrNull()
-            val p = text?.let { ProfileStore.import(ctx, it) }
-            if (p == null) {
-                dialog = { AlertDialog(onDismissRequest = { dialog = null }, text = { Text(stringResource(R.string.wl_import_failed)) }, confirmButton = { TextButton(onClick = { dialog = null }) { Text(stringResource(R.string.wl_ok)) } }) }
+            DeckToggleRow(stringResource(R.string.wl_fab), stringResource(R.string.wl_fab_hint), fab) {
+                fab = it; ProfileStore.setFloatingButton(ctx, it)
             }
-            rev++
-        }
-
-        var exporting by remember { mutableStateOf<Profile?>(null) }
-        val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri: Uri? ->
-            val prof = exporting
-            exporting = null
-            if (uri != null && prof != null) {
-                runCatching { ctx.contentResolver.openOutputStream(uri)?.use { it.write(prof.toJson().toString().toByteArray()) } }
+            DeckToggleRow(stringResource(R.string.wl_external), stringResource(R.string.wl_external_hint), ext) {
+                ext = it; ProfileStore.setExternalEnabled(ctx, it)
             }
+            DeckActionRow(stringResource(R.string.wl_edit_layout), stringResource(R.string.wl_edit_layout_hint), stringResource(R.string.wl_edit)) {
+                ctx.startActivity(Intent(ctx, ControlsEditorActivity::class.java).putExtra(ControlsEditorActivity.EXTRA_PROFILE, ProfileStore.activeId(ctx)))
+            }
+            DeckActionRow(stringResource(R.string.wl_manage_profiles), null, stringResource(R.string.wl_open), onManage)
         }
+    }
+}
 
-        BackHandler(enabled = page != Page.LIST) {
-            setCapture(null)
-            page = if (page == Page.CONTROLLER) Page.DETAIL else Page.LIST
+private enum class Page { LIST, DETAIL, CONTROLLER }
+
+private fun connectedPads(): List<InputDevice> = InputDevice.getDeviceIds().toList().mapNotNull { InputDevice.getDevice(it) }.filter {
+    it.sources and InputDevice.SOURCE_GAMEPAD == InputDevice.SOURCE_GAMEPAD ||
+        it.sources and InputDevice.SOURCE_JOYSTICK == InputDevice.SOURCE_JOYSTICK
+}
+
+/** Manajer profil: daftar, detail profil (kecepatan kursor, warna, controller eksternal), dan penetapan tombol fisik. */
+@Composable
+fun WinlatorControlsPage(onBack: () -> Unit) {
+    val ctx = LocalContext.current
+    var rev by remember { mutableIntStateOf(0) }
+    var resumeRev by remember { mutableIntStateOf(0) }
+    var page by remember { mutableStateOf(Page.LIST) }
+    var openId by remember { mutableIntStateOf(0) }
+    var openController by remember { mutableStateOf<String?>(null) }
+    var dialog by remember { mutableStateOf<(@Composable () -> Unit)?>(null) }
+    val list = remember(rev, resumeRev) { ProfileStore.profiles(ctx) }
+    val activeId = remember(rev, resumeRev) { ProfileStore.active(ctx).id }
+
+    // kembali dari editor tata letak: daftar dibaca ulang
+    val owner = LocalLifecycleOwner.current
+    DisposableEffect(owner) {
+        val obs = LifecycleEventObserver { _, ev -> if (ev == Lifecycle.Event.ON_RESUME) resumeRev++ }
+        owner.lifecycle.addObserver(obs)
+        onDispose { owner.lifecycle.removeObserver(obs); ControllerCapture.callback = null }
+    }
+
+    val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val text = runCatching { ctx.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() } }.getOrNull()
+        val p = text?.let { ProfileStore.import(ctx, it) }
+        if (p == null) {
+            dialog = { AlertDialog(onDismissRequest = { dialog = null }, text = { Text(stringResource(R.string.wl_import_failed)) }, confirmButton = { TextButton(onClick = { dialog = null }) { Text(stringResource(R.string.wl_ok)) } }) }
         }
+        rev++
+    }
+    var exporting by remember { mutableStateOf<Profile?>(null) }
+    val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri: Uri? ->
+        val prof = exporting
+        exporting = null
+        if (uri != null && prof != null) {
+            runCatching { ctx.contentResolver.openOutputStream(uri)?.use { it.write(prof.toJson().toString().toByteArray()) } }
+        }
+    }
+
+    BackHandler {
+        ControllerCapture.callback = null
+        when (page) {
+            Page.CONTROLLER -> page = Page.DETAIL
+            Page.DETAIL -> page = Page.LIST
+            Page.LIST -> onBack()
+        }
+    }
 
         when (page) {
             Page.LIST -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-                ScreenTitle(stringResource(R.string.wl_title), stringResource(R.string.wl_title_hint))
-                DeckGroup(stringResource(R.string.wl_mode)) {
-                    DeckToggleRow(stringResource(R.string.wl_enable), stringResource(R.string.wl_enable_hint), enabled) {
-                        enabled = it; ProfileStore.setEnabled(ctx, it)
-                    }
-                    DeckToggleRow(stringResource(R.string.wl_fab), stringResource(R.string.wl_fab_hint), fab) {
-                        fab = it; ProfileStore.setFloatingButton(ctx, it)
-                    }
-                    DeckToggleRow(stringResource(R.string.wl_external), stringResource(R.string.wl_external_hint), ext) {
-                        ext = it; ProfileStore.setExternalEnabled(ctx, it)
-                    }
-                }
+                ScreenTitle(stringResource(R.string.wl_profiles), stringResource(R.string.wl_title_hint))
                 DeckGroup(stringResource(R.string.wl_profiles)) {
                     for (p in list) {
                         DeckRow(
@@ -181,6 +189,7 @@ class ControlsProfilesActivity : ComponentActivity() {
                         }
                     }
                 }
+                DeckButton(stringResource(R.string.wl_back), Modifier.padding(horizontal = 16.dp, vertical = 8.dp), onClick = onBack)
             }
 
             Page.DETAIL -> {
@@ -195,7 +204,7 @@ class ControlsProfilesActivity : ComponentActivity() {
                     ScreenTitle(p.name, stringResource(R.string.wl_profile_hint))
                     DeckGroup(stringResource(R.string.wl_profile)) {
                         DeckActionRow(stringResource(R.string.wl_edit_layout), stringResource(R.string.wl_edit_layout_hint), stringResource(R.string.wl_edit)) {
-                            startActivity(Intent(ctx, ControlsEditorActivity::class.java).putExtra(ControlsEditorActivity.EXTRA_PROFILE, p.id))
+                            ctx.startActivity(Intent(ctx, ControlsEditorActivity::class.java).putExtra(ControlsEditorActivity.EXTRA_PROFILE, p.id))
                         }
                         DeckSliderRow(stringResource(R.string.wl_cursor_speed), null, speed, 2..50, 1, { "%.1fx".format(it / 10f) }) { speed = it }
                         DeckChoiceRow(
@@ -274,7 +283,7 @@ class ControlsProfilesActivity : ComponentActivity() {
                             Modifier.padding(14.dp), primary = !waiting,
                         ) {
                             waiting = true
-                            setCapture { code ->
+                            ControllerCapture.callback = { code ->
                                 waiting = false
                                 if (c.find(code) == null) { c.bindings.add(PadBinding(code)); p.save(ctx); lastBind++; rev++ }
                             }
@@ -283,25 +292,12 @@ class ControlsProfilesActivity : ComponentActivity() {
                     }
                     DeckGroup(stringResource(R.string.wl_manage)) {
                         DeckButton(stringResource(R.string.wl_remove_controller), Modifier.padding(14.dp), primary = false) {
-                            p.controllers.remove(c); p.save(ctx); setCapture(null); page = Page.DETAIL; rev++
+                            p.controllers.remove(c); p.save(ctx); ControllerCapture.callback = null; page = Page.DETAIL; rev++
                         }
                     }
-                    DeckButton(stringResource(R.string.wl_back), Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) { setCapture(null); page = Page.DETAIL }
+                    DeckButton(stringResource(R.string.wl_back), Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) { ControllerCapture.callback = null; page = Page.DETAIL }
                 }
             }
         }
         dialog?.invoke()
-    }
-
-    private fun connectedPads(): List<InputDevice> = InputDevice.getDeviceIds().toList().mapNotNull { InputDevice.getDevice(it) }.filter {
-        it.sources and InputDevice.SOURCE_GAMEPAD == InputDevice.SOURCE_GAMEPAD ||
-            it.sources and InputDevice.SOURCE_JOYSTICK == InputDevice.SOURCE_JOYSTICK
-    }
-
-    companion object {
-        private val THEME_COLORS = listOf(
-            0 to "Default", 0xFF1A9FFF.toInt() to "Blue", 0xFF3DDC84.toInt() to "Green", 0xFFFF5252.toInt() to "Red",
-            0xFFFFA726.toInt() to "Amber", 0xFFC77DFF.toInt() to "Violet", 0xFFFF6FB5.toInt() to "Pink",
-        )
-    }
 }
