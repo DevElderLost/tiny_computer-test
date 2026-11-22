@@ -37,7 +37,7 @@ fun DisplayOverlay(
     onPadOverlayChange: (Boolean) -> Unit = { Cfg.padOverlay = it },
 ) {
     Box(Modifier.fillMaxSize()) {
-        if (state.padOverlay) {
+        if (state.padOverlay && !state.profileMode) {
             ControllerOverlay(
                 controls = controls, pad = pad, deck = state.padIdentity == "deck",
                 reloadKey = state.padLayoutRev, sceneSize = state.sceneW to state.sceneH,
@@ -54,7 +54,7 @@ fun DisplayOverlay(
         // identitas Deck: controller layar menelan sentuhan kosong, jadi handler geser tepi di DisplayActivity tidak
         // menerimanya. Selama controller aktif, pita tepi kiri ini mengambil alih:
         // geser ke kanan dari tepi = buka menu, sama seperti saat controller mati.
-        if (state.padOverlay && !state.menuOpen) {
+        if (state.padOverlay && !state.profileMode && !state.menuOpen) {
             Box(
                 Modifier.align(Alignment.CenterStart).fillMaxHeight().width(EDGE_ZONE_DP.dp)
                     .pointerInput(Unit) {

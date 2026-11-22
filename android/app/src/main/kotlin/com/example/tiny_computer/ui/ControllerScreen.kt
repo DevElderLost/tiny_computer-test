@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.sp
 import com.droiddeck.launcher.input.ControllerPrefs
 import com.example.tiny_computer.R
 import com.example.tiny_computer.controller.ControllerEditorActivity
+import com.example.tiny_computer.controls.ControlsProfilesActivity
 import com.example.tiny_computer.core.Cfg
 import com.example.tiny_computer.core.Startup
 import com.example.tiny_computer.core.TinyEnv
@@ -174,6 +175,13 @@ fun ControllerScreen() {
             ) { trackpad = it; ControllerPrefs.setTrackpadMode(ctx, it) }
             if (trackpad == ControllerPrefs.PAD_MOUSE) {
                 DeckSliderRow(stringResource(R.string.tc_ctrl_trackpad_speed), null, trackpadSpeed, 1..10) { trackpadSpeed = it }
+            }
+        }
+        DeckGroup(stringResource(R.string.wl_title)) {
+            DeckRow(stringResource(R.string.wl_title), stringResource(R.string.wl_title_hint)) {
+                DeckButton(stringResource(R.string.wl_open), primary = false) {
+                    ctx.startActivity(Intent(ctx, ControlsProfilesActivity::class.java))
+                }
             }
         }
         DeckGroup(stringResource(R.string.ctrl_layout)) {

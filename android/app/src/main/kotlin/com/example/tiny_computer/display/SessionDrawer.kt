@@ -71,6 +71,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.tiny_computer.R
 import com.example.tiny_computer.controller.ControllerEditorActivity
+import com.example.tiny_computer.controls.ControlsEditorActivity
+import com.example.tiny_computer.controls.ControlsProfilesActivity
+import com.example.tiny_computer.controls.ProfileStore
 import com.example.tiny_computer.core.Cfg
 import com.example.tiny_computer.core.ReshadeShaders
 import com.example.tiny_computer.core.SoundControl
@@ -329,6 +332,46 @@ private fun InputPage(state: DisplayUiState, onPadOverlayChange: (Boolean) -> Un
                 state.menuOpen = false
                 ctx.startActivity(Intent(ctx, ControllerEditorActivity::class.java))
             })
+        }
+    }
+    ProfileGroup()
+}
+
+/**
+ * Controller gaya Winlator (profil): saklar mode, pilihan profil aktif, tombol mengambang, editor tata letak, dan
+ * manajer profil (controller eksternal, impor/ekspor). Disimpan di [ProfileStore]; DisplayActivity memuat ulang sendiri.
+ */
+@Composable
+private fun ProfileGroup() {
+    val ctx = LocalContext.current
+    var enabled by remember { mutableStateOf(ProfileStore.enabled(ctx)) }
+    var fab by remember { mutableStateOf(ProfileStore.floatingButton(ctx)) }
+    var active by remember { mutableStateOf(ProfileStore.activeId(ctx)) }
+    val profiles = remember { ProfileStore.profiles(ctx) }
+    val pal = LocalPalette.current
+    DeckGroup(stringResource(R.string.wl_title)) {
+        DrawerToggleRow(stringResource(R.string.wl_enable), enabled) {
+            enabled = it
+            ProfileStore.setEnabled(ctx, it)
+        }
+        if (enabled) {
+            DeckChoiceRow(stringResource(R.string.wl_profile), null, profiles.map { it.id to it.name }, active) {
+                active = it
+                ProfileStore.setActiveId(ctx, it)
+            }
+            DrawerToggleRow(stringResource(R.string.wl_fab), fab) {
+                fab = it
+                ProfileStore.setFloatingButton(ctx, it)
+            }
+            Column(Modifier.fillMaxWidth().padding(10.dp)) {
+                DrawerActionButton(stringResource(R.string.wl_edit_layout), Icons.Outlined.Edit, pal.onBackground, {
+                    // menu menutup agar layar editor terlihat; profil yang sedang dipakai yang diedit
+                    ctx.startActivity(Intent(ctx, ControlsEditorActivity::class.java).putExtra(ControlsEditorActivity.EXTRA_PROFILE, ProfileStore.activeId(ctx)))
+                })
+                DrawerActionButton(stringResource(R.string.wl_manage_profiles), Icons.Outlined.Settings, pal.onBackground, {
+                    ctx.startActivity(Intent(ctx, ControlsProfilesActivity::class.java))
+                })
+            }
         }
     }
 }

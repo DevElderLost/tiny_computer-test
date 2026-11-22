@@ -37,6 +37,10 @@ import com.droiddeck.launcher.session.SessionState
 import com.droiddeck.launcher.wayland.CompositorHost
 import com.droiddeck.launcher.wayland.HdrSupport
 import com.droiddeck.launcher.wayland.WaylandCompositor
+import com.example.tiny_computer.controls.BindingDispatcher
+import com.example.tiny_computer.controls.ExternalControllerHandler
+import com.example.tiny_computer.controls.ProfileControlsView
+import com.example.tiny_computer.controls.ProfileStore
 import com.example.tiny_computer.core.Cfg
 import com.example.tiny_computer.core.Launcher
 import com.example.tiny_computer.core.NavRequest
@@ -74,6 +78,8 @@ class DisplayUiState {
     var sceneW by mutableStateOf(1280)
     var sceneH by mutableStateOf(720)
     var padLayoutRev by mutableStateOf(0)
+    /** Controller gaya Winlator (profil) aktif: menggantikan controller layar DroidDeck. */
+    var profileMode by mutableStateOf(false)
 }
 
 /**
@@ -85,6 +91,11 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
     private val ui = DisplayUiState()
     private lateinit var surfaceView: DeskSurface
     private var pad: PadBridge? = null
+    /** Controller layar gaya Winlator (profil), pemetaan controller fisik, dan penyalur binding-nya. */
+    private var profileView: ProfileControlsView? = null
+    private var bindingDispatcher: BindingDispatcher? = null
+    private var extHandler: ExternalControllerHandler? = null
+    private val profilePrefsListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> runOnUiThread { applyProfileMode() } }
     private lateinit var touchpadInput: TouchpadInput
     /** Gyro + akselerometer HP sebagai gyro controller (hidraw Deck) dan/atau stik; hanya hidup selama layar ini tampil. */
     private var motion: PadMotion? = null
@@ -169,6 +180,7 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
         // rumble dari game (evdev FF + hidraw Deck) -> getar HP / controller fisik
         RumbleReceiver.start(this)
         ControllerPrefs.prefs(this).registerOnSharedPreferenceChangeListener(controllerPrefsListener)
+        getSharedPreferences("winlator_controls", MODE_PRIVATE).registerOnSharedPreferenceChangeListener(profilePrefsListener)
         Launcher.onAppSessionEnded = onAppEnded
 
         surfaceView = DeskSurface(this).apply {
@@ -193,6 +205,14 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
             // inset poni/cutout: dikirim ulang setelah terpasang di jendela
             post { rootWindowInsets?.let { onApplyWindowInsets(it) } }
         }
+        // controller gaya Winlator (profil): View saudara di atas layar compositor; sentuhan di luar elemen jatuh ke layar
+        val dispatcher = BindingDispatcher(p)
+        bindingDispatcher = dispatcher
+        extHandler = ExternalControllerHandler(dispatcher)
+        val profileControls = ProfileControlsView(this, dispatcher, onKeyboard = { ui.pcKeyboard = !ui.pcKeyboard }).apply {
+            visibility = android.view.View.GONE
+        }
+        profileView = profileControls
         val overlay = ComposeView(this).apply {
             setContent {
                 TinyTheme {
@@ -226,6 +246,7 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
             // X++ menggambar kursor X sendiri di dalam server, jadi CursorView (kursor wl_pointer) tidak dipasang
             if (!useXpp) addView(CursorView(this@DisplayActivity, ui) { currentScene() }, FrameLayout.LayoutParams(-1, -1))
             addView(controls, FrameLayout.LayoutParams(-1, -1))
+            addView(profileControls, FrameLayout.LayoutParams(-1, -1))
             addView(overlay, FrameLayout.LayoutParams(-1, -1))
         })
     }
@@ -296,6 +317,7 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
         ui.showCursor = Cfg.showCursor
         // kembali dari editor tata letak (atau pengaturan lain): controller layar membaca ulang posisi dan mode
         ui.padLayoutRev++
+        applyProfileMode()
         resumed = true
         syncMotion()
         surfaceView.requestFocus()
@@ -305,7 +327,32 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
         // sensor tidak dibaca saat layar ini tidak tampil
         resumed = false
         stopMotion()
+        profileView?.releaseAll()
+        extHandler?.reset()
         super.onPause()
+    }
+
+    /**
+     * Mode controller gaya Winlator: profil aktif dimuat ke [profileView] dan ke pemetaan controller fisik. Saat mode
+     * aktif controller layar DroidDeck disembunyikan (DisplayOverlay). Dipanggil saat layar tampil dan tiap pengaturan
+     * profil berubah (ProfileStore).
+     */
+    private fun applyProfileMode() {
+        val on = ProfileStore.enabled(this)
+        ui.profileMode = on
+        val view = profileView ?: return
+        if (!on) {
+            view.releaseAll()
+            view.visibility = android.view.View.GONE
+            extHandler?.profile = null
+            return
+        }
+        val prof = ProfileStore.active(this)
+        // profil diganti/diedit: muat ulang; kalau sama dan tidak berubah, tidak perlu
+        view.profile = prof
+        bindingDispatcher?.cursorSpeed = prof.cursorSpeed
+        view.visibility = android.view.View.VISIBLE
+        extHandler?.profile = if (ProfileStore.externalEnabled(this)) prof else null
     }
 
     /** Menyalakan/mematikan gyro sesuai saklar di Pengaturan Controller dan menu samping, dan memasang mapping-nya. */
@@ -338,6 +385,8 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
     override fun onDestroy() {
         if (Launcher.onAppSessionEnded === onAppEnded) Launcher.onAppSessionEnded = null
         ControllerPrefs.prefs(this).unregisterOnSharedPreferenceChangeListener(controllerPrefsListener)
+        getSharedPreferences("winlator_controls", MODE_PRIVATE).unregisterOnSharedPreferenceChangeListener(profilePrefsListener)
+        profileView?.releaseAll()
         if (useXpp) XppHost.displayAttached = false
         stopMotion()
         RumbleReceiver.stop()
@@ -611,6 +660,8 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
     private var mouseMid = false
 
     override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
+        // controller fisik: sumbu yang dipetakan di profil aktif menjadi binding sebelum pad Deck/Xbox membacanya
+        if (extHandler?.onMotion(event) == true) return true
         val p = pad
         if (p != null && PadBridge.isFromController(event.device) && p.onMotionEvent(event)) return true
         if (event.source and InputDevice.SOURCE_MOUSE == InputDevice.SOURCE_MOUSE) {
@@ -627,6 +678,7 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (extHandler?.onKey(event) == true) return true
         val p = pad
         if (p != null && PadBridge.isControllerKey(event) && p.onKeyEvent(event)) return true
         val code = event.keyCode
