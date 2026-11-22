@@ -14,6 +14,7 @@
 #include "core/xclient.h"
 #include "core/xserver.h"
 #include "native_screen.h"
+#include "native_icc.h"
 #include "native_displayx_bridge.h"
 
 namespace xorg {
@@ -32,6 +33,8 @@ XServer::XServer(jobject instance, ScreenInfo info, bool validation, NativeRende
     selection_manager = std::make_unique<SelectionManager>(this);
     root_visual = std::make_shared<Visual>(GenerateID(), 24, 8, 0x0000ff, 0x00ff00, 0xff0000);
     argb_visual = std::make_shared<Visual>(GenerateID(), 32, 8, 0x0000ff, 0x00ff00, 0xff0000);
+    // Layar virtual mengiklankan profil ICC sRGB (_ICC_PROFILE di root); bisa diganti lewat nativeIccProfile.
+    InstallIccProfile(*this, {});
 }
 XServer::~XServer() {
     Shutdown();

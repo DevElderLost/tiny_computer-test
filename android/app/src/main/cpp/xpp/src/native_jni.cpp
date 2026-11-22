@@ -7,6 +7,7 @@
 #include "core/window_manager.h"
 #include "core/atom.h"
 #include "native_screen.h"
+#include "native_icc.h"
 #include <map>
 
 namespace {
@@ -219,6 +220,21 @@ extern "C" JNIEXPORT void JNICALL JNI_NAME(nativeRefreshRates)(JNIEnv* env, jcla
     static_cast<xorg::NativeScreen&>(server->GetScreen()).SetRandrRates(std::move(rates));
 }
 
+// Profil ICC layar: byte[] berisi berkas .icc/.icm; null atau array kosong = kembali ke sRGB bawaan.
+extern "C" JNIEXPORT jboolean JNICALL JNI_NAME(nativeIccProfile)(JNIEnv* env, jclass, jlong handle, jbyteArray data) {
+    auto server = session(handle); if (!server) return JNI_FALSE;
+    std::vector<u8> profile;
+    const jsize count = data ? env->GetArrayLength(data) : 0;
+    if (count > 0) {
+        if (static_cast<size_t>(count) > xorg::kMaxIccProfileSize) return JNI_FALSE;
+        profile.resize(count);
+        env->GetByteArrayRegion(data, 0, count, reinterpret_cast<jbyte*>(profile.data()));
+        if (env->ExceptionCheck() || !xorg::IsValidIccProfile(profile)) return JNI_FALSE;
+    }
+    auto lock = server->Lock();
+    xorg::InstallIccProfile(*server, profile);
+    return JNI_TRUE;
+}
 extern "C" JNIEXPORT jboolean JNICALL JNI_NAME(nativeHasContent)(JNIEnv*, jclass, jlong handle) {
     auto server = session(handle); if (!server) return false;
     return static_cast<xorg::NativeScreen&>(server->GetScreen()).presentedCount.load() != 0;

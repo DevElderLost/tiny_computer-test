@@ -9,6 +9,7 @@
 #include "core/xscreen.h"
 #include "core/xresource.h"
 #include "native_drawable.h"
+#include "native_icc.h"   // profil ICC layar; juga dipakai native_randr.cpp (properti output _ICC_PROFILE)
 
 namespace xorg {
 class XClient;

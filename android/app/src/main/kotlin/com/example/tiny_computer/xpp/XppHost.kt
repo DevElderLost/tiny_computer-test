@@ -127,6 +127,7 @@ object XppHost {
             // jalur shm tidak dipakai (MIT-SHM tidak diiklankan), tetap diberikan karena parameter wajib
             NativeX11.nativeStart(h0, sock.absolutePath, File(sock.parentFile, ".xpp-shm").absolutePath)
             boundSocket = sock.absolutePath
+            loadIccProfile(ctx, h0)
             curX = w / 2
             curY = h / 2
             applyOptionsLocked(ctx)
@@ -176,6 +177,14 @@ object XppHost {
         // Cfg.upscaler: 2 = Nearest. Filter lain memakai bilinear (0 = linear, 1 = nearest di semua backend); efek lain milik
         // compositor Wayland tidak ada di server ini. Parameter stretch: 0 = Fit/Stretch biasa, 1 = Soft Stretch.
         NativeX11.nativeVisualOptions(handle, if (Cfg.upscaler == 2) 1 else 0, 0, if (soft) 1 else 0, 0.5f, false, null, 2, -1, 70, refreshHz, 0)
+    }
+
+    /** Profil ICC layar: pakai `filesDir/display.icc` bila ada dan valid; selain itu server memakai sRGB bawaan. */
+    private fun loadIccProfile(ctx: Context, h: Long) {
+        val file = File(ctx.filesDir, "display.icc")
+        if (!file.isFile || file.length() !in 132L..(1L shl 20)) return
+        val bytes = runCatching { file.readBytes() }.getOrNull() ?: return
+        if (!NativeX11.nativeIccProfile(h, bytes)) Log.w(TAG, "display.icc bukan profil ICC yang valid, memakai sRGB bawaan")
     }
 
     /** Mematikan server dan menghapus soketnya. Aman dipanggil bila server tidak ada. */

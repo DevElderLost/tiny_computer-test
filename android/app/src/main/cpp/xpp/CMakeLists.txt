@@ -55,6 +55,7 @@ add_library(xpp SHARED
     src/native_extensions.cpp
     src/native_glx.cpp
     src/native_randr.cpp
+    src/native_icc.cpp
     src/native_compat.cpp
     src/native_xinput.cpp
     src/native_displayx_bridge.cpp

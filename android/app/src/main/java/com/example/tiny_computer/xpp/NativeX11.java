@@ -57,6 +57,9 @@ public final class NativeX11 {
 
     public static native void nativeRefreshRates(long handle, int[] rates);
 
+    /** Profil ICC layar (isi berkas .icc); null/kosong = sRGB bawaan. false bila data bukan profil ICC yang valid. */
+    public static native boolean nativeIccProfile(long handle, byte[] profile);
+
     public static native long nativeVisualOptions(long handle, int filter, int postFX, int stretch, float sharpness,
                                            boolean frameGen, String cachePath, int multiplier, int targetRate,
                                            int flowScale, float refreshRate, int engine);

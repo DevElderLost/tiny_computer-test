@@ -3,6 +3,7 @@
 #include "core/xserver.h"
 #include "core/window_manager.h"
 #include "core/window.h"
+#include "core/atom.h"
 #include "native_screen.h"
 #include <X11/extensions/randrproto.h>
 
@@ -21,7 +22,7 @@ void XClient::ProcRandR() {
     switch (req->data) {
     case X_RRQueryVersion: {
         CHECK_REQUEST_SIZE_STRICT(xRRQueryVersionReq);
-        xRRQueryVersionReply reply{}; reply.majorVersion = 1; reply.minorVersion = 3;   // SDL3 mensyaratkan RandR >= 1.3, kalau tidak refresh rate display = 0
+        xRRQueryVersionReply reply{}; reply.majorVersion = 1; reply.minorVersion = 5;   // SDL3 mensyaratkan RandR >= 1.3; 1.5 menambah monitor (xrandr --listmonitors, GTK/Qt/SDL)
         send(reply); return;
     }
     case X_RRSelectInput: CHECK_REQUEST_SIZE_STRICT(xRRSelectInputReq); return;
@@ -116,11 +117,31 @@ void XClient::ProcRandR() {
     }
     case X_RRListOutputProperties: {
         CHECK_REQUEST_SIZE_STRICT(xRRListOutputPropertiesReq);
-        xRRListOutputPropertiesReply reply{}; send(reply); return;
+        // Satu-satunya properti output: _ICC_PROFILE (profil warna layar, sama dengan properti di window root).
+        const Property* icc = GetRequestData<xRRListOutputPropertiesReq>()->output == output ? GetIccProfileProperty(server) : nullptr;
+        xRRListOutputPropertiesReply reply{};
+        if (!icc) { send(reply); return; }
+        const u32 atom = icc->name;
+        reply.type = X_Reply; reply.sequenceNumber = sequence; reply.length = 1; reply.nAtoms = 1;
+        Write(&reply, sizeof(reply)); Write(&atom, 4); Flush(); return;
     }
     case X_RRGetOutputProperty: {
         CHECK_REQUEST_SIZE_STRICT(xRRGetOutputPropertyReq);
-        xRRGetOutputPropertyReply reply{}; send(reply); return;
+        auto* r = GetRequestData<xRRGetOutputPropertyReq>();
+        const Property* icc = r->output == output ? GetIccProfileProperty(server) : nullptr;
+        xRRGetOutputPropertyReply reply{};
+        if (!icc || r->property != icc->name) { send(reply); return; }   // properti tidak ada: format 0, type None
+        const auto data = icc->GetData();
+        reply.type = X_Reply; reply.sequenceNumber = sequence; reply.format = icc->format; reply.propertyType = icc->type;
+        constexpr u32 kAnyPropertyType = 0;
+        if (r->type != kAnyPropertyType && r->type != icc->type) {   // tipe tidak cocok: hanya laporkan ukuran
+            reply.bytesAfter = data.size(); Write(&reply, sizeof(reply)); Flush(); return;
+        }
+        const u64 offset = u64(r->longOffset) * 4;
+        if (offset > data.size()) throw BadValueError(r->longOffset);
+        const u64 length = std::min<u64>(data.size() - offset, u64(r->longLength) * 4);
+        reply.bytesAfter = data.size() - offset - length; reply.nItems = length; reply.length = (length + 3) / 4;
+        Write(&reply, sizeof(reply)); Write(data.data() + offset, length); WritePad((-length) & 3); Flush(); return;
     }
     case X_RRGetCrtcGammaSize: {
         CHECK_REQUEST_SIZE_STRICT(xRRGetCrtcGammaSizeReq);
@@ -163,6 +184,40 @@ void XClient::ProcRandR() {
         CHECK_REQUEST_SIZE(xRRSetCrtcTransformReq);
         if (GetRequestData<xRRSetCrtcTransformReq>()->crtc != crtc) throw BadValueError(0);
         return;   // transform tidak didukung: abaikan (tetap identitas)
+    }
+    // RandR 1.4: provider. Server ini hanya punya satu GPU virtual, jadi daftar provider kosong.
+    // Klien 1.4+ (xrandr, mutter, Qt) memanggil RRGetProviders saat init; BadRequest bisa membuat mereka exit().
+    case X_RRGetProviders: {
+        CHECK_REQUEST_SIZE_STRICT(xRRGetProvidersReq);
+        xRRGetProvidersReply reply{}; reply.timestamp = timestamp; reply.nProviders = 0;
+        send(reply); return;
+    }
+    // RandR 1.5: monitor. Satu monitor otomatis (primary) yang menutupi seluruh layar virtual.
+    case X_RRGetMonitors: {
+        CHECK_REQUEST_SIZE_STRICT(xRRGetMonitorsReq);
+        xRRMonitorInfo info{};
+        info.name = Atom::Intern("Ludashi"); info.primary = 1; info.automatic = 1; info.noutput = 1;
+        info.x = 0; info.y = 0; info.width = screen.width; info.height = screen.height;
+        info.widthInMillimeters = screen.GetWidthInMillimeters(); info.heightInMillimeters = screen.GetHeightInMillimeters();
+        xRRGetMonitorsReply reply{};
+        reply.type = X_Reply; reply.sequenceNumber = sequence;
+        reply.length = (sizeof(info) + sizeof(output)) / 4;
+        reply.timestamp = timestamp; reply.nmonitors = 1; reply.noutputs = 1;
+        Write(&reply, sizeof(reply)); Write(&info, sizeof(info)); Write(&output, 4); Flush(); return;
+    }
+    // Layout monitor tetap (otomatis); monitor buatan klien tidak disimpan. Request divalidasi lalu diabaikan.
+    case X_RRSetMonitor: {
+        CHECK_REQUEST_SIZE(xRRSetMonitorReq);
+        auto* r = GetRequestData<xRRSetMonitorReq>();
+        if (!Atom::IsValid(r->monitor.name)) throw BadAtomError(r->monitor.name);
+        return;
+    }
+    case X_RRDeleteMonitor: {
+        CHECK_REQUEST_SIZE_STRICT(xRRDeleteMonitorReq);
+        auto* r = GetRequestData<xRRDeleteMonitorReq>();
+        if (!Atom::IsValid(r->name)) throw BadAtomError(r->name);
+        // Monitor otomatis tidak bisa dihapus dan tidak ada monitor buatan klien: BadValue sesuai spesifikasi.
+        throw BadValueError(r->name);
     }
     default: throw BadRequestError();
     }

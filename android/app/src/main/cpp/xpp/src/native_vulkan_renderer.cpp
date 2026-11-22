@@ -52,6 +52,7 @@ public:
             if (!attached) throw std::runtime_error("Cannot attach native Vulkan surface");
         }
         context->onSurfaceResized(ANativeWindow_getWidth(context->window), ANativeWindow_getHeight(context->window));
+        scissorValid = false;   // context baru / surface baru: scissor lama tidak berlaku lagi
         UpdateTransform();
     }
     void Options(bool fs, bool visible, int, float rate, float newZoom) override {
@@ -275,6 +276,25 @@ private:
         context->setTransform(baseX - magnifierPan.x * baseSx,
                               baseY - magnifierPan.y * baseSy,
                               baseSx * zoom, baseSy * zoom);
+        UpdateClip(aspect);
+    }
+    // Potong gambar (window dan kursor) ke area screen size, seperti compositor Wayland dan backend EGL/DisplayX:
+    // window yang digeser melewati tepi layar virtual atau kursor yang overshoot tidak boleh muncul di bar hitam
+    // letterbox. Rect dihitung di piksel surface (tidak terpengaruh zoom/pan), sama dengan NativeBackendGeometry.
+    void UpdateClip(float aspect) {
+        const int sw = context->surfaceWidth, sh = context->surfaceHeight;
+        const int left = fullscreen ? 0 : std::max(0, int((sw - width * aspect) * .5f));
+        const int top = fullscreen ? 0 : std::max(0, int((sh - height * aspect) * .5f));
+        const bool full = left == 0 && top == 0;   // layar penuh (Stretch/Soft Stretch) atau rasio sama: tanpa bar
+        if (full) {
+            if (!scissorValid || scissorSet) context->clearCustomScissor();   // !scissorValid: context lama bisa masih punya scissor
+            scissorValid = true; scissorSet = false;
+            return;
+        }
+        const int w = sw - 2 * left, h = sh - 2 * top;
+        if (scissorValid && scissorSet && clipX == left && clipY == top && clipW == w && clipH == h) return;
+        context->setCustomScissor(left, top, w, h);
+        scissorValid = true; scissorSet = true; clipX = left; clipY = top; clipW = w; clipH = h;
     }
     // The completion worker reads only immutable submission handles, never
     // mutable context state. ReadyToDraw prevents resetting a tracked slot;
@@ -294,6 +314,9 @@ private:
     bool fullscreen{}, cursor{true};
     float refresh{60}, zoom{1.f};
     int lastCursorX{}, lastCursorY{};
+    // Cache scissor terakhir yang dipasang ke VulkanRendererContext supaya tidak memicu render ulang tiap UpdateTransform.
+    bool scissorValid{}, scissorSet{};
+    int clipX{}, clipY{}, clipW{}, clipH{};
     NativeMagnifierPan magnifierPan{};
     u64 cursorID{};
     NativeAHBMetrics ahbMetrics{};
