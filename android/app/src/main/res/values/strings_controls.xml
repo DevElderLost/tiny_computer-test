@@ -66,4 +66,27 @@
     <string name="wl_stick_radius">Stick radius</string>
     <string name="wl_scale">Size</string>
     <string name="wl_opacity">Opacity</string>
+    <string name="wl_controls_editor">Controls Editor</string>
+    <string name="wl_overlay_opacity">Overlay Opacity</string>
+    <string name="wl_move_toolbar">Move toolbar</string>
+    <string name="wl_undo">Undo</string>
+    <string name="wl_settings">Settings</string>
+    <string name="wl_scheme_color">Scheme color</string>
+    <string name="wl_scheme_color_hint">Applies to every control that doesn\'t have its own custom color</string>
+    <string name="wl_type">Type</string>
+    <string name="wl_shape">Shape</string>
+    <string name="wl_theme_color">Theme color</string>
+    <string name="wl_custom_text">Custom text</string>
+    <string name="wl_input">Input</string>
+    <string name="wl_remove">Remove</string>
+    <string name="wl_move_cursor_drag">Move mouse cursor while dragging</string>
+    <string name="wl_dead_zone_fmt">Dead zone: %1$d%%</string>
+    <string name="wl_touch_area_width">Touch area width</string>
+    <string name="wl_touch_area_height">Touch area height</string>
+    <string name="wl_color_hex">Color (RRGGBB)</string>
+    <string name="wl_range">Range</string>
+    <string name="wl_orientation">Orientation</string>
+    <string name="wl_horizontal">Horizontal</string>
+    <string name="wl_vertical">Vertical</string>
+    <string name="wl_toggle_switch">Toggle switch</string>
 </resources>

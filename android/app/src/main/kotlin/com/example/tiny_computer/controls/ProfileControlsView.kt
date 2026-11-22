@@ -40,7 +40,19 @@ class ProfileControlsView(
     var selected: Element? = null
         set(value) { field = value; invalidate() }
     var onSelect: (Element?) -> Unit = {}
+    /** Editor: dipanggil setelah elemen selesai digeser (jari diangkat), supaya riwayat dan simpan otomatis jalan. */
+    var onEdited: () -> Unit = {}
     var swallowEmptyTouches = false
+
+    /**
+     * Sentuhan yang tidak dipakai elemen atau tombol mengambang diteruskan ke sini (layar sesi), seperti
+     * `touchpadView.onTouchEvent` di InputControlsView Winlator. Tanpa ini, begitu satu jari menahan tombol atau
+     * tombol mengambang, View ini (match_parent) menjadi sasaran sentuh dan jari kedua tidak pernah sampai ke layar,
+     * sehingga kursor tidak bisa digeser.
+     */
+    var passthrough: ((MotionEvent) -> Boolean)? = null
+    private val passIds = LinkedHashSet<Int>()
+    private var passDownTime = 0L
 
     /** Tombol profil tampil; dimatikan lewat tombol mengambang. Di editor selalu tampil. */
     var controlsShown = true
@@ -150,7 +162,7 @@ class ProfileControlsView(
                     main.postDelayed(fabLongTask, 450)
                     return true
                 }
-                if (prof == null || (!controlsShown && !editing)) return swallowEmptyTouches
+                if (prof == null || (!controlsShown && !editing)) return emptyTouch(ev, id)
                 val e = topHit(x, y)
                 if (editing) {
                     selected = e
@@ -166,7 +178,7 @@ class ProfileControlsView(
                         invalidate()
                         return true
                     }
-                    return swallowEmptyTouches
+                    return emptyTouch(ev, id)
                 }
                 if (touches.values.any { it.e === e }) return true
                 val t = Touch(e, id).also { it.startX = x; it.startY = y; it.lastX = x; it.lastY = y; it.thumbX = x; it.thumbY = y }
@@ -176,7 +188,7 @@ class ProfileControlsView(
                 return true
             }
             MotionEvent.ACTION_MOVE -> {
-                var used = fabPointer != -1
+                var used = fabPointer != -1 || passIds.isNotEmpty()
                 for (i in 0 until ev.pointerCount) {
                     val pid = ev.getPointerId(i)
                     if (pid == fabPointer) { fabMove(ev.getX(i), ev.getY(i)); continue }
@@ -184,20 +196,74 @@ class ProfileControlsView(
                     used = true
                     if (editing) editMove(t, ev.getX(i), ev.getY(i)) else move(t, ev.getX(i), ev.getY(i))
                 }
+                if (passIds.isNotEmpty()) forward(ev, MotionEvent.ACTION_MOVE, -1)
                 if (used) invalidate()
                 return used
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL -> {
                 val cancel = ev.actionMasked == MotionEvent.ACTION_CANCEL
-                if (cancel) { releaseAll(); return true }
+                if (cancel) {
+                    if (passIds.isNotEmpty()) { forward(ev, MotionEvent.ACTION_CANCEL, -1); passIds.clear() }
+                    releaseAll()
+                    return true
+                }
+                if (id in passIds) {
+                    forward(ev, if (passIds.size == 1) MotionEvent.ACTION_UP else MotionEvent.ACTION_POINTER_UP, id)
+                    passIds.remove(id)
+                    return true
+                }
                 if (id == fabPointer) { fabUp(); return true }
                 val t = touches.remove(id) ?: return false
-                if (!editing) up(t)
+                if (!editing) up(t) else onEdited()
                 invalidate()
                 return true
             }
         }
         return false
+    }
+
+    /**
+     * Sentuhan di area kosong. Jari pertama (ACTION_DOWN): bila View ini belum menjadi sasaran sentuh, layar di bawahnya
+     * menerima sendiri (false). Jari berikutnya saat View ini sudah menahan tombol/tombol mengambang: sistem sudah
+     * menyerahkannya ke sini, jadi diteruskan ke layar lewat [passthrough] (seperti touchpadView.onTouchEvent Winlator).
+     */
+    private fun emptyTouch(ev: MotionEvent, id: Int): Boolean {
+        if (swallowEmptyTouches || editing) return swallowEmptyTouches
+        val isTarget = fabPointer != -1 || touches.isNotEmpty() || passIds.isNotEmpty()
+        if (!isTarget || passthrough == null) return false
+        if (passIds.isEmpty()) passDownTime = ev.eventTime
+        passIds.add(id)
+        forward(ev, if (passIds.size == 1) MotionEvent.ACTION_DOWN else MotionEvent.ACTION_POINTER_DOWN, id)
+        return true
+    }
+
+    /**
+     * Kirim ke [passthrough] MotionEvent yang hanya berisi jari-jari teruskan ([passIds]). [actionId] = id jari yang
+     * turun/naik (-1 untuk MOVE/CANCEL); ACTION_DOWN/UP tunggal tidak membawa indeks jari.
+     */
+    private fun forward(ev: MotionEvent, action: Int, actionId: Int) {
+        val sink = passthrough ?: return
+        val n = ev.pointerCount
+        val props = ArrayList<MotionEvent.PointerProperties>(n)
+        val coords = ArrayList<MotionEvent.PointerCoords>(n)
+        var actionIndexInSub = 0
+        for (i in 0 until n) {
+            val pid = ev.getPointerId(i)
+            if (pid !in passIds) continue
+            if (pid == actionId) actionIndexInSub = props.size
+            props.add(MotionEvent.PointerProperties().also { ev.getPointerProperties(i, it) })
+            coords.add(MotionEvent.PointerCoords().also { ev.getPointerCoords(i, it) })
+        }
+        if (props.isEmpty()) return
+        val a = if (action == MotionEvent.ACTION_POINTER_DOWN || action == MotionEvent.ACTION_POINTER_UP) {
+            action or (actionIndexInSub shl MotionEvent.ACTION_POINTER_INDEX_SHIFT)
+        } else action
+        val sub = MotionEvent.obtain(
+            passDownTime, ev.eventTime, a, props.size,
+            props.toTypedArray(), coords.toTypedArray(),
+            ev.metaState, ev.buttonState, ev.xPrecision, ev.yPrecision, ev.deviceId, ev.edgeFlags, ev.source, ev.flags,
+        )
+        try { sink(sub) } finally { sub.recycle() }
     }
 
     private fun fabMove(x: Float, y: Float) {
@@ -364,6 +430,7 @@ class ProfileControlsView(
         for (e in toggled.toList()) for (b in e.bindings) dispatcher?.handle(b, false)
         toggled.clear()
         fabPointer = -1
+        passIds.clear()
         dispatcher?.releaseAll()
     }
 
@@ -379,8 +446,12 @@ class ProfileControlsView(
 
     private fun withAlpha(c: Int, a: Float): Int = ((a.coerceIn(0f, 1f) * 255).toInt() shl 24) or (c and 0xFFFFFF)
 
+    /** Opasitas overlay global (pengaturan "Overlay Opacity" seperti Winlator), dikalikan opasitas tiap elemen. */
+    private var overlayAlpha = 0.85f
+
     override fun onDraw(c: Canvas) {
         super.onDraw(c)
+        overlayAlpha = ProfileStore.overlayOpacity(context) / 100f
         val prof = profile
         if (prof != null && (controlsShown || editing)) {
             if (editing) drawGrid(c)
@@ -405,7 +476,7 @@ class ProfileControlsView(
         val b = bounds(e, RectF())
         val on = touches.values.any { it.e === e } || e in toggled
         val color = themeColor(e)
-        val a = if (editing) 1f else e.opacity
+        val a = if (editing) 1f else e.opacity * overlayAlpha
         val fill = if (on) withAlpha(color, 0.63f * a) else withAlpha(darken(color, 0.12f), 0.31f * a)
         val stroke = if (on) withAlpha(lighten(color, 0.7f), 0.9f * a) else withAlpha(lighten(color, 0.25f), 0.59f * a)
         val sw = max(1.5f, snap * 0.3f * e.scale)

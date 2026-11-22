@@ -2,29 +2,58 @@ package com.example.tiny_computer.controls
 
 import android.os.Build
 import android.os.Bundle
-import android.view.Gravity
+import android.os.SystemClock
 import android.view.View
 import android.view.WindowManager
 import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Undo
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.DragIndicator
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,31 +62,39 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.tiny_computer.R
-import com.example.tiny_computer.ui.DeckRow
-import com.example.tiny_computer.ui.DeckSliderRow
-import com.example.tiny_computer.ui.DeckToggleRow
-import com.example.tiny_computer.ui.LocalPalette
 import com.example.tiny_computer.ui.TinyTheme
-import com.example.tiny_computer.ui.onSignal
+import org.json.JSONArray
+import org.json.JSONObject
 import kotlin.math.roundToInt
 
 /**
- * Editor controller gaya Winlator (port `ControlsEditorComposeHost`): layar penuh dengan grid; ketuk elemen untuk memilih,
- * seret untuk memindahkan, ubah jenis/bentuk/binding/ukuran/opasitas/warna di panel kanan, tambah atau hapus elemen,
- * lalu Simpan. Profil yang diedit dikirim lewat [EXTRA_PROFILE]; tanpa itu profil aktif.
+ * Editor tata letak controller gaya Winlator 4.1 (port `ControlsEditorComposeHost`): kanvas layar penuh dengan grid;
+ * bilah alat melayang yang bisa digeser (tambah, hapus, gandakan, urungkan, pengaturan elemen, warna skema), panel
+ * pengaturan elemen di sisi layar yang berlawanan dengan elemen, palet 64 warna + kolom hex. Perubahan disimpan
+ * otomatis ke profil (tanpa tombol Simpan/Batal di bilah); keluar dengan tombol Kembali.
+ * Profil yang diedit dikirim lewat [EXTRA_PROFILE]; tanpa itu profil aktif.
  */
 class ControlsEditorActivity : ComponentActivity() {
     private lateinit var view: ProfileControlsView
     private lateinit var prof: Profile
     private var selected by mutableStateOf<Element?>(null)
+    private var panelElement by mutableStateOf<Element?>(null)
+    private var showColors by mutableStateOf(false)
     private var rev by mutableIntStateOf(0)
+
+    // riwayat urungkan: potret profil sebelum tiap rangkaian perubahan (digabung bila berdekatan < 600 md)
+    private val undo = ArrayList<String>()
+    private var lastSnap = ""
+    private var lastPush = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -66,77 +103,79 @@ class ControlsEditorActivity : ComponentActivity() {
         val p = prof
         view = ProfileControlsView(this, null, editing = true).apply {
             profile = p
-            onSelect = { selected = it; rev++ }
+            onSelect = { onSelected(it) }
+            onEdited = { commit(); persist() }
         }
+        lastSnap = snapshot()
         val root = FrameLayout(this)
         root.setBackgroundColor(0xFF0B0F14.toInt())
         root.addView(view, FrameLayout.LayoutParams(-1, -1))
-
-        val bar = ComposeView(this).apply { setContent { TinyTheme { TopBar() } } }
-        root.addView(bar, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = 8 })
-
-        val density = resources.displayMetrics.density
-        val panel = ComposeView(this).apply { setContent { TinyTheme { SidePanel() } } }
-        root.addView(panel, FrameLayout.LayoutParams((300 * density).toInt(), -2, Gravity.END or Gravity.CENTER_VERTICAL).apply { rightMargin = 8 })
+        // chrome Compose di atas kanvas; sentuhan di luar bilah/panel jatuh ke kanvas
+        val chrome = ComposeView(this).apply { setContent { TinyTheme { Editor() } } }
+        root.addView(chrome, FrameLayout.LayoutParams(-1, -1))
         setContentView(root)
     }
 
-    private fun changed() {
+    override fun onPause() {
+        persist()
+        super.onPause()
+    }
+
+    // ---- keadaan
+
+    private fun onSelected(e: Element?) {
+        selected = e
+        if (e == null) { panelElement = null; showColors = false }
+        else if (panelElement != null) panelElement = e
+        rev++
+    }
+
+    private fun snapshot(): String = JSONObject().apply {
+        put("t", prof.themeColor)
+        put("e", JSONArray().also { a -> prof.elements.forEach { a.put(it.toJson()) } })
+    }.toString()
+
+    /** Catat perubahan ke riwayat urungkan dan gambar ulang; penyimpanan ke berkas lewat [persist]. */
+    private fun commit() {
+        val snap = snapshot()
+        if (snap != lastSnap) {
+            val now = SystemClock.uptimeMillis()
+            if (now - lastPush > 600) {
+                undo.add(lastSnap)
+                if (undo.size > 60) undo.removeAt(0)
+            }
+            lastPush = now
+            lastSnap = snap
+        }
         rev++
         view.invalidate()
     }
 
-    @Composable
-    private fun TopBar() {
-        val r = rev // dibaca supaya bilah ikut diperbarui saat pilihan berubah
-        var menu by remember { mutableStateOf(false) }
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            modifier = Modifier
-                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f), RoundedCornerShape(50))
-                .padding(start = 14.dp, end = 5.dp, top = 5.dp, bottom = 5.dp),
-        ) {
-            Text(prof.name, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(end = 4.dp))
-            Box {
-                PillButton(stringResource(R.string.wl_add), false) { menu = true }
-                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    for ((t, label) in TYPE_LABELS) {
-                        DropdownMenuItem(text = { Text(label) }, onClick = { menu = false; addElement(t) })
-                    }
-                }
-            }
-            if (selected != null && r >= 0) {
-                PillButton(stringResource(R.string.wl_duplicate), false) { duplicateSelected() }
-                PillButton(stringResource(R.string.wl_delete), false) { deleteSelected() }
-            }
-            PillButton(stringResource(R.string.wl_cancel), false) { finish() }
-            PillButton(stringResource(R.string.wl_save), true) {
-                prof.save(this@ControlsEditorActivity)
-                finish()
-            }
+    private fun persist() { prof.save(this) }
+
+    private fun undoLast() {
+        val prev = undo.removeLastOrNull() ?: return
+        runCatching {
+            val o = JSONObject(prev)
+            prof.themeColor = o.getInt("t")
+            val arr = o.getJSONArray("e")
+            prof.elements.clear()
+            for (i in 0 until arr.length()) Element.fromJson(arr.getJSONObject(i))?.let { prof.elements.add(it) }
         }
+        lastSnap = prev
+        lastPush = 0L
+        selected = null; panelElement = null; view.selected = null
+        persist()
+        rev++
+        view.invalidate()
     }
 
-    @Composable
-    private fun PillButton(label: String, primary: Boolean, onClick: () -> Unit) {
-        val pal = LocalPalette.current
-        Text(
-            label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
-            color = if (primary) pal.onSignal else MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.clip(RoundedCornerShape(50))
-                .background(if (primary) pal.signal else Color.White.copy(alpha = 0.06f))
-                .clickable(onClick = onClick)
-                .padding(horizontal = 12.dp, vertical = 6.dp),
-        )
-    }
-
-    private fun addElement(t: Element.Type) {
-        val e = Element(t, Element.Shape.CIRCLE).apply { applyType(t); x = 0.5f; y = 0.5f }
+    private fun addElement() {
+        val e = Element(Element.Type.BUTTON, Element.Shape.CIRCLE).apply { applyType(Element.Type.BUTTON); x = 0.5f; y = 0.5f }
         prof.elements.add(e)
         selected = e
         view.selected = e
-        changed()
+        commit(); persist()
     }
 
     private fun duplicateSelected() {
@@ -146,100 +185,90 @@ class ControlsEditorActivity : ComponentActivity() {
         prof.elements.add(c)
         selected = c
         view.selected = c
-        changed()
+        commit(); persist()
     }
 
-    private fun deleteSelected() {
+    private fun removeSelected() {
         val s = selected ?: return
         prof.elements.remove(s)
-        selected = null
+        selected = null; panelElement = null
         view.selected = null
-        changed()
+        commit(); persist()
     }
 
+    // ---- tampilan (port Editor Winlator)
+
     @Composable
-    private fun SidePanel() {
-        val e = selected ?: return
-        val r = rev
-        val maxH = (LocalConfiguration.current.screenHeightDp - 80).dp
-        Column(
-            Modifier.fillMaxWidth().heightIn(max = maxH)
-                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.95f), RoundedCornerShape(16.dp))
-                .verticalScroll(rememberScrollState()).padding(vertical = 8.dp),
-        ) {
-            if (r < 0) return@Column
-            ElementPanel(e) { changed() }
+    private fun Editor() {
+        val r = rev // dibaca supaya bilah dan panel ikut diperbarui setiap perubahan
+        val config = LocalConfiguration.current
+        val density = LocalDensity.current
+        var dragX by remember { mutableStateOf(0f) }
+        var dragY by remember { mutableStateOf(0f) }
+        var toolbarWidth by remember { mutableStateOf(0) }
+        val screenWidth = with(density) { config.screenWidthDp.dp.toPx() }
+        val screenHeight = with(density) { config.screenHeightDp.dp.toPx() }
+        LaunchedEffect(screenWidth, screenHeight, toolbarWidth) {
+            val maxX = ((screenWidth - toolbarWidth) / 2).coerceAtLeast(0f)
+            dragX = dragX.coerceIn(-maxX, maxX)
+            dragY = dragY.coerceIn(0f, (screenHeight - with(density) { 64.dp.toPx() }).coerceAtLeast(0f))
         }
-    }
-
-    @Composable
-    private fun ElementPanel(e: Element, onChange: () -> Unit) {
-        ChipRow(TYPE_LABELS, e.type) { e.applyType(it); onChange() }
-        var textDialog by remember { mutableStateOf(false) }
-        when (e.type) {
-            Element.Type.BUTTON -> {
-                ChipRow(SHAPE_LABELS, e.shape) { e.shape = it; onChange() }
-                DeckRow(stringResource(R.string.wl_text), null) {
-                    Text(
-                        e.text.ifEmpty { "-" }, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
-                        color = LocalPalette.current.signal, modifier = Modifier.clickable { textDialog = true }.padding(8.dp),
-                    )
-                }
-                BindingRow(stringResource(R.string.wl_binding), e.bindings.firstOrNull() ?: Binding.NONE) {
-                    e.bindings = arrayOf(it); onChange()
-                }
-                DeckToggleRow(stringResource(R.string.wl_toggle), null, e.toggleSwitch) { e.toggleSwitch = it; onChange() }
-                DeckToggleRow(stringResource(R.string.wl_mouse_move), null, e.mouseMoveMode) { e.mouseMoveMode = it; onChange() }
-            }
-            Element.Type.RANGE_BUTTON -> {
-                ChipRow(
-                    Element.Range.entries.map { it to it.name.removePrefix("FROM_").replace("_TO_", "-") },
-                    e.range ?: Element.Range.FROM_A_TO_Z,
+        Box(Modifier.fillMaxSize()) {
+            Surface(
+                modifier = Modifier.align(Alignment.TopCenter).offset { IntOffset(dragX.roundToInt(), dragY.roundToInt()) }
+                    .padding(top = 8.dp).onSizeChanged { toolbarWidth = it.width },
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.surface,
+                shadowElevation = 8.dp,
+            ) {
+                Row(
+                    Modifier.width((config.screenWidthDp - 16).coerceAtMost(460).dp).horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    e.range = it
-                    e.bindings = Array(it.max) { i -> Element.rangeBinding(it, i) }
-                    onChange()
-                }
-                ChipRow(listOf(0 to "—", 1 to "|"), e.orientation) { e.orientation = it; onChange() }
-            }
-            else -> {
-                val names = listOf(R.string.wl_up, R.string.wl_right, R.string.wl_down, R.string.wl_left)
-                for (i in 0 until 4) {
-                    BindingRow(stringResource(names[i]), e.bindings.getOrElse(i) { Binding.NONE }) { b ->
-                        if (e.bindings.size < 4) e.bindings = Array(4) { j -> e.bindings.getOrElse(j) { Binding.NONE } }
-                        e.bindings[i] = b
-                        onChange()
+                    Icon(
+                        Icons.Outlined.DragIndicator, stringResource(R.string.wl_move_toolbar),
+                        Modifier.size(28.dp).pointerInput(screenWidth, screenHeight, toolbarWidth) {
+                            detectDragGestures { change, delta ->
+                                change.consume()
+                                val maxX = ((screenWidth - toolbarWidth) / 2).coerceAtLeast(0f)
+                                dragX = (dragX + delta.x).coerceIn(-maxX, maxX)
+                                dragY = (dragY + delta.y).coerceIn(0f, (screenHeight - 64.dp.toPx()).coerceAtLeast(0f))
+                            }
+                        },
+                    )
+                    Column(Modifier.width(80.dp).padding(horizontal = 4.dp)) {
+                        Text(stringResource(R.string.wl_profile), style = MaterialTheme.typography.labelSmall)
+                        Text(prof.name, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge, maxLines = 1)
                     }
-                }
-                if (e.type == Element.Type.STICK || e.type == Element.Type.DYNAMIC_STICK) {
-                    DeckSliderRow(stringResource(R.string.wl_deadzone), null, (e.deadZone * 100).roundToInt(), 0..50, 5, { "$it%" }) {
-                        e.deadZone = it / 100f; onChange()
+                    IconButton(onClick = { addElement() }) { Icon(Icons.Outlined.Add, stringResource(R.string.wl_add)) }
+                    IconButton(onClick = { removeSelected() }) { Icon(Icons.Outlined.Delete, stringResource(R.string.wl_remove)) }
+                    IconButton(onClick = { duplicateSelected() }) { Icon(Icons.Outlined.ContentCopy, stringResource(R.string.wl_duplicate)) }
+                    IconButton(onClick = { undoLast() }, enabled = undo.isNotEmpty() && r >= 0) {
+                        Icon(Icons.AutoMirrored.Outlined.Undo, stringResource(R.string.wl_undo))
                     }
-                }
-                if (e.type == Element.Type.DYNAMIC_STICK) {
-                    DeckSliderRow(stringResource(R.string.wl_area_w), null, (e.areaWidthRatio * 100).roundToInt(), 10..100, 5, { "$it%" }) {
-                        e.areaWidthRatio = it / 100f; onChange()
-                    }
-                    DeckSliderRow(stringResource(R.string.wl_area_h), null, (e.areaHeightRatio * 100).roundToInt(), 10..100, 5, { "$it%" }) {
-                        e.areaHeightRatio = it / 100f; onChange()
-                    }
-                    DeckSliderRow(stringResource(R.string.wl_stick_radius), null, (e.stickRadiusRatio * 100).roundToInt(), 5..30, 1, { "$it%" }) {
-                        e.stickRadiusRatio = it / 100f; onChange()
-                    }
+                    IconButton(onClick = { panelElement = selected }) { Icon(Icons.Outlined.Settings, stringResource(R.string.wl_settings)) }
+                    IconButton(onClick = { showColors = true }) { Icon(Icons.Outlined.Palette, stringResource(R.string.wl_scheme_color)) }
                 }
             }
-        }
-        if (e.type != Element.Type.DYNAMIC_STICK) {
-            DeckSliderRow(stringResource(R.string.wl_scale), null, (e.scale * 100).roundToInt(), 50..300, 10, { "$it%" }) {
-                e.scale = it / 100f; onChange()
+            if (showColors) {
+                EditorPanel(stringResource(R.string.wl_scheme_color), { persist(); showColors = false }) {
+                    Text(stringResource(R.string.wl_scheme_color_hint), style = MaterialTheme.typography.bodySmall)
+                    ColorGrid(prof.themeColor) { color -> prof.themeColor = color; commit() }
+                    HexColorField(prof.themeColor) { prof.themeColor = it; commit() }
+                }
             }
-        }
-        DeckSliderRow(stringResource(R.string.wl_opacity), null, (e.opacity * 100).roundToInt(), 10..100, 5, { "$it%" }) {
-            e.opacity = it / 100f; onChange()
-        }
-        ChipRow(COLOR_LABELS, e.customColor) { e.customColor = it; onChange() }
-        if (textDialog) NameDialog(stringResource(R.string.wl_text), e.text, { textDialog = false }) {
-            e.text = it; textDialog = false; onChange()
+            panelElement?.let { element ->
+                // kanvas tetap bisa disentuh saat panel terbuka
+                key(element) {
+                    EditorPanel(
+                        stringResource(R.string.wl_settings), { persist(); panelElement = null },
+                        if (element.x > 0.5f) Alignment.CenterStart else Alignment.CenterEnd,
+                    ) {
+                        ElementFields(element, r, { view.invalidate() }, { commit() })
+                    }
+                }
+            }
         }
     }
 
@@ -266,18 +295,253 @@ class ControlsEditorActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_PROFILE = "tiny.controls.profile"
+    }
+}
 
-        private val TYPE_LABELS = listOf(
-            Element.Type.BUTTON to "BUTTON", Element.Type.D_PAD to "D-PAD", Element.Type.STICK to "STICK",
-            Element.Type.DYNAMIC_STICK to "DYN STICK", Element.Type.TRACKPAD to "TRACKPAD", Element.Type.RANGE_BUTTON to "RANGE",
+private val palette = intArrayOf(
+    0, 0xffffffff.toInt(), 0xffdddddd.toInt(), 0xffaaaaaa.toInt(), 0xff777777.toInt(), 0xff444444.toInt(), 0xff222222.toInt(), 0xff000000.toInt(),
+    0xffff3b30.toInt(), 0xffff6961.toInt(), 0xffff453a.toInt(), 0xffcc0000.toInt(), 0xff800000.toInt(), 0xff4d0000.toInt(), 0xffff8080.toInt(), 0xffffb3b3.toInt(),
+    0xffff9500.toInt(), 0xffff6000.toInt(), 0xfffe9f0d.toInt(), 0xffffcc00.toInt(), 0xffffd60a.toInt(), 0xffffea00.toInt(), 0xffffb347.toInt(), 0xffffdca5.toInt(),
+    0xff34c759.toInt(), 0xff30d158.toInt(), 0xff4cd964.toInt(), 0xff00b050.toInt(), 0xff2e8b57.toInt(), 0xff006400.toInt(), 0xffa8e6cf.toInt(), 0xffd4edda.toInt(),
+    0xff5ac8fa.toInt(), 0xff32ade6.toInt(), 0xff00b4d8.toInt(), 0xff0096c7.toInt(), 0xff00758a.toInt(), 0xff004c5a.toInt(), 0xffb2ebf2.toInt(), 0xffe0f7fa.toInt(),
+    0xff007aff.toInt(), 0xff0a84ff.toInt(), 0xff2184ff.toInt(), 0xff1a56db.toInt(), 0xff003f8f.toInt(), 0xff001a66.toInt(), 0xffbed6f8.toInt(), 0xffdce9ff.toInt(),
+    0xffaf52de.toInt(), 0xffbf5af2.toInt(), 0xff9b59b6.toInt(), 0xff6e3fa3.toInt(), 0xff4a0e8f.toInt(), 0xff2d0066.toInt(), 0xffd7b4f3.toInt(), 0xffede0f8.toInt(),
+    0xffff2d92.toInt(), 0xffff375f.toInt(), 0xffff6ab0.toInt(), 0xffe91e8c.toInt(), 0xffad1457.toInt(), 0xff6a0032.toInt(), 0xffffb3d9.toInt(), 0xffffdcef.toInt()
+)
+
+@Composable
+private fun BoxScope.EditorPanel(title: String, onDismiss: () -> Unit, alignment: Alignment = Alignment.CenterEnd, content: @Composable () -> Unit) {
+    val configuration = LocalConfiguration.current
+    val landscape = configuration.screenWidthDp > configuration.screenHeightDp
+    val panelWidth = if (landscape) minOf(330f, configuration.screenWidthDp * 0.44f).dp
+        else (configuration.screenWidthDp - 24).dp
+    Surface(
+        modifier = Modifier.align(alignment).padding(12.dp).width(panelWidth)
+            .heightIn(max = (configuration.screenHeightDp - 24).dp),
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 6.dp,
+        shadowElevation = 8.dp,
+    ) {
+        Column {
+            Row(
+                Modifier.fillMaxWidth().padding(start = 16.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.wl_save)) }
+            }
+            Column(
+                modifier = Modifier.fillMaxWidth()
+                    .heightIn(max = (configuration.screenHeightDp - 104).coerceAtLeast(160).dp)
+                    .verticalScroll(rememberScrollState())
+                    .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) { content() }
+        }
+    }
+}
+
+@Composable
+private fun ColorGrid(selected: Int, onSelected: (Int) -> Unit) {
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(8),
+        modifier = Modifier.width(224.dp).height(224.dp),
+        userScrollEnabled = false,
+    ) {
+        items(palette.size) { index ->
+            val color = palette[index]
+            Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) {
+                Box(
+                    Modifier.size(24.dp).clip(CircleShape)
+                        .background(if (color == 0) Color.White else Color(color))
+                        .then(if (selected == color) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, CircleShape) else Modifier)
+                        .clickable { onSelected(color) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun <T> Choice(label: String, selected: T, options: List<T>, text: (T) -> String, onSelected: (T) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Column {
+        Text(label, style = MaterialTheme.typography.labelMedium)
+        OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
+            Text(text(selected), modifier = Modifier.weight(1f))
+            Text("\u25BE")
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.forEach { option ->
+                DropdownMenuItem(text = { Text(text(option)) }, onClick = { expanded = false; onSelected(option) })
+            }
+        }
+    }
+}
+
+@Composable
+private fun Percent(label: String, value: Float, step: Int, onChange: (Float) -> Unit, onFinished: () -> Unit, range: ClosedFloatingPointRange<Float> = 0f..1f) {
+    var progress by remember(value) { mutableStateOf(value) }
+    Column {
+        Text("$label: ${(progress * 100).roundToInt()}%")
+        Slider(
+            value = progress.coerceIn(range),
+            valueRange = range,
+            onValueChange = {
+                val rounded = if (step == 1) (it * 100).roundToInt() else ((it * 100 / step).roundToInt() * step)
+                progress = (rounded / 100f).coerceIn(range)
+                onChange(progress)
+            },
+            onValueChangeFinished = onFinished,
         )
-        private val SHAPE_LABELS = listOf(
-            Element.Shape.CIRCLE to "CIRCLE", Element.Shape.RECT to "RECT",
-            Element.Shape.ROUND_RECT to "ROUND RECT", Element.Shape.SQUARE to "SQUARE",
+    }
+}
+
+@Composable
+private fun RatioSlider(label: String, value: Float, min: Float, max: Float, onChange: (Float) -> Unit, onFinished: () -> Unit) {
+    var progress by remember(value) { mutableStateOf(value) }
+    Column {
+        Text("$label: ${(progress * 100).roundToInt()}%")
+        Slider(
+            value = progress,
+            onValueChange = {
+                progress = ((it * 100).roundToInt() / 100f).coerceIn(min, max)
+                onChange(progress)
+            },
+            onValueChangeFinished = onFinished,
+            valueRange = min..max,
         )
-        private val COLOR_LABELS = listOf(
-            0 to "DEFAULT", 0xFF1A9FFF.toInt() to "BLUE", 0xFF3DDC84.toInt() to "GREEN", 0xFFFF5252.toInt() to "RED",
-            0xFFFFA726.toInt() to "AMBER", 0xFFE8EEF4.toInt() to "WHITE", 0xFFC77DFF.toInt() to "VIOLET", 0xFFFF6FB5.toInt() to "PINK",
+    }
+}
+
+@Composable
+private fun HexColorField(color: Int, onChange: (Int) -> Unit) {
+    var value by remember(color) { mutableStateOf(if (color == 0) "" else "%06X".format(color and 0xffffff)) }
+    OutlinedTextField(
+        value, { text ->
+            val clean = text.removePrefix("#").take(6)
+            value = clean
+            if (clean.isEmpty()) onChange(0)
+            else if (clean.length == 6 && clean.all { it in "0123456789abcdefABCDEF" }) onChange((0xff000000L or clean.toLong(16)).toInt())
+        },
+        label = { Text(stringResource(R.string.wl_color_hex)) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+/** Isian pengaturan satu elemen, urutan sama dengan `ElementFields` Winlator 4.1. [touch] = gambar ulang, [commit] = catat perubahan. */
+@Composable
+private fun ElementFields(e: Element, rev: Int, touch: () -> Unit, commit: () -> Unit) {
+    @Suppress("UNUSED_VARIABLE") val update = rev
+    val type = e.type
+    Choice(stringResource(R.string.wl_type), type, Element.Type.entries.toList(), { it.name.replace('_', '-') }) {
+        // applyType mengatur ulang binding: jangan dipanggil bila jenisnya sama
+        if (it != e.type) { e.applyType(it); commit() }
+    }
+    if (type == Element.Type.BUTTON) {
+        Choice(stringResource(R.string.wl_shape), e.shape, Element.Shape.entries.toList(), { it.name.replace('_', ' ') }) {
+            if (it != e.shape) { e.shape = it; commit() }
+        }
+    }
+    if (type != Element.Type.DYNAMIC_STICK) {
+        Percent(stringResource(R.string.wl_scale), e.scale, 5, { e.scale = it; touch() }, commit, 0.5f..2f)
+    }
+    if (type == Element.Type.STICK || type == Element.Type.DYNAMIC_STICK) {
+        var deadZone by remember(e) { mutableStateOf(e.deadZone) }
+        Column {
+            Text(stringResource(R.string.wl_dead_zone_fmt, (deadZone * 100).roundToInt()))
+            Slider(
+                value = deadZone,
+                onValueChange = { deadZone = (it * 100).roundToInt() / 100f; e.deadZone = deadZone },
+                onValueChangeFinished = commit,
+                valueRange = 0f..0.5f,
+            )
+        }
+    }
+    if (type == Element.Type.DYNAMIC_STICK) {
+        RatioSlider(stringResource(R.string.wl_touch_area_width), e.areaWidthRatio, 0.15f, 1f, { e.areaWidthRatio = it; touch() }, commit)
+        RatioSlider(stringResource(R.string.wl_touch_area_height), e.areaHeightRatio, 0.15f, 1f, { e.areaHeightRatio = it; touch() }, commit)
+        RatioSlider(stringResource(R.string.wl_stick_radius), e.stickRadiusRatio, 0.05f, 0.3f, { e.stickRadiusRatio = it; touch() }, commit)
+    }
+    Percent(stringResource(R.string.wl_opacity), e.opacity, 1, { e.opacity = it; touch() }, commit)
+    Text(stringResource(R.string.wl_theme_color), style = MaterialTheme.typography.labelMedium)
+    ColorGrid(e.customColor) { e.customColor = it; commit() }
+    HexColorField(e.customColor) { e.customColor = it; commit() }
+    if (type == Element.Type.BUTTON) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(stringResource(R.string.wl_toggle_switch), modifier = Modifier.weight(1f))
+            Switch(checked = e.toggleSwitch, onCheckedChange = { e.toggleSwitch = it; commit() })
+        }
+        var customText by remember(e) { mutableStateOf(e.text) }
+        OutlinedTextField(
+            value = customText,
+            onValueChange = { customText = it; e.text = it.trim(); commit() },
+            label = { Text(stringResource(R.string.wl_custom_text)) },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
         )
+    }
+    if (type == Element.Type.RANGE_BUTTON) {
+        Choice(
+            stringResource(R.string.wl_range), e.range ?: Element.Range.FROM_A_TO_Z, Element.Range.entries.toList(),
+            { it.name.removePrefix("FROM_").replace("_TO_", "-").replace('_', ' ') },
+        ) {
+            if (it != e.range) {
+                e.range = it
+                e.bindings = Array(it.max) { i -> Element.rangeBinding(it, i) }
+                commit()
+            }
+        }
+        val horizontal = stringResource(R.string.wl_horizontal)
+        val vertical = stringResource(R.string.wl_vertical)
+        Choice(stringResource(R.string.wl_orientation), e.orientation, listOf(0, 1), { if (it == 0) horizontal else vertical }) {
+            if (it != e.orientation) { e.orientation = it; commit() }
+        }
+    }
+    val bindingLabels = when (type) {
+        Element.Type.BUTTON -> listOf(R.string.wl_binding)
+        Element.Type.D_PAD, Element.Type.STICK, Element.Type.DYNAMIC_STICK, Element.Type.TRACKPAD ->
+            listOf(R.string.wl_up, R.string.wl_right, R.string.wl_down, R.string.wl_left)
+        else -> emptyList()
+    }
+    bindingLabels.forEachIndexed { index, label ->
+        key(type, index) { BindingField(stringResource(label), e, index, commit) }
+    }
+    if (type == Element.Type.BUTTON) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(stringResource(R.string.wl_move_cursor_drag), modifier = Modifier.weight(1f))
+            Switch(checked = e.mouseMoveMode, onCheckedChange = { e.mouseMoveMode = it; commit() })
+        }
+    }
+}
+
+@Composable
+private fun BindingField(label: String, e: Element, index: Int, commit: () -> Unit) {
+    val current = e.bindings.getOrElse(index) { Binding.NONE }
+    var family by remember(e, index) { mutableIntStateOf(if (current.isMouse) 1 else if (current.isGamepad) 2 else 0) }
+    val options = when (family) {
+        1 -> Binding.mouseValues
+        2 -> Binding.gamepadValues
+        else -> Binding.keyboardValues
+    }
+    val none = stringResource(R.string.wl_none)
+    val families = listOf(stringResource(R.string.wl_tab_keyboard), stringResource(R.string.wl_tab_mouse), stringResource(R.string.wl_tab_gamepad))
+    Text(label, style = MaterialTheme.typography.labelMedium)
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(Modifier.weight(1f)) {
+            Choice(stringResource(R.string.wl_input), family, listOf(0, 1, 2), { families[it] }) { family = it }
+        }
+        Box(Modifier.weight(1f)) {
+            Choice(stringResource(R.string.wl_binding), current, options, { if (it == Binding.NONE) none else it.label }) { b ->
+                if (b != current) {
+                    if (e.type == Element.Type.BUTTON) e.bindings = arrayOf(b)
+                    else {
+                        if (e.bindings.size < 4) e.bindings = Array(4) { j -> e.bindings.getOrElse(j) { Binding.NONE } }
+                        e.bindings[index] = b
+                    }
+                    commit()
+                }
+            }
+        }
     }
 }

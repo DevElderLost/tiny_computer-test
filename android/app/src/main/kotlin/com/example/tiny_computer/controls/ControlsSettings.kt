@@ -6,14 +6,47 @@ import android.view.InputDevice
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material.icons.outlined.FileUpload
+import androidx.compose.material.icons.outlined.Gamepad
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.SportsEsports
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -24,30 +57,31 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.example.tiny_computer.R
-import com.example.tiny_computer.ui.DeckActionRow
 import com.example.tiny_computer.ui.DeckButton
-import com.example.tiny_computer.ui.DeckChoiceRow
 import com.example.tiny_computer.ui.DeckGroup
 import com.example.tiny_computer.ui.DeckNote
 import com.example.tiny_computer.ui.DeckRow
-import com.example.tiny_computer.ui.DeckSliderRow
-import com.example.tiny_computer.ui.DeckToggleRow
 import com.example.tiny_computer.ui.ScreenTitle
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
 /**
  * Pengaturan controller gaya Winlator, tinggal di Pengaturan > Controller (ControllerScreen) bersama controller
- * DroidDeck: potret dan lanskap memakai komponen Deck* yang sama. Hanya editor tata letak yang layar penuh (seperti
- * editor DroidDeck).
+ * DroidDeck. Tampilannya mengikuti layar Input Controls Winlator 4.1 (`InputControlsComposeHost`): kartu Profil
+ * (pemilih + tombol bulat tambah/ubah/gandakan/hapus), Overlay Opacity, Import/Export, tombol Controls Editor, dan
+ * daftar External Controllers; potret satu kolom, lanskap dua kolom. Editor tata letak layar penuh.
  */
 
 /** Penangkap tombol/sumbu controller fisik untuk penetapan binding; diisi halaman, dipicu MainActivity. */
@@ -72,52 +106,191 @@ object ControllerCapture {
     }
 }
 
-/** Grup di halaman Controller: saklar mode, profil aktif, tombol mengambang, editor, dan pintu ke manajer profil. */
+/** Kartu gaya Winlator (`SettingsCard` di InputControlsComposeHost). */
+@Composable
+internal fun WlCard(title: String?, content: @Composable () -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Column(Modifier.padding(14.dp)) {
+            if (title != null) {
+                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(12.dp))
+            }
+            content()
+        }
+    }
+}
+
+@Composable
+private fun WlSwitchRow(label: String, hint: String?, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f).padding(end = 12.dp)) {
+            Text(label, style = MaterialTheme.typography.bodyLarge)
+            if (hint != null) Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Switch(checked = checked, onCheckedChange = onChange)
+    }
+}
+
+/** Tombol besar "Controls Editor" (`EditorButton` Winlator). */
+@Composable
+internal fun WlEditorButton(onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().height(52.dp),
+        shape = RoundedCornerShape(14.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary),
+    ) {
+        Icon(Icons.Outlined.SportsEsports, null)
+        Spacer(Modifier.width(10.dp))
+        Text(stringResource(R.string.wl_controls_editor), style = MaterialTheme.typography.titleMedium)
+    }
+}
+
+private fun openEditor(ctx: android.content.Context, profileId: Int) {
+    ctx.startActivity(Intent(ctx, ControlsEditorActivity::class.java).putExtra(ControlsEditorActivity.EXTRA_PROFILE, profileId))
+}
+
+/** Grup di halaman Controller: saklar mode, tombol mengambang, controller eksternal, editor, dan pintu ke halaman profil. */
 @Composable
 fun WinlatorControlsGroup(onManage: () -> Unit) {
     val ctx = LocalContext.current
     var enabled by remember { mutableStateOf(ProfileStore.enabled(ctx)) }
     var fab by remember { mutableStateOf(ProfileStore.floatingButton(ctx)) }
     var ext by remember { mutableStateOf(ProfileStore.externalEnabled(ctx)) }
-    var active by remember { mutableIntStateOf(ProfileStore.active(ctx).id) }
-    val profiles = remember { ProfileStore.profiles(ctx) }
-    DeckGroup(stringResource(R.string.wl_title)) {
-        DeckToggleRow(stringResource(R.string.wl_enable), stringResource(R.string.wl_enable_hint), enabled) {
-            enabled = it; ProfileStore.setEnabled(ctx, it)
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        WlCard(stringResource(R.string.wl_title)) {
+            WlSwitchRow(stringResource(R.string.wl_enable), stringResource(R.string.wl_enable_hint), enabled) {
+                enabled = it; ProfileStore.setEnabled(ctx, it)
+            }
+            if (enabled) {
+                WlSwitchRow(stringResource(R.string.wl_fab), stringResource(R.string.wl_fab_hint), fab) {
+                    fab = it; ProfileStore.setFloatingButton(ctx, it)
+                }
+                WlSwitchRow(stringResource(R.string.wl_external), stringResource(R.string.wl_external_hint), ext) {
+                    ext = it; ProfileStore.setExternalEnabled(ctx, it)
+                }
+            }
         }
         if (enabled) {
-            DeckChoiceRow(stringResource(R.string.wl_profile), null, profiles.map { it.id to it.name }, active) {
-                active = it; ProfileStore.setActiveId(ctx, it)
-            }
-            DeckToggleRow(stringResource(R.string.wl_fab), stringResource(R.string.wl_fab_hint), fab) {
-                fab = it; ProfileStore.setFloatingButton(ctx, it)
-            }
-            DeckToggleRow(stringResource(R.string.wl_external), stringResource(R.string.wl_external_hint), ext) {
-                ext = it; ProfileStore.setExternalEnabled(ctx, it)
-            }
-            DeckActionRow(stringResource(R.string.wl_edit_layout), stringResource(R.string.wl_edit_layout_hint), stringResource(R.string.wl_edit)) {
-                ctx.startActivity(Intent(ctx, ControlsEditorActivity::class.java).putExtra(ControlsEditorActivity.EXTRA_PROFILE, ProfileStore.activeId(ctx)))
-            }
-            DeckActionRow(stringResource(R.string.wl_manage_profiles), null, stringResource(R.string.wl_open), onManage)
+            WlEditorButton { openEditor(ctx, ProfileStore.activeId(ctx)) }
+            OutlinedButton(
+                onClick = onManage,
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            ) { Text(stringResource(R.string.wl_manage_profiles)) }
         }
     }
 }
 
-private enum class Page { LIST, DETAIL, CONTROLLER }
+private enum class Page { MAIN, CONTROLLER }
+
+private data class PadItem(val id: String, val name: String, val bindings: Int, val connected: Boolean, val added: Boolean)
 
 private fun connectedPads(): List<InputDevice> = InputDevice.getDeviceIds().toList().mapNotNull { InputDevice.getDevice(it) }.filter {
     it.sources and InputDevice.SOURCE_GAMEPAD == InputDevice.SOURCE_GAMEPAD ||
         it.sources and InputDevice.SOURCE_JOYSTICK == InputDevice.SOURCE_JOYSTICK
 }
 
-/** Manajer profil: daftar, detail profil (kecepatan kursor, warna, controller eksternal), dan penetapan tombol fisik. */
+@Composable
+private fun RoundAction(icon: androidx.compose.ui.graphics.vector.ImageVector, description: String, onClick: () -> Unit) {
+    Surface(
+        modifier = Modifier.size(44.dp),
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        IconButton(onClick = onClick) { Icon(icon, description, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ProfilePicker(profiles: List<Profile>, activeId: Int, onPick: (Int) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    val name = profiles.firstOrNull { it.id == activeId }?.name ?: profiles.firstOrNull()?.name ?: "-"
+    Box {
+        Surface(
+            onClick = { expanded = true },
+            modifier = Modifier.fillMaxWidth().height(50.dp),
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        ) {
+            Row(Modifier.fillMaxSize().padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(name, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Icon(Icons.Outlined.KeyboardArrowDown, null)
+            }
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.fillMaxWidth(0.82f)) {
+            for (p in profiles) {
+                DropdownMenuItem(
+                    text = { Text(p.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    onClick = { expanded = false; onPick(p.id) },
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ControllerCard(item: PadItem, onOpen: () -> Unit, onRemove: () -> Unit) {
+    Surface(
+        onClick = onOpen,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Row(Modifier.padding(start = 14.dp, top = 10.dp, bottom = 10.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Surface(Modifier.size(42.dp), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(Icons.Outlined.Gamepad, null, tint = if (item.connected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error)
+                }
+            }
+            Spacer(Modifier.width(13.dp))
+            Column(Modifier.weight(1f)) {
+                Text(item.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    "${item.bindings} ${stringResource(R.string.wl_bindings)}",
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (item.bindings > 0) IconButton(onClick = onRemove) { Icon(Icons.Outlined.Delete, stringResource(R.string.wl_remove_controller)) }
+            Icon(Icons.Outlined.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.width(8.dp))
+        }
+    }
+}
+
+@Composable
+private fun EmptyControllers() {
+    Surface(
+        Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Column(Modifier.fillMaxWidth().padding(vertical = 22.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(Icons.Outlined.Gamepad, null, Modifier.size(30.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(10.dp))
+            Text(stringResource(R.string.wl_no_controller), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/** Halaman Input Controls (port `InputControlsScreen` Winlator 4.1) dan halaman penetapan tombol controller fisik. */
 @Composable
 fun WinlatorControlsPage(onBack: () -> Unit) {
     val ctx = LocalContext.current
     var rev by remember { mutableIntStateOf(0) }
     var resumeRev by remember { mutableIntStateOf(0) }
-    var page by remember { mutableStateOf(Page.LIST) }
-    var openId by remember { mutableIntStateOf(0) }
+    var page by remember { mutableStateOf(Page.MAIN) }
     var openController by remember { mutableStateOf<String?>(null) }
     var dialog by remember { mutableStateOf<(@Composable () -> Unit)?>(null) }
     val list = remember(rev, resumeRev) { ProfileStore.profiles(ctx) }
@@ -137,7 +310,7 @@ fun WinlatorControlsPage(onBack: () -> Unit) {
         val p = text?.let { ProfileStore.import(ctx, it) }
         if (p == null) {
             dialog = { AlertDialog(onDismissRequest = { dialog = null }, text = { Text(stringResource(R.string.wl_import_failed)) }, confirmButton = { TextButton(onClick = { dialog = null }) { Text(stringResource(R.string.wl_ok)) } }) }
-        }
+        } else ProfileStore.setActiveId(ctx, p.id)
         rev++
     }
     var exporting by remember { mutableStateOf<Profile?>(null) }
@@ -152,152 +325,195 @@ fun WinlatorControlsPage(onBack: () -> Unit) {
     BackHandler {
         ControllerCapture.callback = null
         when (page) {
-            Page.CONTROLLER -> page = Page.DETAIL
-            Page.DETAIL -> page = Page.LIST
-            Page.LIST -> onBack()
+            Page.CONTROLLER -> page = Page.MAIN
+            Page.MAIN -> onBack()
         }
     }
 
-        when (page) {
-            Page.LIST -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-                ScreenTitle(stringResource(R.string.wl_profiles), stringResource(R.string.wl_title_hint))
-                DeckGroup(stringResource(R.string.wl_profiles)) {
-                    for (p in list) {
-                        DeckRow(
-                            p.name + if (p.id == activeId) "  ✓" else "",
-                            "${p.elements.size} ${stringResource(R.string.wl_elements)}",
-                        ) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                if (p.id != activeId) DeckButton(stringResource(R.string.wl_use), primary = false) {
-                                    ProfileStore.setActiveId(ctx, p.id); rev++
-                                }
-                                DeckButton(stringResource(R.string.wl_open), primary = false) { openId = p.id; page = Page.DETAIL }
-                            }
-                        }
-                    }
-                    Row(Modifier.padding(14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        DeckButton(stringResource(R.string.wl_new)) {
+    val p = remember(rev, resumeRev, activeId) { ProfileStore.get(ctx, activeId) ?: ProfileStore.active(ctx) }
+
+    when (page) {
+        Page.MAIN -> {
+            val landscape = LocalConfiguration.current.let { it.screenWidthDp > it.screenHeightDp }
+            var opacity by remember { mutableIntStateOf(ProfileStore.overlayOpacity(ctx)) }
+            var speed by remember(p.id) { mutableIntStateOf((p.cursorSpeed * 10).roundToInt().coerceIn(2, 50)) }
+            LaunchedEffect(speed) {
+                delay(200)
+                if ((p.cursorSpeed * 10).roundToInt() != speed) { p.cursorSpeed = speed / 10f; p.save(ctx) }
+            }
+            val pads = run {
+                val added = p.controllers.map { PadItem(it.id, it.name, it.bindings.size, it.isConnected(), true) }
+                val extra = connectedPads().filter { d -> p.controllers.none { it.id == d.descriptor } }
+                    .map { PadItem(it.descriptor, it.name, 0, true, false) }
+                added + extra
+            }
+
+            val profileCard: @Composable () -> Unit = {
+                WlCard(stringResource(R.string.wl_profile)) {
+                    ProfilePicker(list, activeId) { ProfileStore.setActiveId(ctx, it); rev++ }
+                    Spacer(Modifier.height(10.dp))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                        RoundAction(Icons.Outlined.Add, stringResource(R.string.wl_new)) {
                             dialog = {
                                 NameDialog(stringResource(R.string.wl_new), "", { dialog = null }) { n ->
                                     dialog = null
-                                    if (n.isNotEmpty()) { ProfileStore.create(ctx, n); rev++ }
+                                    if (n.isNotEmpty()) { val c = ProfileStore.create(ctx, n); ProfileStore.setActiveId(ctx, c.id); rev++ }
                                 }
                             }
                         }
-                        DeckButton(stringResource(R.string.wl_import), primary = false) {
-                            importer.launch(arrayOf("application/json", "application/octet-stream", "text/plain", "*/*"))
-                        }
-                    }
-                }
-                DeckButton(stringResource(R.string.wl_back), Modifier.padding(horizontal = 16.dp, vertical = 8.dp), onClick = onBack)
-            }
-
-            Page.DETAIL -> {
-                val p = remember(rev, resumeRev, openId) { ProfileStore.get(ctx, openId) }
-                if (p == null) { page = Page.LIST; return }
-                var speed by remember(openId) { mutableIntStateOf((p.cursorSpeed * 10).roundToInt().coerceIn(2, 50)) }
-                LaunchedEffect(speed) {
-                    delay(200)
-                    if ((p.cursorSpeed * 10).roundToInt() != speed) { p.cursorSpeed = speed / 10f; p.save(ctx) }
-                }
-                Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-                    ScreenTitle(p.name, stringResource(R.string.wl_profile_hint))
-                    DeckGroup(stringResource(R.string.wl_profile)) {
-                        DeckActionRow(stringResource(R.string.wl_edit_layout), stringResource(R.string.wl_edit_layout_hint), stringResource(R.string.wl_edit)) {
-                            ctx.startActivity(Intent(ctx, ControlsEditorActivity::class.java).putExtra(ControlsEditorActivity.EXTRA_PROFILE, p.id))
-                        }
-                        DeckSliderRow(stringResource(R.string.wl_cursor_speed), null, speed, 2..50, 1, { "%.1fx".format(it / 10f) }) { speed = it }
-                        DeckChoiceRow(
-                            stringResource(R.string.wl_theme), null,
-                            THEME_COLORS.map { (c, n) -> c to n }, p.themeColor,
-                        ) { p.themeColor = it; p.save(ctx); rev++ }
-                    }
-                    DeckGroup(stringResource(R.string.wl_ext_controllers), help = stringResource(R.string.wl_ext_help)) {
-                        for (c in p.controllers) {
-                            DeckRow(c.name, "${c.bindings.size} ${stringResource(R.string.wl_bindings)}" + if (c.isConnected()) "" else " · ${stringResource(R.string.wl_disconnected)}") {
-                                DeckButton(stringResource(R.string.wl_open), primary = false) { openController = c.id; page = Page.CONTROLLER }
-                            }
-                        }
-                        val connected = connectedPads().filter { d -> p.controllers.none { it.id == d.descriptor } }
-                        if (connected.isEmpty() && p.controllers.isEmpty()) DeckNote(stringResource(R.string.wl_no_controller))
-                        for (d in connected) {
-                            DeckRow(d.name, stringResource(R.string.wl_connected)) {
-                                DeckButton(stringResource(R.string.wl_add), primary = false) {
-                                    p.controllers.add(PadController(d.descriptor, d.name))
-                                    p.save(ctx); openController = d.descriptor; page = Page.CONTROLLER
-                                }
-                            }
-                        }
-                    }
-                    DeckGroup(stringResource(R.string.wl_manage)) {
-                        Row(Modifier.padding(14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            DeckButton(stringResource(R.string.wl_rename), primary = false) {
-                                dialog = { NameDialog(stringResource(R.string.wl_rename), p.name, { dialog = null }) { n ->
+                        Spacer(Modifier.width(10.dp))
+                        RoundAction(Icons.Outlined.Edit, stringResource(R.string.wl_rename)) {
+                            dialog = {
+                                NameDialog(stringResource(R.string.wl_rename), p.name, { dialog = null }) { n ->
                                     dialog = null; if (n.isNotEmpty()) { ProfileStore.rename(ctx, p, n); rev++ }
-                                } }
+                                }
                             }
-                            DeckButton(stringResource(R.string.wl_duplicate), primary = false) { ProfileStore.duplicate(ctx, p); page = Page.LIST; rev++ }
                         }
-                        Row(Modifier.padding(start = 14.dp, end = 14.dp, bottom = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            DeckButton(stringResource(R.string.wl_export), primary = false) {
-                                exporting = p
-                                exporter.launch(p.name.replace(Regex("[^A-Za-z0-9._-]"), "_") + ".icp")
-                            }
-                            DeckButton(stringResource(R.string.wl_delete), primary = false) {
-                                dialog = { ConfirmDialog(stringResource(R.string.wl_confirm_delete, p.name), { dialog = null }) {
-                                    dialog = null; ProfileStore.remove(ctx, p); page = Page.LIST; rev++
-                                } }
+                        Spacer(Modifier.width(10.dp))
+                        RoundAction(Icons.Outlined.ContentCopy, stringResource(R.string.wl_duplicate)) {
+                            val c = ProfileStore.duplicate(ctx, p); ProfileStore.setActiveId(ctx, c.id); rev++
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        RoundAction(Icons.Outlined.Delete, stringResource(R.string.wl_delete)) {
+                            dialog = {
+                                ConfirmDialog(stringResource(R.string.wl_confirm_delete, p.name), { dialog = null }) {
+                                    dialog = null; ProfileStore.remove(ctx, p); rev++
+                                }
                             }
                         }
                     }
-                    DeckButton(stringResource(R.string.wl_back), Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) { page = Page.LIST }
+                }
+            }
+            val opacityCard: @Composable () -> Unit = {
+                WlCard(stringResource(R.string.wl_overlay_opacity)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Slider(
+                            value = opacity.toFloat(),
+                            onValueChange = { opacity = (it / 5f).roundToInt() * 5 },
+                            onValueChangeFinished = { ProfileStore.setOverlayOpacity(ctx, opacity) },
+                            modifier = Modifier.weight(1f), valueRange = 0f..100f, steps = 19,
+                        )
+                        Spacer(Modifier.width(14.dp))
+                        Text("$opacity%", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+            val speedCard: @Composable () -> Unit = {
+                WlCard(stringResource(R.string.wl_cursor_speed)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Slider(
+                            value = speed.toFloat(), onValueChange = { speed = it.roundToInt() },
+                            modifier = Modifier.weight(1f), valueRange = 2f..50f, steps = 47,
+                        )
+                        Spacer(Modifier.width(14.dp))
+                        Text("%.1fx".format(speed / 10f), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+            val transfer: @Composable () -> Unit = {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedButton(
+                        onClick = { importer.launch(arrayOf("application/json", "application/octet-stream", "text/plain", "*/*")) },
+                        modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    ) { Icon(Icons.Outlined.FileDownload, null); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.wl_import)) }
+                    OutlinedButton(
+                        onClick = { exporting = p; exporter.launch(p.name.replace(Regex("[^A-Za-z0-9._-]"), "_") + ".icp") },
+                        modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    ) { Icon(Icons.Outlined.FileUpload, null); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.wl_export)) }
+                }
+            }
+            val controllersLabel: @Composable () -> Unit = {
+                Text(
+                    stringResource(R.string.wl_ext_controllers),
+                    modifier = Modifier.padding(top = 6.dp, bottom = 2.dp),
+                    style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            val controllerCards: @Composable () -> Unit = {
+                if (pads.isEmpty()) EmptyControllers()
+                for (pad in pads) {
+                    ControllerCard(
+                        pad,
+                        onOpen = {
+                            if (!pad.added) { p.controllers.add(PadController(pad.id, pad.name)); p.save(ctx) }
+                            openController = pad.id; page = Page.CONTROLLER; rev++
+                        },
+                        onRemove = { p.controller(pad.id)?.let { c -> p.controllers.remove(c); p.save(ctx); rev++ } },
+                    )
                 }
             }
 
-            Page.CONTROLLER -> {
-                val p = remember(rev, resumeRev, openId) { ProfileStore.get(ctx, openId) }
-                val c = p?.controller(openController ?: "")
-                if (p == null || c == null) { page = Page.DETAIL; return }
-                var waiting by remember { mutableStateOf(false) }
-                var lastBind by remember { mutableIntStateOf(0) }
-                Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-                    ScreenTitle(c.name, stringResource(R.string.wl_ctrl_hint))
-                    DeckGroup(stringResource(R.string.wl_bindings)) {
-                        for (b in c.bindings) {
-                            var open by remember(b, lastBind) { mutableStateOf(false) }
-                            DeckRow(b.label, null) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    DeckButton(if (b.binding == Binding.NONE) stringResource(R.string.wl_none) else b.binding.label, primary = false) { open = true }
-                                    DeckButton(stringResource(R.string.wl_delete), primary = false) {
-                                        c.bindings.remove(b); p.save(ctx); lastBind++; rev++
-                                    }
-                                }
-                            }
-                            if (open) BindingPickerDialog(b.binding, { open = false }) {
-                                b.binding = it; p.save(ctx); open = false; lastBind++; rev++
-                            }
+            if (landscape) {
+                Column(Modifier.fillMaxSize()) {
+                    ScreenTitle(stringResource(R.string.wl_title), stringResource(R.string.wl_title_hint))
+                    Row(Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(bottom = 18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            profileCard(); opacityCard(); speedCard(); transfer(); WlEditorButton { openEditor(ctx, p.id) }
                         }
-                        if (c.bindings.isEmpty()) DeckNote(stringResource(R.string.wl_no_bindings))
-                        DeckButton(
-                            if (waiting) stringResource(R.string.wl_press_button) else stringResource(R.string.wl_add_binding),
-                            Modifier.padding(14.dp), primary = !waiting,
-                        ) {
-                            waiting = true
-                            ControllerCapture.callback = { code ->
-                                waiting = false
-                                if (c.find(code) == null) { c.bindings.add(PadBinding(code)); p.save(ctx); lastBind++; rev++ }
-                            }
-                        }
-                        if (waiting) DeckNote(stringResource(R.string.wl_capture_hint))
-                    }
-                    DeckGroup(stringResource(R.string.wl_manage)) {
-                        DeckButton(stringResource(R.string.wl_remove_controller), Modifier.padding(14.dp), primary = false) {
-                            p.controllers.remove(c); p.save(ctx); ControllerCapture.callback = null; page = Page.DETAIL; rev++
+                        Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(bottom = 18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            controllersLabel(); controllerCards()
+                            DeckButton(stringResource(R.string.wl_back), Modifier.padding(vertical = 8.dp), primary = false, onClick = onBack)
                         }
                     }
-                    DeckButton(stringResource(R.string.wl_back), Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) { ControllerCapture.callback = null; page = Page.DETAIL }
+                }
+            } else {
+                Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                    ScreenTitle(stringResource(R.string.wl_title), stringResource(R.string.wl_title_hint))
+                    Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        profileCard(); opacityCard(); speedCard(); transfer(); WlEditorButton { openEditor(ctx, p.id) }
+                        controllersLabel(); controllerCards()
+                        DeckButton(stringResource(R.string.wl_back), Modifier.padding(vertical = 8.dp), primary = false, onClick = onBack)
+                    }
                 }
             }
         }
-        dialog?.invoke()
+
+        Page.CONTROLLER -> {
+            val c = p.controller(openController ?: "")
+            if (c == null) { page = Page.MAIN; return }
+            var waiting by remember { mutableStateOf(false) }
+            var lastBind by remember { mutableIntStateOf(0) }
+            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
+                ScreenTitle(c.name, stringResource(R.string.wl_ctrl_hint))
+                DeckGroup(stringResource(R.string.wl_bindings)) {
+                    for (b in c.bindings) {
+                        var open by remember(b, lastBind) { mutableStateOf(false) }
+                        DeckRow(b.label, null) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                DeckButton(if (b.binding == Binding.NONE) stringResource(R.string.wl_none) else b.binding.label, primary = false) { open = true }
+                                DeckButton(stringResource(R.string.wl_delete), primary = false) {
+                                    c.bindings.remove(b); p.save(ctx); lastBind++; rev++
+                                }
+                            }
+                        }
+                        if (open) BindingPickerDialog(b.binding, { open = false }) {
+                            b.binding = it; p.save(ctx); open = false; lastBind++; rev++
+                        }
+                    }
+                    if (c.bindings.isEmpty()) DeckNote(stringResource(R.string.wl_no_bindings))
+                    DeckButton(
+                        if (waiting) stringResource(R.string.wl_press_button) else stringResource(R.string.wl_add_binding),
+                        Modifier.padding(14.dp), primary = !waiting,
+                    ) {
+                        waiting = true
+                        ControllerCapture.callback = { code ->
+                            waiting = false
+                            if (c.find(code) == null) { c.bindings.add(PadBinding(code)); p.save(ctx); lastBind++; rev++ }
+                        }
+                    }
+                    if (waiting) DeckNote(stringResource(R.string.wl_capture_hint))
+                }
+                DeckGroup(stringResource(R.string.wl_manage)) {
+                    DeckButton(stringResource(R.string.wl_remove_controller), Modifier.padding(14.dp), primary = false) {
+                        p.controllers.remove(c); p.save(ctx); ControllerCapture.callback = null; page = Page.MAIN; rev++
+                    }
+                }
+                DeckButton(stringResource(R.string.wl_back), Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) { ControllerCapture.callback = null; page = Page.MAIN }
+            }
+        }
+    }
+    dialog?.invoke()
 }

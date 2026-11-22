@@ -4,6 +4,7 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import kotlin.math.roundToInt
 
 /**
  * Model profil controller bergaya Winlator (port `ControlsProfile`, `ControlElement` (data saja), `ExternalController`,
@@ -248,6 +249,10 @@ object ProfileStore {
     /** Controller fisik memakai pemetaan profil (tombol tanpa pemetaan tetap diteruskan ke pad Deck/Xbox). */
     fun externalEnabled(c: Context) = prefs(c).getBoolean("external", true)
     fun setExternalEnabled(c: Context, on: Boolean) = prefs(c).edit().putBoolean("external", on).apply()
+
+    /** Opasitas overlay controller layar, 0..100 (Winlator: overlay_opacity, bawaan 85%). */
+    fun overlayOpacity(c: Context) = (prefs(c).getFloat("overlayOpacity", 0.85f) * 100f).roundToInt().coerceIn(0, 100)
+    fun setOverlayOpacity(c: Context, percent: Int) = prefs(c).edit().putFloat("overlayOpacity", percent.coerceIn(0, 100) / 100f).apply()
 
     fun activeId(c: Context) = prefs(c).getInt("activeProfile", 0)
     fun setActiveId(c: Context, id: Int) = prefs(c).edit().putInt("activeProfile", id).apply()
