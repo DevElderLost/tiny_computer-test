@@ -3,6 +3,7 @@ package com.example.tiny_computer.controls
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.RectF
 import android.os.Handler
 import android.os.Looper
@@ -13,6 +14,7 @@ import android.view.ViewConfiguration
 import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.max
+import kotlin.math.min
 
 /**
  * Controller layar gaya Winlator (port `InputControlsView` + `ControlElement`): tombol keyboard/mouse/gamepad,
@@ -90,7 +92,12 @@ class ProfileControlsView(
         }
     }
 
-    private val snap: Float get() = width / 100f
+    /** Sama dengan `snappingSize` Winlator: lebar / 100 dengan pembagian bilangan bulat. */
+    private val snap: Float get() = max(1, width / 100).toFloat()
+
+    /** Jari-jari stik dinamis dalam piksel (sama dengan `getDynamicStickRadiusPixels` Winlator). */
+    private fun dynRadius(e: Element): Float =
+        max(1, (min(width, height) * e.stickRadiusRatio * e.scale).toInt()).toFloat()
 
     // ---- geometri
 
@@ -339,7 +346,7 @@ class ProfileControlsView(
                 if (e.type == Element.Type.STICK) {
                     cx = b.centerX(); cy = b.centerY(); radius = b.width() / 2f
                 } else {
-                    cx = t.startX; cy = t.startY; radius = width * e.stickRadiusRatio
+                    cx = t.startX; cy = t.startY; radius = dynRadius(e)
                 }
                 var dx = (x - cx) / radius
                 var dy = (y - cy) / radius
@@ -441,10 +448,42 @@ class ProfileControlsView(
 
     // ---- gambar
 
-    private fun themeColor(e: Element): Int =
-        if (e.customColor != 0) e.customColor else (profile?.themeColor?.takeIf { it != 0 } ?: 0xFF1A9FFF.toInt())
+    private val darkSurface = 0xFF06111D.toInt()
+    private val edgeSoft = 0xFF7FA8D8.toInt()
+    private val white = 0xFFFFFFFF.toInt()
+    private val path = Path()
 
-    private fun withAlpha(c: Int, a: Float): Int = ((a.coerceIn(0f, 1f) * 255).toInt() shl 24) or (c and 0xFFFFFF)
+    /** Warna tema: warna elemen, lalu warna profil, lalu putih (sama dengan `getThemeColor` Winlator). */
+    private fun themeColor(e: Element): Int =
+        if (e.customColor != 0) e.customColor else (profile?.themeColor?.takeIf { it != 0 } ?: white)
+
+    /** Opasitas elemen x opasitas overlay; di editor minimal 0,35 (`getEffectiveOpacity` Winlator). */
+    private fun effOpacity(e: Element): Float {
+        val combined = e.opacity * overlayAlpha
+        return if (editing) max(0.35f, combined) else combined
+    }
+
+    /** `withAlpha` Winlator: [alpha] 0..255 dikali opasitas efektif. */
+    private fun wa(e: Element, color: Int, alpha: Int): Int {
+        val a = (alpha * effOpacity(e)).toInt().coerceIn(0, 255)
+        return (color and 0x00FFFFFF) or (a shl 24)
+    }
+
+    /** `withStickFeedbackAlpha` Winlator: umpan balik stik yang disentuh tetap terbaca di overlay transparan. */
+    private fun sa(e: Element, color: Int, alpha: Int): Int {
+        var eff = effOpacity(e)
+        if (e.opacity > 0f && overlayAlpha > 0f) eff = max(eff, 0.7f)
+        val a = min(255, (alpha * eff).toInt())
+        return (color and 0x00FFFFFF) or (a shl 24)
+    }
+
+    private fun setup(style: Paint.Style, color: Int, strokeWidth: Float) {
+        paint.style = style
+        paint.color = color
+        paint.strokeWidth = strokeWidth
+        paint.textAlign = Paint.Align.CENTER
+        paint.isAntiAlias = true
+    }
 
     /** Opasitas overlay global (pengaturan "Overlay Opacity" seperti Winlator), dikalikan opasitas tiap elemen. */
     private var overlayAlpha = 0.85f
@@ -474,104 +513,239 @@ class ProfileControlsView(
 
     private fun drawElement(c: Canvas, e: Element) {
         val b = bounds(e, RectF())
-        val on = touches.values.any { it.e === e } || e in toggled
-        val color = themeColor(e)
-        val a = if (editing) 1f else e.opacity * overlayAlpha
-        val fill = if (on) withAlpha(color, 0.63f * a) else withAlpha(darken(color, 0.12f), 0.31f * a)
-        val stroke = if (on) withAlpha(lighten(color, 0.7f), 0.9f * a) else withAlpha(lighten(color, 0.25f), 0.59f * a)
-        val sw = max(1.5f, snap * 0.3f * e.scale)
-        val text = withAlpha(lighten(color, 0.75f), 0.82f * a)
-
-        fun shape(r: RectF, circle: Boolean, radius: Float) {
-            paint.style = Paint.Style.FILL; paint.color = fill
-            if (circle) c.drawOval(r, paint) else c.drawRoundRect(r, radius, radius, paint)
-            paint.style = Paint.Style.STROKE; paint.strokeWidth = sw; paint.color = stroke
-            if (circle) c.drawOval(r, paint) else c.drawRoundRect(r, radius, radius, paint)
-        }
+        val pointer = !editing && touches.values.any { it.e === e }
+        // sama dengan isVisuallyPressed Winlator: terpilih (editor) atau sedang disentuh/ditahan
+        val active = (editing && e === selected) || pointer || e in toggled
+        val theme = themeColor(e)
+        val sn = snap
+        val sc = e.scale
 
         when (e.type) {
             Element.Type.BUTTON -> {
-                shape(b, e.shape == Element.Shape.CIRCLE, if (e.shape == Element.Shape.RECT) 4f else b.height() * 0.3f)
-                label(c, e.text.ifEmpty { e.bindings.firstOrNull()?.label ?: "" }, b.centerX(), b.centerY(), b.width() * 0.8f, text)
+                val cx = b.centerX(); val cy = b.centerY()
+                val w = b.width(); val h = b.height()
+                val label = displayText(e)
+                when (e.shape) {
+                    Element.Shape.CIRCLE -> softCircle(c, e, cx, cy, w * 0.5f, active, theme, true)
+                    Element.Shape.RECT, Element.Shape.ROUND_RECT ->
+                        softRoundRect(c, e, b.left, b.top, b.right, b.bottom, h * 0.45f, active)
+                    Element.Shape.SQUARE ->
+                        softRoundRect(c, e, b.left, b.top, b.right, b.bottom, sn * 1.05f * sc, active)
+                }
+                centeredText(c, e, label, cx, cy, w * 0.55f, sn * 2.1f * sc, if (active) white else theme)
             }
             Element.Type.D_PAD -> {
-                val arm = b.width() / 3f
                 val cx = b.centerX(); val cy = b.centerY()
-                val on0 = isDir(e, 0); val on1 = isDir(e, 1); val on2 = isDir(e, 2); val on3 = isDir(e, 3)
-                fun arrow(l: Float, t: Float, r: Float, bt: Float, pressed: Boolean) {
-                    rect.set(l, t, r, bt)
-                    paint.style = Paint.Style.FILL; paint.color = if (pressed) withAlpha(color, 0.63f * a) else fill
-                    c.drawRoundRect(rect, arm * 0.2f, arm * 0.2f, paint)
-                    paint.style = Paint.Style.STROKE; paint.strokeWidth = sw; paint.color = stroke
-                    c.drawRoundRect(rect, arm * 0.2f, arm * 0.2f, paint)
-                }
-                arrow(cx - arm / 2, b.top, cx + arm / 2, cy - arm / 2, on0)
-                arrow(cx + arm / 2, cy - arm / 2, b.right, cy + arm / 2, on1)
-                arrow(cx - arm / 2, cy + arm / 2, cx + arm / 2, b.bottom, on2)
-                arrow(b.left, cy - arm / 2, cx - arm / 2, cy + arm / 2, on3)
+                val base = min(b.width(), b.height())
+                val piece = base * 0.30f
+                val dist = piece * 1.15f
+                val centerSize = piece * 0.26f
+                setup(Paint.Style.FILL, wa(e, darkSurface, if (active) 72 else 42), 0f)
+                c.drawRoundRect(
+                    cx - centerSize * 0.5f, cy - centerSize * 0.5f, cx + centerSize * 0.5f, cy + centerSize * 0.5f,
+                    centerSize * 0.22f, centerSize * 0.22f, paint,
+                )
+                dpadPiece(c, e, cx, cy - dist, piece, 0, isDir(e, 0))
+                dpadPiece(c, e, cx + dist, cy, piece, 1, isDir(e, 1))
+                dpadPiece(c, e, cx, cy + dist, piece, 2, isDir(e, 2))
+                dpadPiece(c, e, cx - dist, cy, piece, 3, isDir(e, 3))
             }
             Element.Type.STICK -> {
-                shape(b, true, 0f)
-                val t = touches.values.firstOrNull { it.e === e }
-                val tx = t?.thumbX ?: b.centerX()
-                val ty = t?.thumbY ?: b.centerY()
-                paint.style = Paint.Style.FILL; paint.color = withAlpha(color, (if (t != null) 0.78f else 0.47f) * a)
-                c.drawCircle(tx, ty, b.width() * 0.22f, paint)
+                val cx = b.centerX(); val cy = b.centerY()
+                val outer = b.height() * 0.5f
+                val innerRing = outer * 0.52f
+                val thumbRadius = outer * 0.42f
+                setup(Paint.Style.FILL, wa(e, darkSurface, if (active) 155 else 118), 0f)
+                c.drawCircle(cx, cy, outer, paint)
+                setup(Paint.Style.STROKE, wa(e, edgeSoft, if (active) 62 else 26), max(1f, sn * 0.20f * sc))
+                c.drawCircle(cx, cy, outer * 0.96f, paint)
+                setup(Paint.Style.STROKE, wa(e, theme, if (active) 72 else 20), max(1f, sn * 0.50f * sc))
+                c.drawCircle(cx, cy, outer * 0.98f, paint)
+                setup(
+                    Paint.Style.STROKE,
+                    if (pointer) sa(e, theme, 235) else wa(e, theme, if (active) 235 else 205),
+                    max(1f, sn * 0.22f * sc),
+                )
+                c.drawCircle(cx, cy, innerRing, paint)
+                val t = if (pointer) touches.values.firstOrNull { it.e === e } else null
+                val tx = t?.thumbX ?: cx
+                val ty = t?.thumbY ?: cy
+                setup(Paint.Style.FILL, if (pointer) sa(e, theme, 180) else wa(e, darkSurface, 190), 0f)
+                c.drawCircle(tx, ty, thumbRadius, paint)
+                setup(
+                    Paint.Style.STROKE,
+                    if (pointer) sa(e, white, 245) else wa(e, edgeSoft, 45),
+                    max(1f, sn * 0.12f * sc),
+                )
+                c.drawCircle(tx, ty, thumbRadius * 0.96f, paint)
             }
             Element.Type.DYNAMIC_STICK -> {
-                val t = touches.values.firstOrNull { it.e === e }
                 if (editing) {
-                    paint.style = Paint.Style.STROKE; paint.strokeWidth = 2f; paint.color = withAlpha(color, 0.5f)
-                    paint.pathEffect = android.graphics.DashPathEffect(floatArrayOf(14f, 10f), 0f)
-                    c.drawRoundRect(b, 16f, 16f, paint)
-                    paint.pathEffect = null
-                    label(c, "DYNAMIC STICK", b.centerX(), b.centerY(), b.width() * 0.6f, text)
-                } else if (t != null) {
-                    val r = width * e.stickRadiusRatio
-                    rect.set(t.startX - r, t.startY - r, t.startX + r, t.startY + r)
-                    shape(rect, true, 0f)
-                    paint.style = Paint.Style.FILL; paint.color = withAlpha(color, 0.78f * a)
-                    c.drawCircle(t.thumbX, t.thumbY, r * 0.4f, paint)
+                    val corner = sn * 1.5f
+                    val sel = e === selected
+                    setup(Paint.Style.FILL, wa(e, theme, if (sel) 48 else 24), 0f)
+                    c.drawRoundRect(b, corner, corner, paint)
+                    setup(Paint.Style.STROKE, wa(e, theme, if (sel) 210 else 100), max(1f, sn * 0.15f))
+                    c.drawRoundRect(b, corner, corner, paint)
+                    centeredText(c, e, "Dynamic Stick", b.centerX(), b.centerY(), b.width() * 0.8f, sn * 1.8f, wa(e, theme, 210))
+                }
+                val t = if (pointer) touches.values.firstOrNull { it.e === e } else null
+                if (t != null) {
+                    val r = dynRadius(e)
+                    setup(Paint.Style.FILL, wa(e, darkSurface, 118), 0f)
+                    c.drawCircle(t.startX, t.startY, r, paint)
+                    setup(Paint.Style.STROKE, sa(e, theme, 225), max(1f, sn * 0.22f * sc))
+                    c.drawCircle(t.startX, t.startY, r, paint)
+                    setup(Paint.Style.FILL, sa(e, theme, 180), 0f)
+                    c.drawCircle(t.thumbX, t.thumbY, r * 0.42f, paint)
+                    setup(Paint.Style.STROKE, sa(e, white, 245), max(1f, sn * 0.12f * sc))
+                    c.drawCircle(t.thumbX, t.thumbY, r * 0.42f, paint)
                 }
             }
             Element.Type.TRACKPAD -> {
-                shape(b, false, b.width() * 0.12f)
-                label(c, e.text.ifEmpty { "PAD" }, b.centerX(), b.centerY(), b.width() * 0.6f, text)
+                softRoundRect(c, e, b.left, b.top, b.right, b.bottom, b.height() * 0.18f, active)
+                mouseGlyph(c, e, b.centerX(), b.centerY(), min(b.width(), b.height()) * 0.45f, wa(e, theme, if (active) 220 else 95))
             }
             Element.Type.RANGE_BUTTON -> {
-                shape(b, false, b.height() * 0.2f)
+                val radius = sn * 0.9f * sc
                 val n = e.bindings.size
-                val cur = touches.values.firstOrNull { it.e === e }?.cell ?: -1
+                val minText = sn * 2f * sc
+                val stroke = max(1f, sn * 0.16f * sc)
+                val cur = if (pointer) touches.values.firstOrNull { it.e === e }?.cell ?: -1 else -1
+                softRoundRect(c, e, b.left, b.top, b.right, b.bottom, radius, active)
+                c.save()
+                path.reset()
+                path.addRoundRect(b, radius, radius, Path.Direction.CW)
+                c.clipPath(path)
                 for (i in 0 until n) {
-                    val cx = if (e.orientation == 1) b.centerX() else b.left + b.width() * (i + 0.5f) / n
-                    val cy = if (e.orientation == 1) b.top + b.height() * (i + 0.5f) / n else b.centerY()
-                    val cell = if (e.orientation == 1) b.height() / n else b.width() / n
-                    if (i == cur) {
-                        paint.style = Paint.Style.FILL; paint.color = withAlpha(color, 0.6f * a)
-                        c.drawCircle(cx, cy, cell * 0.45f, paint)
+                    val vertical = e.orientation == 1
+                    val cell = if (vertical) b.height() / n else b.width() / n
+                    val cx = if (vertical) b.centerX() else b.left + cell * (i + 0.5f)
+                    val cy = if (vertical) b.top + cell * (i + 0.5f) else b.centerY()
+                    val pressed = i == cur
+                    if (pressed) {
+                        setup(Paint.Style.FILL, wa(e, theme, 150), 0f)
+                        if (vertical) c.drawRect(b.left, cy - cell * 0.5f, b.right, cy + cell * 0.5f, paint)
+                        else c.drawRect(cx - cell * 0.5f, b.top, cx + cell * 0.5f, b.bottom, paint)
                     }
-                    label(c, e.bindings[i].label, cx, cy, cell * 0.85f, text)
+                    val maxW = if (vertical) b.width() - stroke * 2 else cell - stroke * 2
+                    centeredText(c, e, rangeText(e, i), cx, cy, maxW, minText, if (pressed) white else theme)
                 }
+                c.restore()
             }
-        }
-        if (editing && e === selected) {
-            paint.style = Paint.Style.STROKE; paint.strokeWidth = 3f; paint.color = 0xFFFFD54F.toInt()
-            c.drawRoundRect(RectF(b).apply { inset(-6f, -6f) }, 10f, 10f, paint)
         }
     }
 
     private fun isDir(e: Element, i: Int): Boolean = touches.values.any { it.e === e && it.active.getOrElse(i) { false } }
 
-    private fun label(c: Canvas, text: String, cx: Float, cy: Float, maxW: Float, color: Int) {
+    /** `drawSoftRoundRect` Winlator: halo tema, tepi lembut, isi gelap/tema saat aktif, garis dalam tipis. */
+    private fun softRoundRect(c: Canvas, e: Element, l: Float, t: Float, r: Float, b: Float, radius: Float, active: Boolean) {
+        val theme = themeColor(e)
+        val sn = snap
+        val sc = e.scale
+        setup(Paint.Style.STROKE, wa(e, theme, if (active) 64 else 16), max(1f, sn * 0.55f * sc))
+        c.drawRoundRect(l, t, r, b, radius, radius, paint)
+        setup(Paint.Style.STROKE, wa(e, edgeSoft, if (active) 70 else 28), max(1f, sn * 0.22f * sc))
+        c.drawRoundRect(l, t, r, b, radius, radius, paint)
+        setup(Paint.Style.FILL, if (active) wa(e, theme, 190) else wa(e, darkSurface, 135), 0f)
+        c.drawRoundRect(l, t, r, b, radius, radius, paint)
+        val inset = max(1f, sn * 0.35f * sc)
+        val inner = max(0f, radius - inset)
+        setup(Paint.Style.STROKE, wa(e, white, if (active) 58 else 24), max(1f, sn * 0.08f * sc))
+        c.drawRoundRect(l + inset, t + inset, r - inset, b - inset, inner, inner, paint)
+    }
+
+    /** `drawSoftCircle` Winlator. */
+    private fun softCircle(c: Canvas, e: Element, cx: Float, cy: Float, radius: Float, active: Boolean, accent: Int, fillActive: Boolean) {
+        val theme = themeColor(e)
+        val sn = snap
+        val sc = e.scale
+        setup(Paint.Style.STROKE, wa(e, theme, if (active) 72 else 18), max(1f, sn * 0.55f * sc))
+        c.drawCircle(cx, cy, radius, paint)
+        setup(Paint.Style.STROKE, wa(e, edgeSoft, if (active) 74 else 30), max(1f, sn * 0.20f * sc))
+        c.drawCircle(cx, cy, radius, paint)
+        setup(Paint.Style.FILL, if (active && fillActive) wa(e, accent, 190) else wa(e, darkSurface, 140), 0f)
+        c.drawCircle(cx, cy, radius, paint)
+        setup(Paint.Style.STROKE, wa(e, white, if (active) 44 else 18), max(1f, sn * 0.08f * sc))
+        c.drawCircle(cx, cy, radius * 0.88f, paint)
+    }
+
+    /** `drawTriangle` Winlator; [dir] 0 atas, 1 kanan, 2 bawah, 3 kiri. */
+    private fun triangle(c: Canvas, cx: Float, cy: Float, size: Float, dir: Int, color: Int) {
+        path.reset()
+        when (dir) {
+            0 -> { path.moveTo(cx, cy - size); path.lineTo(cx - size * 0.85f, cy + size * 0.65f); path.lineTo(cx + size * 0.85f, cy + size * 0.65f) }
+            1 -> { path.moveTo(cx + size, cy); path.lineTo(cx - size * 0.65f, cy - size * 0.85f); path.lineTo(cx - size * 0.65f, cy + size * 0.85f) }
+            2 -> { path.moveTo(cx, cy + size); path.lineTo(cx - size * 0.85f, cy - size * 0.65f); path.lineTo(cx + size * 0.85f, cy - size * 0.65f) }
+            else -> { path.moveTo(cx - size, cy); path.lineTo(cx + size * 0.65f, cy - size * 0.85f); path.lineTo(cx + size * 0.65f, cy + size * 0.85f) }
+        }
+        path.close()
+        setup(Paint.Style.FILL, color, 0f)
+        c.drawPath(path, paint)
+    }
+
+    /** `drawDPadPiece` Winlator. */
+    private fun dpadPiece(c: Canvas, e: Element, cx: Float, cy: Float, size: Float, dir: Int, active: Boolean) {
+        softRoundRect(c, e, cx - size * 0.5f, cy - size * 0.5f, cx + size * 0.5f, cy + size * 0.5f, size * 0.28f, active)
+        triangle(c, cx, cy, size * 0.22f, dir, if (active) wa(e, white, 255) else wa(e, themeColor(e), 255))
+    }
+
+    /** `drawMouseGlyph` Winlator (lambang mouse di trackpad). */
+    private fun mouseGlyph(c: Canvas, e: Element, cx: Float, cy: Float, size: Float, color: Int) {
+        val w = size * 0.42f
+        val h = size * 0.62f
+        val r = w * 0.5f
+        setup(Paint.Style.STROKE, color, max(1f, size * 0.035f))
+        c.drawRoundRect(cx - w * 0.5f, cy - h * 0.5f, cx + w * 0.5f, cy + h * 0.5f, r, r, paint)
+        c.drawLine(cx, cy - h * 0.48f, cx, cy - h * 0.15f, paint)
+    }
+
+    /** `drawCenteredText` Winlator: ukuran pas lebar [maxW], dibatasi [maxSize], warna ikut opasitas efektif. */
+    private fun centeredText(c: Canvas, e: Element, text: String, cx: Float, cy: Float, maxW: Float, maxSize: Float, color: Int) {
         if (text.isEmpty()) return
-        paint.style = Paint.Style.FILL
-        paint.color = color
-        paint.textAlign = Paint.Align.CENTER
-        var size = snap * 2.2f
-        paint.textSize = size
+        setup(Paint.Style.FILL, wa(e, color, (color ushr 24) and 0xFF), 0f)
+        paint.textSize = 48f
         val w = paint.measureText(text)
-        if (w > maxW && w > 0f) { size *= maxW / w; paint.textSize = size }
-        c.drawText(text, cx, cy - (paint.descent() + paint.ascent()) / 2f, paint)
+        if (w <= 0f) return
+        paint.textSize = min(48f * maxW / w, maxSize)
+        c.drawText(text, cx, cy - (paint.descent() + paint.ascent()) * 0.5f, paint)
+    }
+
+    /** `getBindingTextAt` Winlator. */
+    private fun bindingText(e: Element, i: Int): String {
+        val b = e.bindings.getOrElse(i) { Binding.NONE }
+        val text = b.label.replace("NUMPAD ", "NP").replace("BUTTON ", "")
+        if (text.length > 7) {
+            val sb = StringBuilder()
+            for (part in text.split(" ")) if (part.isNotEmpty()) sb.append(part[0])
+            return (if (b.isMouse) "M" else "") + sb
+        }
+        return text
+    }
+
+    /** `getDisplayText` Winlator. */
+    private fun displayText(e: Element): String {
+        if (e.text.isNotEmpty()) return e.text
+        if (e.type == Element.Type.BUTTON) {
+            val sb = StringBuilder()
+            for (i in e.bindings.indices) {
+                if (e.bindings[i] != Binding.NONE) {
+                    if (sb.isNotEmpty()) sb.append("+")
+                    sb.append(bindingText(e, i))
+                }
+            }
+            return if (sb.isNotEmpty()) sb.toString() else bindingText(e, 0)
+        }
+        return bindingText(e, 0)
+    }
+
+    /** `getRangeTextForIndex` Winlator. */
+    private fun rangeText(e: Element, i: Int): String = when (e.range) {
+        Element.Range.FROM_A_TO_Z -> (65 + i).toChar().toString()
+        Element.Range.FROM_0_TO_9 -> ((i + 1) % 10).toString()
+        Element.Range.FROM_F1_TO_F12 -> "F${i + 1}"
+        Element.Range.FROM_NP0_TO_NP9 -> "NP${(i + 1) % 10}"
+        null -> bindingText(e, i)
     }
 
     private fun drawFab(c: Canvas) {
@@ -589,18 +763,6 @@ class ProfileControlsView(
             if (row == 1 && (col == -2 || col == 2)) continue
             c.drawCircle(cx + col * r * 0.28f, cy + row * r * 0.3f, d, paint)
         }
-    }
-
-    private fun darken(c: Int, f: Float): Int {
-        val r = ((c shr 16 and 0xFF) * f).toInt(); val g = ((c shr 8 and 0xFF) * f).toInt(); val b = ((c and 0xFF) * f).toInt()
-        return (0xFF shl 24) or (r shl 16) or (g shl 8) or b
-    }
-
-    private fun lighten(c: Int, f: Float): Int {
-        val r = ((c shr 16 and 0xFF) + (255 - (c shr 16 and 0xFF)) * f).toInt()
-        val g = ((c shr 8 and 0xFF) + (255 - (c shr 8 and 0xFF)) * f).toInt()
-        val b = ((c and 0xFF) + (255 - (c and 0xFF)) * f).toInt()
-        return (0xFF shl 24) or (r shl 16) or (g shl 8) or b
     }
 
     /** Ukuran bantu untuk editor: tinggi/lebar elemen dalam piksel layar. */
