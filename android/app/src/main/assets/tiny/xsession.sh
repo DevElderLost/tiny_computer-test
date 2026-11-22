@@ -71,6 +71,69 @@ GUARD
 fi
 echo "[tiny] xfwm4: compositor $comp_msg, vblank $vb_msg"
 
+# Penjaga wallpaper (autostart, satu bus D-Bus dengan xfconfd). Rootfs Ubuntu tanpa paket artwork Xubuntu membawa
+# setelan bawaan xfce4-desktop yang menunjuk /usr/share/xfce4/backdrops/xubuntu-wallpaper.png, padahal berkas itu tidak
+# ada. xfdesktop lalu gagal memuat gambar ("Failed to load image file ... No such file or directory") dan menggambar
+# warna latar bawaannya, yaitu hitam, ke window desktop. Itu bukan kerusakan X++: PutImage dan CopyArea wallpaper
+# sampai ke window desktop dengan benar, isinya memang hitam. Penjaga ini memeriksa setiap properti last-image dan
+# image-path di channel xfce4-desktop; bila berkasnya tidak ada, diganti gambar pertama yang ditemukan di rootfs.
+# Bila rootfs tidak punya gambar sama sekali, dipakai gradien biru tua supaya tidak hitam polos.
+# - TINY_KEEP_WALLPAPER=1: penjaga tidak dipasang (setelan lama).
+if [ "${TINY_KEEP_WALLPAPER:-0}" != 1 ]; then
+	wg="$HOME/.vnc/tiny-wallpaper-guard.sh"
+	mkdir -p "${wg%/*}" "$HOME/.config/autostart"
+	cat > "$wg" <<'WGUARD'
+#!/bin/sh
+command -v xfconf-query >/dev/null 2>&1 || exit 0
+ch=xfce4-desktop
+find_image() {
+	for d in /usr/share/backgrounds/xfce /usr/share/xfce4/backdrops /usr/share/backgrounds /usr/share/images/desktop-base /usr/share/wallpapers; do
+		[ -d "$d" ] || continue
+		f=$(find "$d" -maxdepth 3 -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \) 2>/dev/null | sort | head -n 1)
+		if [ -n "$f" ]; then printf '%s\n' "$f"; return 0; fi
+	done
+	return 1
+}
+fix_once() {
+	changed=0
+	props=$(xfconf-query -c "$ch" -l 2>/dev/null | grep -E '/(last-image|image-path)$')
+	[ -n "$props" ] || return 1
+	img=$(find_image)
+	for p in $props; do
+		v=$(xfconf-query -c "$ch" -p "$p" 2>/dev/null)
+		[ -n "$v" ] || continue
+		[ -e "$v" ] && continue
+		pre=${p%/*}
+		if [ -n "$img" ]; then
+			xfconf-query -c "$ch" -p "$p" -s "$img" 2>/dev/null && changed=1 &&
+				echo "[tiny] wallpaper: $v tidak ada, diganti $img ($p)"
+			xfconf-query -c "$ch" -p "$pre/image-style" -n -t int -s 5 2>/dev/null ||
+				xfconf-query -c "$ch" -p "$pre/image-style" -s 5 2>/dev/null
+		else
+			xfconf-query -c "$ch" -p "$pre/image-style" -n -t int -s 0 2>/dev/null ||
+				xfconf-query -c "$ch" -p "$pre/image-style" -s 0 2>/dev/null
+			xfconf-query -c "$ch" -p "$pre/color-style" -n -t int -s 2 2>/dev/null ||
+				xfconf-query -c "$ch" -p "$pre/color-style" -s 2 2>/dev/null
+			xfconf-query -c "$ch" -p "$pre/rgba1" -n -a -t double -s 0.10 -t double -s 0.17 -t double -s 0.30 -t double -s 1 2>/dev/null
+			xfconf-query -c "$ch" -p "$pre/rgba2" -n -a -t double -s 0.02 -t double -s 0.04 -t double -s 0.10 -t double -s 1 2>/dev/null
+			changed=1
+			echo "[tiny] wallpaper: $v tidak ada dan rootfs tidak punya gambar, dipakai gradien warna ($pre)"
+		fi
+	done
+	[ "$changed" = 1 ]
+}
+# xfdesktop membuat properti per-monitor sesudah jalan, jadi diperiksa beberapa kali.
+for t in 2 3 5 8 12; do
+	sleep "$t"
+	pgrep -x xfdesktop >/dev/null 2>&1 || continue
+	fix_once && break
+done
+exit 0
+WGUARD
+	printf '%s\n' '[Desktop Entry]' 'Type=Application' 'Name=Tiny wallpaper guard' "Exec=sh $wg" \
+		'OnlyShowIn=XFCE;' 'NoDisplay=true' 'X-GNOME-Autostart-enabled=true' > "$HOME/.config/autostart/tiny-wallpaper-guard.desktop"
+fi
+
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}"
 export XDG_SESSION_TYPE=x11
 export DISPLAY="${DISPLAY:-:4}"
