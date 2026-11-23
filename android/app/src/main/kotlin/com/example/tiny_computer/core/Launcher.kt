@@ -68,15 +68,35 @@ object Launcher {
      */
     @Volatile var appSessionDesktop = false
 
+    /** Mode tampilan X++, compositor xfwm4, dan mode Wayland yang dipakai sesi aplikasi yang berjalan (dipilih aplikasi pemicunya). */
+    @Volatile var appSessionBackend = Cfg.XPP_EGL
+    @Volatile var appSessionComp = false
+    @Volatile var appSessionWayland = false
+    /** Present mode dan batas FPS yang dipakai server X++ sesi aplikasi yang berjalan. */
+    @Volatile var appSessionPresent = 0
+    @Volatile var appSessionFps = 0
+
     /**
      * Apakah aplikasi Shortcut berikutnya berjalan di desktop XFCE lengkap. Desktop yang dibuka lewat Open desktop sudah punya
      * panel dan wallpaper sendiri (false: tidak ada sesi tambahan). Sesi aplikasi yang berjalan menetapkan pilihannya sendiri.
      */
-    fun shortcutDesktop(): Boolean = when {
+    fun shortcutDesktop(appId: String? = null): Boolean = when {
         guiStarted -> false
-        sessionStale() -> Cfg.shortcutDesktop
+        sessionStale(appId) -> ShortcutPrefs.desktopMode(appId)
         appSessionStarted -> appSessionDesktop
-        else -> Cfg.shortcutDesktop
+        else -> ShortcutPrefs.desktopMode(appId)
+    }
+
+    /**
+     * Mode Wayland (aplikasi SDL/Vulkan langsung ke compositor, hanya untuk sesi Xwayland) aplikasi Shortcut berikutnya.
+     * Mengikuti pilihan Display server khusus Shortcut [appId] bila ada, kalau tidak pengaturan desktop utama; desktop yang
+     * sedang berjalan dan sesi aplikasi yang sudah hidup menetapkan pilihannya sendiri.
+     */
+    fun shortcutWayland(appId: String? = null): Boolean = when {
+        guiStarted -> Cfg.desktopWayland
+        sessionStale(appId) -> ShortcutPrefs.displayServer(appId) == Cfg.DISPLAY_WAYLAND
+        appSessionStarted -> appSessionWayland
+        else -> ShortcutPrefs.displayServer(appId) == Cfg.DISPLAY_WAYLAND
     }
 
     /**
@@ -86,11 +106,11 @@ object Launcher {
      *  - selain itu: pengaturan saat ini ([Cfg.desktopXpp]), jadi X++ Vulkan/EGL/DisplayX/Old Display ([Cfg.xppBackend])
      *    dipakai juga oleh sesi baru, bukan lagi selalu Xwayland.
      */
-    fun shortcutXpp(): Boolean = when {
+    fun shortcutXpp(appId: String? = null): Boolean = when {
         guiStarted -> desktopIsXpp
-        sessionStale() -> Cfg.desktopXpp
+        sessionStale(appId) -> ShortcutPrefs.displayServer(appId) == Cfg.DISPLAY_XPP
         appSessionStarted -> appSessionXpp
-        else -> Cfg.desktopXpp
+        else -> ShortcutPrefs.displayServer(appId) == Cfg.DISPLAY_XPP
     }
 
     /**
@@ -100,8 +120,17 @@ object Launcher {
      * aplikasi berikutnya "terkunci" di server lama walau pengaturan sudah diganti. Sesi seperti ini dimulai ulang
      * oleh [launchAppLocked]. Sesi yang masih punya aplikasi berjalan tidak disentuh.
      */
-    fun sessionStale(): Boolean =
-        !guiStarted && appSessionStarted && (appSessionXpp != Cfg.desktopXpp || appSessionDesktop != Cfg.shortcutDesktop) && !appsBusy()
+    fun sessionStale(appId: String? = null): Boolean {
+        if (guiStarted || !appSessionStarted || appsBusy()) return false
+        // pengaturan desktop aplikasi yang akan dibuka ([appId], atau pengaturan utama bila null) dibandingkan dengan sesi hidup
+        val wantXpp = ShortcutPrefs.displayServer(appId) == Cfg.DISPLAY_XPP
+        return appSessionXpp != wantXpp ||
+            appSessionDesktop != ShortcutPrefs.desktopMode(appId) ||
+            (wantXpp && (appSessionBackend != ShortcutPrefs.xppBackend(appId) ||
+                appSessionPresent != ShortcutPrefs.presentMode(appId) || appSessionFps != ShortcutPrefs.fpsLimit(appId))) ||
+            (!wantXpp && appSessionWayland != (ShortcutPrefs.displayServer(appId) == Cfg.DISPLAY_WAYLAND)) ||
+            (appSessionDesktop && appSessionComp != ShortcutPrefs.compositor(appId))
+    }
 
     /** True setelah perintah Xwayland + Xsession dikirim ke kontainer yang sedang berjalan. */
     // state Compose (bukan @Volatile biasa) supaya tombol "kembali ke desktop" muncul/hilang mengikuti status desktop
@@ -836,10 +865,10 @@ export PROOT_LOADER_32=${'$'}DATA_DIR/applib/libproot-loader32.so""".trimIndent(
      * (Turnip mati). Dipakai skrip desktop X++ dan sesi desktop Shortcut; skrip aplikasi Shortcut memasangnya sendiri per
      * pilihan GPU aplikasi ([ShortcutRunner.script]).
      */
-    internal fun qtGpuEnv(): String =
-        if (Cfg.turnip && Cfg.xppQtGpu) "export QT_XCB_GL_INTEGRATION=xcb_egl QSG_RHI_BACKEND=vulkan\n" else ""
+    internal fun qtGpuEnv(on: Boolean = Cfg.xppQtGpu): String =
+        if (Cfg.turnip && on) "export QT_XCB_GL_INTEGRATION=xcb_egl QSG_RHI_BACKEND=vulkan\n" else ""
 
-    internal fun waylandSessionEnv(): String = if (Cfg.desktopWayland) {
+    internal fun waylandSessionEnv(wayland: Boolean = Cfg.desktopWayland): String = if (wayland) {
         "XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0 SDL_VIDEODRIVER=wayland,x11 " +
             "GDK_BACKEND=x11 QT_QPA_PLATFORM=xcb MOZ_ENABLE_WAYLAND=0 ELECTRON_OZONE_PLATFORM_HINT=x11 CLUTTER_BACKEND=x11 "
     } else ""
@@ -1263,16 +1292,19 @@ fi
         // Pengaturan Display server berubah sejak sesi ini dimulai dan tidak ada aplikasi yang berjalan: buang sesi lama
         // dulu supaya aplikasi ini memakai server yang dipilih sekarang, bukan server lama yang terkunci.
         val staleGone = ArrayList<Int>()
-        if (sessionStale()) {
-            LaunchLog.write(appSessionLog, "session", "Display server berubah (${if (appSessionXpp) "X++" else "Xwayland"} -> ${if (Cfg.desktopXpp) "X++" else "Xwayland"}); sesi lama dimulai ulang")
+        if (sessionStale(appId)) {
+            LaunchLog.write(appSessionLog, "session", "Pengaturan desktop untuk $appId berbeda dari sesi yang berjalan (${if (appSessionXpp) "X++" else "Xwayland"} -> ${if (ShortcutPrefs.displayServer(appId) == Cfg.DISPLAY_XPP) "X++" else "Xwayland"}); sesi lama dimulai ulang")
             staleGone += stopAppSession(graceful = true)
             waitGone(staleGone, 2500)
         }
         // Display server aplikasi ini = pengaturan Display server desktop (X++ atau Xwayland/Wayland), ditetapkan sekali di sini
-        val xpp = shortcutXpp()
+        // Pengaturan desktop (display server, mode X++, desktop penuh, compositor) bisa dipilih per Shortcut: yang berlaku
+        // adalah milik aplikasi pemicu sesi; aplikasi yang dibuka saat sesi lain hidup mengikuti sesi itu.
+        val xpp = shortcutXpp(appId)
         // Desktop XFCE lengkap (panel + wallpaper) atau sesi minimal lama; ditetapkan sekali per sesi aplikasi
-        val deskMode = shortcutDesktop()
-        val script = ShortcutRunner.prepare(ctx, appId, xpp, deskMode) ?: run {
+        val deskMode = shortcutDesktop(appId)
+        val wayland = shortcutWayland(appId)
+        val script = ShortcutRunner.prepare(ctx, appId, xpp, deskMode, wayland) ?: run {
             mainHandler.post {
                 if (appPhase == AppPhase.STARTING) appPhase = AppPhase.IDLE
                 onAppSessionEnded?.invoke(null)
@@ -1299,17 +1331,27 @@ fi
             appSessionSize = size
             val sLog = LaunchLog.begin("shortcut")
             appSessionLog = sLog
+            val backend = ShortcutPrefs.xppBackend(appId)
+            val comp = ShortcutPrefs.compositor(appId)
+            val qtGpu = ShortcutPrefs.qtGpu(appId)
+            val present = ShortcutPrefs.presentMode(appId)
+            val fps = ShortcutPrefs.fpsLimit(appId)
+            appSessionBackend = backend
+            appSessionPresent = present
+            appSessionFps = fps
+            appSessionComp = comp
+            appSessionWayland = wayland
             if (xpp) {
                 // X++ native X server dari proses aplikasi (sama dengan Open desktop): mode tampilan = Cfg.xppBackend
                 // (Vulkan, EGL, DisplayX, Old Display). Harus menyala SEBELUM proot sesi dan aplikasi: soket X4 dibuat di sini.
-                val backendName = when (Cfg.xppBackend) {
+                val backendName = when (backend) {
                     Cfg.XPP_VULKAN -> "Vulkan"
                     Cfg.XPP_DISPLAYX -> "DisplayX"
                     Cfg.XPP_OLD_DISPLAY -> "Old Display (EGL)"
                     else -> "EGL"
                 }
                 LaunchLog.write(sLog, "session", "sesi aplikasi Shortcut dimulai (X++ $backendName ${size.first}x${size.second}), dipicu oleh $appId")
-                if (!XppHost.ensureStarted(ctx, size.first, size.second)) {
+                if (!XppHost.ensureStarted(ctx, size.first, size.second, backend, present, fps)) {
                     val reason = XppHost.lastError ?: "unknown error"
                     LaunchLog.write(sLog, "session", "X++ gagal dinyalakan: $reason")
                     appSessionXpp = false
@@ -1330,7 +1372,7 @@ fi
             val withWm = deskMode || !ShortcutRunner.isWineApp(appId)
             if (!withWm) LaunchLog.write(sLog, "session", "window manager dijeda (sesi dimulai aplikasi Wine, layar penuh)")
             if (deskMode) LaunchLog.write(sLog, "session", "desktop XFCE lengkap dinyalakan; hanya $appId yang dijalankan di dalamnya")
-            val session = spawnDetached(appProotScript(ctx, ShortcutRunner.prepareSession(ctx, size, withWm, xpp, deskMode), killOnExit = true, log = sLog), "TinyAppSession")
+            val session = spawnDetached(appProotScript(ctx, ShortcutRunner.prepareSession(ctx, size, withWm, xpp, deskMode, wayland, comp, qtGpu), killOnExit = true, log = sLog), "TinyAppSession")
             appSession = session
             // Xwayland mati sendiri (crash): aplikasinya ikut putus, tutup sesi dan kembali ke Shortcut
             watch("tiny-session-wait") {
@@ -1416,6 +1458,8 @@ fi
         appSession?.let { guests += it }
         appSession = null
         appSessionDesktop = false
+        appSessionComp = false
+        appSessionWayland = false
         // Xwayland + window manager (proot sesi) tetap hidup selama fase ini: aplikasi butuh X untuk menutup jendelanya.
         if (graceful) runCatching { closeGracefully(appRoots, log) }.onFailure { Log.w("Launcher", "closeGracefully", it) }
         stopStage(2)

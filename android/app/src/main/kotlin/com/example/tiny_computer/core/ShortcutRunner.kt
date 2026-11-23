@@ -174,7 +174,7 @@ tiny_need_lib libxkbcommon-x11.so.0 libxkbcommon-x11-0
      * (pengaturan Display server desktop = X++; lihat [Launcher.shortcutXpp]): tidak ada compositor Wayland, jadi tidak ada
      * variabel Wayland, dan Turnip/Zink memakai WSI software seperti desktop X++.
      */
-    private fun script(ctx: Context, app: DesktopApps.App, s: ShortcutPrefs.Settings, id: String, xpp: Boolean, desktop: Boolean): String {
+    private fun script(ctx: Context, app: DesktopApps.App, s: ShortcutPrefs.Settings, id: String, xpp: Boolean, desktop: Boolean, wayland: Boolean): String {
         val sb = StringBuilder()
         sb.append("#!/bin/sh\n")
         sb.append("# Ditulis ulang oleh menu Shortcut Tiny Computer setiap kali aplikasi dijalankan.\n")
@@ -460,7 +460,7 @@ fi
         // Bawaan: semua aplikasi Shortcut (Linux dan .exe Wine) mendapat XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0
         // seperti Open desktop (Cfg.desktopWayland, bawaan aktif). Hanya dua variabel itu; pengaturan GPU dan env
         // buatan pengguna di bawah tetap bisa menimpanya. Tidak untuk X++ (tidak ada compositor Wayland).
-        if (Cfg.desktopWayland && !xpp) {
+        if (wayland && !xpp) {
             sb.append("if [ -S /tmp/wayland-0 ]; then export XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0; fi\n")
         }
         // grafis khusus aplikasi ini
@@ -478,9 +478,15 @@ fi
                 if (!Cfg.dri3 || xpp) sb.append("export MESA_VK_WSI_DEBUG=sw\n")
             }
         }
+        // Batas memori Vulkan khusus aplikasi ini (lapisan VK_LAYER_TINY_memlimit): menimpa Pengaturan > Batas memori. Tanpa pilihan
+        // khusus (-1) env dari pengaturan utama dibiarkan; 0 = tanpa batas (lapisan meneruskan semuanya bila batas 0).
+        if (s.vulkanMem >= 0) {
+            val layerEnv = if (s.vulkanMem > 0) VkMemLimit.envList(s.vulkanMem) else null
+            if (layerEnv != null) layerEnv.forEach { sb.append("export $it\n") } else sb.append("export TINY_VK_MEM_LIMIT_MB=0\n")
+        }
         // Qt di X++: EGL + Vulkan RHI (bukan GLX + Zink/Kopper, yang membuat jendela Qt Quick hitam karena tidak ada DRI3).
         // Hanya bila GPU Turnip dipakai aplikasi ini; env buatan pengguna di bawah bisa menimpa (mis. QT_QUICK_BACKEND=software).
-        if (xpp && turnipOn && Cfg.xppQtGpu) {
+        if (xpp && turnipOn && (ShortcutPrefs.triState(s.qtGpu) ?: Cfg.xppQtGpu)) {
             sb.append("export QT_XCB_GL_INTEGRATION=xcb_egl QSG_RHI_BACKEND=vulkan\n")
         }
         // Program Vulkan/SDL memakai WSI Wayland langsung ke compositor, bukan X11 lewat Xwayland (tanpa DRI3):
@@ -490,7 +496,7 @@ fi
         // diekspor ke seluruh guest (GTK/Qt/Firefox tetap X11 lewat GDK_BACKEND/QT_QPA_PLATFORM). vkcube/vkcubepp
         // mendapat `--wsi wayland` dari pembungkus [WsiWayland]. SDL_VIDEODRIVER tidak diatur untuk program .exe (Wine).
         // Mengikuti Display server desktop: hanya bila mode Wayland (Cfg.desktopWayland); mode Xwayland dan X++ tetap X11.
-        if (turnipOn && !xpp && Cfg.desktopWayland) {
+        if (turnipOn && !xpp && wayland) {
             val sdl = if (isWine) "" else " SDL_VIDEODRIVER=wayland"
             sb.append("if [ -S /tmp/wayland-0 ]; then export XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0$sdl; fi\n")
         }
@@ -615,7 +621,10 @@ exec sh -c "${'$'}TINY_CMD"
      * `/bin/sh <path>` di proot baru), atau null bila aplikasinya sudah tidak ada. Log ada di
      * `~/.vnc/shortcut-<id>.log`.
      */
-    fun prepare(ctx: Context, appId: String, xpp: Boolean = Launcher.shortcutXpp(), desktop: Boolean = Launcher.shortcutDesktop()): String? {
+    fun prepare(
+        ctx: Context, appId: String, xpp: Boolean = Launcher.shortcutXpp(appId), desktop: Boolean = Launcher.shortcutDesktop(appId),
+        wayland: Boolean = Launcher.shortcutWayland(appId),
+    ): String? {
         val app = DesktopApps.find(appId)
         if (app == null) {
             Log.w(TAG, "aplikasi $appId tidak ditemukan")
@@ -623,7 +632,7 @@ exec sh -c "${'$'}TINY_CMD"
         }
         WsiWayland.install() // pembungkus vkcube/vkcubepp: --wsi wayland
         val id = safe(appId)
-        write("run-$id.sh", script(ctx, app, ShortcutPrefs.get(appId), id, xpp, desktop))
+        write("run-$id.sh", script(ctx, app, ShortcutPrefs.get(appId), id, xpp, desktop, wayland))
         return "$GUEST_DIR/run-$id.sh"
     }
 
@@ -638,7 +647,9 @@ exec sh -c "${'$'}TINY_CMD"
      * mendengarkan di X4, jadi tidak ada Xwayland: soket X4 tidak dihapus, tidak menunggu compositor Wayland, tidak
      * memakai xrandr, dan proot ini hanya menjaga window manager lalu berakhir bila soket X++ hilang (server dimatikan).
      */
-    fun prepareSession(ctx: Context, size: Pair<Int, Int>, withWm: Boolean = true, xpp: Boolean = false, desktop: Boolean = false): String {
+    fun prepareSession(ctx: Context, size: Pair<Int, Int>, withWm: Boolean = true, xpp: Boolean = false, desktop: Boolean = false,
+        wayland: Boolean = false, compositor: Boolean = Cfg.xfceCompositor, qtGpu: Boolean = Cfg.xppQtGpu,
+    ): String {
         val (w, h) = size
         // [desktop] true: setelah server X menyala, sesi XFCE penuh (Xsession yang sama dengan Open desktop: xfwm4, panel, wallpaper)
         // dijalankan di DISPLAY=:4. Hanya desktopnya; aplikasi yang dipilih dijalankan terpisah ([script]) sehingga cuma satu
@@ -650,13 +661,13 @@ exec sh -c "${'$'}TINY_CMD"
             File(vnc, "desktop-failed").delete()
         }
         val xsEnv = buildString {
-            if (!xpp) append(Launcher.waylandSessionEnv())
-            if (Cfg.xfceCompositor) append("TINY_XFCE_COMPOSITOR=1 ")
+            if (!xpp) append(Launcher.waylandSessionEnv(wayland))
+            if (compositor) append("TINY_XFCE_COMPOSITOR=1 ")
             append("TINY_SHORTCUT_SESSION=1 ")
         }
         val xsGpu = if (xpp) {
             (if (Cfg.turnip) "export ${Launcher.turnipOpt(ctx)} LIBGL_KOPPER_DRI2=true MESA_VK_WSI_DEBUG=sw\n" else "") +
-                Launcher.qtGpuEnv() +
+                Launcher.qtGpuEnv(qtGpu) +
                 "export TINY_NO_WAYLAND=1 GDK_CORE_DEVICE_EVENTS=1 QT_XCB_NO_XI2=1\nunset WAYLAND_DISPLAY\n"
         } else ""
         val desktopBlock = if (!desktop) "" else """
@@ -697,7 +708,7 @@ exec sh -c "${'$'}TINY_CMD"
         // X++, xfwm4 dijalankan dengan compositor menyala seperti xfwm4 Open desktop (Launcher.guiCommandXpp memakai
         // TINY_XFCE_COMPOSITOR=1). Jejak desktop yang window-nya bisa digeser memakai compositor menyala, sedangkan xfwm4
         // Shortcut (compositor mati) tidak menanggapi klik di bingkai; ini cara menguji apakah compositor penyebabnya.
-        val wmCompArg = if (xpp && Cfg.xfceCompositor) "--compositor=on" else "--compositor=off"
+        val wmCompArg = if (xpp && compositor) "--compositor=on" else "--compositor=off"
         val wmEnv = if (xpp) {
             "unset WAYLAND_DISPLAY\nexport TINY_NO_WAYLAND=1 GDK_CORE_DEVICE_EVENTS=1 QT_XCB_NO_XI2=1\n"
         } else ""

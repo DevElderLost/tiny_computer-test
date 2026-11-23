@@ -71,6 +71,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.tiny_computer.R
 import com.example.tiny_computer.controller.ControllerEditorActivity
+import com.example.tiny_computer.controls.ControllerMode
 import com.example.tiny_computer.controls.ControlsEditorActivity
 import com.example.tiny_computer.controls.ProfileStore
 import com.example.tiny_computer.core.Cfg
@@ -333,7 +334,7 @@ private fun InputPage(state: DisplayUiState, onPadOverlayChange: (Boolean) -> Un
             })
         }
     }
-    ProfileGroup()
+    ProfileGroup(state.currentApp)
 }
 
 /**
@@ -341,9 +342,11 @@ private fun InputPage(state: DisplayUiState, onPadOverlayChange: (Boolean) -> Un
  * Manajer profil (controller eksternal, impor/ekspor) ada di Pengaturan > Controller. Disimpan di [ProfileStore]; DisplayActivity memuat ulang sendiri.
  */
 @Composable
-private fun ProfileGroup() {
+private fun ProfileGroup(app: String?) {
     val ctx = LocalContext.current
     var enabled by remember { mutableStateOf(ProfileStore.enabled(ctx)) }
+    // controller DroidDeck dinyalakan di sini atau di Pengaturan: Winlator ikut mati (ControllerMode)
+    androidx.compose.runtime.LaunchedEffect(ControllerMode.version) { enabled = ProfileStore.enabled(ctx) }
     var fab by remember { mutableStateOf(ProfileStore.floatingButton(ctx)) }
     var active by remember { mutableStateOf(ProfileStore.activeId(ctx)) }
     val profiles = remember { ProfileStore.profiles(ctx) }
@@ -351,7 +354,8 @@ private fun ProfileGroup() {
     DeckGroup(stringResource(R.string.wl_title)) {
         DrawerToggleRow(stringResource(R.string.wl_enable), enabled) {
             enabled = it
-            ProfileStore.setEnabled(ctx, it)
+            // menyalakan Winlator mematikan controller DroidDeck (global, dan pilihan DroidDeck ON milik Shortcut ini)
+            ControllerMode.enableWinlator(ctx, it, app)
         }
         if (enabled) {
             DeckChoiceRow(stringResource(R.string.wl_profile), null, profiles.map { it.id to it.name }, active) {

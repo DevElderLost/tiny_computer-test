@@ -18,6 +18,9 @@ object ShortcutPrefs {
     const val OFF = "off"
     const val GPU_SOFTWARE = "software"
     const val GPU_TURNIP = "turnip"
+    const val DISPLAY_XWAYLAND = "xwayland"
+    const val DISPLAY_WAYLAND = "wayland"
+    const val DISPLAY_XPP = "xpp"
 
     data class Settings(
         /** Nama tampilan; kosong = nama dari berkas .desktop. */
@@ -38,6 +41,26 @@ object ShortcutPrefs {
         val pad: String = DEFAULT,
         /** Ukuran layar sesi aplikasi `LEBARxTINGGI`; kosong = ikuti pengaturan global (Settings > Output resolution). */
         val screen: String = "",
+        /** Display server khusus aplikasi ini: default (ikut Settings desktop) | xwayland | wayland | xpp */
+        val display: String = DEFAULT,
+        /** Mode tampilan X++ khusus aplikasi ini: default | vulkan | egl | displayx | old */
+        val xppBackend: String = DEFAULT,
+        /** Compositor xfwm4 di desktop sesi Shortcut: default | on | off */
+        val compositor: String = DEFAULT,
+        /** Shortcut membuka desktop XFCE lengkap atau sesi minimal: default | on | off */
+        val desktopMode: String = DEFAULT,
+        /** Qt memakai EGL + Vulkan di X++: default | on | off */
+        val qtGpu: String = DEFAULT,
+        /** Batas FPS (0 = laju panel); -1 = ikut Settings. */
+        val fps: Int = -1,
+        /** Present mode layar/X++ (0 auto, 1 FIFO, 2 FIFO relaxed, 3 Mailbox, 4 Immediate); -1 = ikut Settings. */
+        val presentMode: Int = -1,
+        /** Jumlah buffer swapchain compositor Wayland (0 auto, 2, 3, 4); -1 = ikut Settings. */
+        val buffering: Int = -1,
+        /** Batas memori Vulkan compositor Wayland (MiB, 0 = tanpa batas); -1 = ikut Settings. */
+        val compositorMem: Int = -1,
+        /** Batas memori Vulkan aplikasi ini (MiB, 0 = tanpa batas); -1 = ikut Settings. */
+        val vulkanMem: Int = -1,
         val hidden: Boolean = false,
     )
 
@@ -56,6 +79,11 @@ object ShortcutPrefs {
                 name = o.optString("name"), command = o.optString("command"), args = o.optString("args"), env = o.optString("env"),
                 workDir = o.optString("workDir"), gpu = o.optString("gpu", DEFAULT), hidpi = o.optString("hidpi", DEFAULT),
                 pad = o.optString("pad", DEFAULT), screen = o.optString("screen"),
+                display = o.optString("display", DEFAULT), xppBackend = o.optString("xppBackend", DEFAULT),
+                compositor = o.optString("compositor", DEFAULT), desktopMode = o.optString("desktopMode", DEFAULT),
+                qtGpu = o.optString("qtGpu", DEFAULT),
+                fps = o.optInt("fps", -1), presentMode = o.optInt("presentMode", -1), buffering = o.optInt("buffering", -1),
+                compositorMem = o.optInt("compositorMem", -1), vulkanMem = o.optInt("vulkanMem", -1),
                 hidden = o.optBoolean("hidden", false),
             )
         }.getOrDefault(Settings())
@@ -67,6 +95,10 @@ object ShortcutPrefs {
             val o = JSONObject()
                 .put("name", s.name).put("command", s.command).put("args", s.args).put("env", s.env).put("workDir", s.workDir)
                 .put("gpu", s.gpu).put("hidpi", s.hidpi).put("pad", s.pad).put("screen", s.screen)
+                .put("display", s.display).put("xppBackend", s.xppBackend).put("compositor", s.compositor)
+                .put("desktopMode", s.desktopMode).put("qtGpu", s.qtGpu)
+                .put("fps", s.fps).put("presentMode", s.presentMode).put("buffering", s.buffering)
+                .put("compositorMem", s.compositorMem).put("vulkanMem", s.vulkanMem)
                 .put("hidden", s.hidden)
             sp.edit().putString("app.$id", o.toString()).apply()
         }
@@ -74,6 +106,40 @@ object ShortcutPrefs {
     }
 
     fun reset(id: String) = save(id, Settings())
+
+    /** on -> true, off -> false, lainnya (default) -> null. */
+    fun triState(v: String): Boolean? = when (v) { ON -> true; OFF -> false; else -> null }
+
+    /**
+     * Pengaturan desktop EFEKTIF sebuah aplikasi: pilihan khusus Shortcut bila ada, kalau tidak pengaturan desktop
+     * kontainer utama ([Cfg]). Dengan begitu pengaturan desktop bisa dibedakan per Shortcut tanpa bolak-balik ke
+     * Settings. [id] null = tanpa pilihan khusus (pengaturan utama).
+     */
+    fun displayServer(id: String?): String = when (id?.let { get(it).display }) {
+        DISPLAY_XWAYLAND -> Cfg.DISPLAY_XWAYLAND
+        DISPLAY_WAYLAND -> Cfg.DISPLAY_WAYLAND
+        DISPLAY_XPP -> Cfg.DISPLAY_XPP
+        else -> Cfg.displayServer
+    }
+
+    fun xppBackend(id: String?): Int = when (id?.let { get(it).xppBackend }) {
+        "vulkan" -> Cfg.XPP_VULKAN
+        "egl" -> Cfg.XPP_EGL
+        "displayx" -> Cfg.XPP_DISPLAYX
+        "old" -> Cfg.XPP_OLD_DISPLAY
+        else -> Cfg.xppBackend
+    }
+
+    fun compositor(id: String?): Boolean = id?.let { triState(get(it).compositor) } ?: Cfg.xfceCompositor
+    fun desktopMode(id: String?): Boolean = id?.let { triState(get(it).desktopMode) } ?: Cfg.shortcutDesktop
+    fun qtGpu(id: String?): Boolean = id?.let { triState(get(it).qtGpu) } ?: Cfg.xppQtGpu
+
+    // Present / FPS / memori: pilihan khusus Shortcut (>= 0) atau pengaturan Display dan Batas memori utama.
+    // Berlaku untuk compositor Wayland (Xwayland/Wayland) dan server X++.
+    fun fpsLimit(id: String?): Int = id?.let { get(it).fps }?.takeIf { it >= 0 } ?: Cfg.fpsLimit
+    fun presentMode(id: String?): Int = id?.let { get(it).presentMode }?.takeIf { it >= 0 } ?: Cfg.presentMode
+    fun swapBuffers(id: String?): Int = id?.let { get(it).buffering }?.takeIf { it >= 0 } ?: Cfg.swapBuffers
+    fun compositorMemMb(id: String?): Int = id?.let { get(it).compositorMem }?.takeIf { it >= 0 } ?: Cfg.compositorMemMb
 
     /** Controller di layar untuk aplikasi ini; null = ikuti pengaturan global. */
     fun padOverlay(id: String?): Boolean? {

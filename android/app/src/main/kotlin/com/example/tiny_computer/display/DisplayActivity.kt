@@ -38,6 +38,7 @@ import com.droiddeck.launcher.wayland.CompositorHost
 import com.droiddeck.launcher.wayland.HdrSupport
 import com.droiddeck.launcher.wayland.WaylandCompositor
 import com.example.tiny_computer.controls.BindingDispatcher
+import com.example.tiny_computer.controls.ControllerMode
 import com.example.tiny_computer.controls.ExternalControllerHandler
 import com.example.tiny_computer.controls.ProfileControlsView
 import com.example.tiny_computer.controls.ProfileStore
@@ -80,6 +81,8 @@ class DisplayUiState {
     var padLayoutRev by mutableStateOf(0)
     /** Controller gaya Winlator (profil) aktif: menggantikan controller layar DroidDeck. */
     var profileMode by mutableStateOf(false)
+    /** Id aplikasi Shortcut layar ini (null = desktop): menu sesi memakainya untuk pilihan controller khusus Shortcut. */
+    var currentApp: String? = null
 }
 
 /**
@@ -93,6 +96,8 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
     private var pad: PadBridge? = null
     /** Controller layar gaya Winlator (profil), pemetaan controller fisik, dan penyalur binding-nya. */
     private var profileView: ProfileControlsView? = null
+    /** Controller layar DroidDeck (View saudara); disembunyikan setiap kali controller gaya Winlator yang aktif ([ControllerMode]). */
+    private var deckControls: OnScreenControls? = null
     private var bindingDispatcher: BindingDispatcher? = null
     private var extHandler: ExternalControllerHandler? = null
     private val profilePrefsListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> runOnUiThread { applyProfileMode() } }
@@ -144,7 +149,7 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
 
     private fun decideXpp(): Boolean =
         if (currentApp == null) (if (Launcher.guiStarted) Launcher.desktopIsXpp else Cfg.desktopXpp)
-        else Launcher.shortcutXpp()
+        else Launcher.shortcutXpp(currentApp)
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -205,6 +210,7 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
             // inset poni/cutout: dikirim ulang setelah terpasang di jendela
             post { rootWindowInsets?.let { onApplyWindowInsets(it) } }
         }
+        deckControls = controls
         // controller gaya Winlator (profil): View saudara di atas layar compositor; sentuhan di luar elemen jatuh ke layar
         val dispatcher = BindingDispatcher(p)
         bindingDispatcher = dispatcher
@@ -233,9 +239,10 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
                             else Launcher.shutdownDesktop { finish() }
                         },
                         onPadOverlayChange = { on ->
-                            // aplikasi Shortcut punya pengaturan controller sendiri; desktop memakai yang global
-                            val app = currentApp
-                            if (app != null) { ShortcutPrefs.setPadOverlay(app, on) } else { Cfg.padOverlay = on }
+                            // aplikasi Shortcut punya pengaturan controller sendiri; desktop memakai yang global. Menyalakan
+                            // controller DroidDeck mematikan controller gaya Winlator (dan sebaliknya): tidak pernah keduanya.
+                            ControllerMode.enableDeck(this@DisplayActivity, currentApp, on)
+                            applyProfileMode()
                         },
                     )
                 }
@@ -259,7 +266,11 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
         currentApp = app
         pendingApp = app
         ui.appMode = app != null
-        ui.padOverlay = ShortcutPrefs.padOverlay(app) ?: Cfg.padOverlay
+        ui.currentApp = app
+        // satu controller saja: DroidDeck ATAU Winlator, ditentukan sejak awal supaya tidak ada kedipan dua controller
+        val mode = ControllerMode.resolve(this, app)
+        ui.padOverlay = mode == ControllerMode.Active.DECK
+        ui.profileMode = mode == ControllerMode.Active.WINLATOR
     }
 
     /** launchMode singleTask: ketukan Shortcut berikutnya masuk ke sini selama layar ini masih hidup. */
@@ -313,7 +324,7 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
 
     override fun onResume() {
         super.onResume()
-        ui.padOverlay = ShortcutPrefs.padOverlay(currentApp) ?: Cfg.padOverlay
+        ui.padOverlay = ControllerMode.resolve(this, currentApp) == ControllerMode.Active.DECK
         ui.padIdentity = Cfg.padIdentity
         ui.touchpad = Cfg.touchpadMode
         ui.showCursor = Cfg.showCursor
@@ -340,8 +351,13 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
      * profil berubah (ProfileStore).
      */
     private fun applyProfileMode() {
-        val on = ProfileStore.enabled(this)
+        // ControllerMode memutuskan SATU controller aktif; yang tidak terpilih disembunyikan di sini juga, supaya View
+        // controller DroidDeck tidak tertinggal tampil di bawah controller Winlator
+        val mode = ControllerMode.resolve(this, currentApp)
+        val on = mode == ControllerMode.Active.WINLATOR
         ui.profileMode = on
+        ui.padOverlay = mode == ControllerMode.Active.DECK
+        if (mode != ControllerMode.Active.DECK) deckControls?.let { it.releaseAll(); it.visibility = android.view.View.GONE }
         val view = profileView ?: return
         if (!on) {
             view.releaseAll()
@@ -427,9 +443,10 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
 
         ScreenFx.applyDisplayMode()
         WaylandCompositor.nativeSetUpscaler(Cfg.upscaler)
-        WaylandCompositor.nativeSetMemoryLimit(Cfg.compositorMemMb)
-        WaylandCompositor.nativeSetPresentMode(Cfg.presentMode)
-        WaylandCompositor.nativeSetBuffering(Cfg.swapBuffers)
+        // present mode, buffering, dan batas memori compositor: pilihan khusus aplikasi Shortcut ini (currentApp) atau pengaturan utama
+        WaylandCompositor.nativeSetMemoryLimit(ShortcutPrefs.compositorMemMb(currentApp))
+        WaylandCompositor.nativeSetPresentMode(ShortcutPrefs.presentMode(currentApp))
+        WaylandCompositor.nativeSetBuffering(ShortcutPrefs.swapBuffers(currentApp))
         if (!CompositorHost.isStarted) {
             // Gerbang HDR compositor memakai laporan Display ini; HDR hanya menyala bila diminta (Pengaturan)
             // DAN panel mendukung HDR10. HDR memakai display layer, jadi zero-copy ikut dinyalakan.
@@ -463,7 +480,7 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
         CompositorHost.startOrAttach(
             holder.surface, rt.path,
             id?.let { turnip.driverPath(it) }, id?.let { turnip.libraryName(it) },
-            applicationInfo.nativeLibraryDir, outW, outH, refresh, Cfg.fpsLimit,
+            applicationInfo.nativeLibraryDir, outW, outH, refresh, ShortcutPrefs.fpsLimit(currentApp),
         )
         // compositor hidup lebih lama dari activity dan hanya menerima ukuran awal saat pertama dinyalakan
         // (lihat CompositorHost.startOrAttach): sesi berikutnya dengan ukuran lain harus mengubahnya sendiri

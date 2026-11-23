@@ -162,10 +162,13 @@ fun WinlatorControlsGroup(onManage: () -> Unit) {
     var enabled by remember { mutableStateOf(ProfileStore.enabled(ctx)) }
     var fab by remember { mutableStateOf(ProfileStore.floatingButton(ctx)) }
     var ext by remember { mutableStateOf(ProfileStore.externalEnabled(ctx)) }
+    // controller DroidDeck dinyalakan di halaman yang sama: Winlator ikut mati (ControllerMode), saklar ini menyusul
+    androidx.compose.runtime.LaunchedEffect(ControllerMode.version) { enabled = ProfileStore.enabled(ctx) }
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         WlCard(stringResource(R.string.wl_title)) {
             WlSwitchRow(stringResource(R.string.wl_enable), stringResource(R.string.wl_enable_hint), enabled) {
-                enabled = it; ProfileStore.setEnabled(ctx, it)
+                // menyalakan Winlator mematikan controller layar DroidDeck (tidak pernah aktif bersamaan)
+                enabled = it; ControllerMode.enableWinlator(ctx, it)
             }
             if (enabled) {
                 WlSwitchRow(stringResource(R.string.wl_fab), stringResource(R.string.wl_fab_hint), fab) {

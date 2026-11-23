@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.sp
 import com.droiddeck.launcher.input.ControllerPrefs
 import com.example.tiny_computer.R
 import com.example.tiny_computer.controller.ControllerEditorActivity
+import com.example.tiny_computer.controls.ControllerMode
 import com.example.tiny_computer.controls.WinlatorControlsGroup
 import com.example.tiny_computer.controls.WinlatorControlsPage
 import com.example.tiny_computer.core.Cfg
@@ -69,6 +70,9 @@ fun ControllerScreen() {
     val land = isLandscape()
 
     fun refresh() { c = ControllerPrefs.read(ctx) }
+
+    // controller gaya Winlator dinyalakan di bawah: DroidDeck ikut mati (ControllerMode), saklar di sini menyusul
+    LaunchedEffect(ControllerMode.version) { overlay = Cfg.padOverlay }
 
     // Menggeser seekbar memanggil onChange berkali-kali; tulis ke penyimpanan setelah berhenti sejenak.
     LaunchedEffect(opacity) {
@@ -111,7 +115,9 @@ fun ControllerScreen() {
             )
         }
         DeckGroup(stringResource(R.string.tc_pad_overlay)) {
-            DeckToggleRow(stringResource(R.string.tc_pad_overlay), null, overlay) { overlay = it; Cfg.padOverlay = it }
+            DeckToggleRow(stringResource(R.string.tc_pad_overlay), stringResource(R.string.tc_pad_overlay_exclusive_hint), overlay) {
+                overlay = it; ControllerMode.enableDeck(ctx, null, it)
+            }
             DeckChoiceRow(
                 stringResource(R.string.tc_ctrl_identity), stringResource(R.string.tc_ctrl_hint),
                 listOf("xbox360" to stringResource(R.string.tc_ctrl_xbox), "deck" to stringResource(R.string.tc_ctrl_deck)),

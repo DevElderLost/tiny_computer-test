@@ -72,6 +72,9 @@ import com.example.tiny_computer.core.DesktopApps
 import com.example.tiny_computer.core.ExeShortcuts
 import com.example.tiny_computer.core.Launcher
 import com.example.tiny_computer.core.ShortcutPrefs
+import com.example.tiny_computer.core.VkMemLimit
+import com.example.tiny_computer.core.Cfg
+import com.example.tiny_computer.controls.ControllerMode
 import com.example.tiny_computer.core.ShortcutRunner
 import com.example.tiny_computer.core.Startup
 import com.example.tiny_computer.core.TinyEnv
@@ -428,8 +431,106 @@ private fun AppSettingsDialog(app: DesktopApps.App, onRemoved: () -> Unit, onSho
                         stringResource(R.string.tc_pad_overlay), null,
                         listOf(ShortcutPrefs.DEFAULT to def, ShortcutPrefs.ON to on, ShortcutPrefs.OFF to off),
                         s.pad,
-                    ) { update(s.copy(pad = it)) }
+                    ) { pick ->
+                        // DroidDeck ON mematikan controller gaya Winlator (tidak pernah aktif bersamaan)
+                        if (pick == ShortcutPrefs.ON) { ControllerMode.enableDeck(ctx, app.id, true); s = ShortcutPrefs.get(app.id) }
+                        else update(s.copy(pad = pick))
+                    }
                     DeckToggleRow(stringResource(R.string.tc_sc_hide), null, s.hidden) { update(s.copy(hidden = it)) }
+                }
+                // Pengaturan desktop khusus aplikasi ini: tidak perlu bolak-balik ke Settings desktop kontainer utama.
+                // Berlaku saat aplikasi ini memulai sesi baru; "Default" mengikuti Settings.
+                DeckGroup(stringResource(R.string.tc_sc_group_desktop), help = stringResource(R.string.tc_sc_desktop_note)) {
+                    DeckChoiceRow(
+                        stringResource(R.string.tc_ui_display_server), null,
+                        listOf(
+                            ShortcutPrefs.DEFAULT to def,
+                            ShortcutPrefs.DISPLAY_XWAYLAND to stringResource(R.string.tc_ui_display_xwayland),
+                            ShortcutPrefs.DISPLAY_WAYLAND to stringResource(R.string.tc_ui_display_wayland),
+                            ShortcutPrefs.DISPLAY_XPP to stringResource(R.string.tc_ui_display_xpp),
+                        ),
+                        s.display,
+                    ) { update(s.copy(display = it)) }
+                    if (ShortcutPrefs.displayServer(app.id) == Cfg.DISPLAY_XPP) {
+                        DeckChoiceRow(
+                            stringResource(R.string.tc_ui_xpp_backend), null,
+                            listOf(
+                                ShortcutPrefs.DEFAULT to def, "vulkan" to "Vulkan", "egl" to "EGL (OpenGL ES)",
+                                "displayx" to "DisplayX (SurfaceControl)", "old" to "Old Display (EGL)",
+                            ),
+                            s.xppBackend,
+                        ) { update(s.copy(xppBackend = it)) }
+                        DeckChoiceRow(
+                            stringResource(R.string.tc_ui_xpp_qt_gpu), null,
+                            listOf(ShortcutPrefs.DEFAULT to def, ShortcutPrefs.ON to on, ShortcutPrefs.OFF to off),
+                            s.qtGpu,
+                        ) { update(s.copy(qtGpu = it)) }
+                    }
+                    DeckChoiceRow(
+                        stringResource(R.string.tc_ui_shortcut_desktop), null,
+                        listOf(ShortcutPrefs.DEFAULT to def, ShortcutPrefs.ON to on, ShortcutPrefs.OFF to off),
+                        s.desktopMode,
+                    ) { update(s.copy(desktopMode = it)) }
+                    if (ShortcutPrefs.desktopMode(app.id)) {
+                        DeckChoiceRow(
+                            stringResource(R.string.tc_ui_xfce_compositor), null,
+                            listOf(ShortcutPrefs.DEFAULT to def, ShortcutPrefs.ON to on, ShortcutPrefs.OFF to off),
+                            s.compositor,
+                        ) { update(s.copy(compositor = it)) }
+                    }
+                }
+                // FPS, present mode, buffering, dan batas memori khusus aplikasi ini (compositor Wayland dan server X++).
+                // "Default" mengikuti Settings > Display dan Batas memori.
+                DeckGroup(stringResource(R.string.tc_sc_group_perf)) {
+                    val isXpp = ShortcutPrefs.displayServer(app.id) == Cfg.DISPLAY_XPP
+                    val fpsOpts = (listOf(0, 30, 45, 60, 90, 120, 144) + listOfNotNull(s.fps.takeIf { it >= 0 })).distinct().sorted()
+                    DeckChoiceRow(
+                        stringResource(R.string.tc_disp_fps), null,
+                        listOf(-1 to def) + fpsOpts.map { it to (if (it == 0) stringResource(R.string.tc_opt_panel_rate) else "$it FPS") },
+                        s.fps,
+                    ) { update(s.copy(fps = it)) }
+                    DeckChoiceRow(
+                        stringResource(R.string.tc_disp_vsync), stringResource(R.string.tc_disp_vsync_hint),
+                        listOf(
+                            -1 to def,
+                            0 to stringResource(R.string.tc_vsync_auto),
+                            1 to stringResource(R.string.tc_vsync_fifo),
+                            2 to stringResource(R.string.tc_vsync_fifo_relaxed),
+                            3 to stringResource(R.string.tc_vsync_mailbox),
+                            4 to stringResource(R.string.tc_vsync_immediate),
+                        ),
+                        s.presentMode,
+                    ) { update(s.copy(presentMode = it)) }
+                    @Composable
+                    fun memLabel(mb: Int): String = when {
+                        mb <= 0 -> stringResource(R.string.tc_mem_unlimited)
+                        mb < 1024 -> stringResource(R.string.tc_mem_mb, mb)
+                        else -> stringResource(R.string.tc_mem_gb, mb / 1024)
+                    }
+                    // buffering swapchain dan memori compositor hanya ada di compositor Wayland (Xwayland/Wayland), bukan X++
+                    if (!isXpp) {
+                        DeckChoiceRow(
+                            stringResource(R.string.tc_disp_buffering), stringResource(R.string.tc_disp_buffering_hint),
+                            listOf(
+                                -1 to def,
+                                0 to stringResource(R.string.tc_vsync_auto),
+                                2 to stringResource(R.string.tc_buffering_double),
+                                3 to stringResource(R.string.tc_buffering_triple),
+                                4 to stringResource(R.string.tc_buffering_quad),
+                            ),
+                            s.buffering,
+                        ) { update(s.copy(buffering = it)) }
+                        DeckChoiceRow(
+                            stringResource(R.string.tc_mem_compositor), stringResource(R.string.tc_mem_compositor_hint),
+                            listOf(-1 to def) + VkMemLimit.STEPS.map { it to memLabel(it) },
+                            s.compositorMem,
+                        ) { update(s.copy(compositorMem = it)) }
+                    }
+                    DeckChoiceRow(
+                        stringResource(R.string.tc_mem_vulkan), stringResource(R.string.tc_mem_vulkan_hint),
+                        listOf(-1 to def) + VkMemLimit.STEPS.map { it to memLabel(it) },
+                        s.vulkanMem,
+                    ) { update(s.copy(vulkanMem = it)) }
                 }
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     DeckButton(stringResource(R.string.tc_sc_reset), Modifier.weight(1f), primary = false) {

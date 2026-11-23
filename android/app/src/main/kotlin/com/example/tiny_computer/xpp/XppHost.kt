@@ -40,6 +40,8 @@ object XppHost {
     private var height = 0
     private var backend = NativeX11.BACKEND_EGL
     private var presentMode = 2
+    /** Batas FPS khusus sesi Shortcut yang menyalakan server ini; null = [Cfg.fpsLimit]. */
+    @Volatile private var fpsLimitOverride: Int? = null
     private var boundSocket: String? = null
     private var surface: Surface? = null
     private var refreshHz = 60f
@@ -85,17 +87,23 @@ object XppHost {
      * saat desktop belum berjalan ([com.example.tiny_computer.core.Launcher.launchGuiBackend]), jadi tidak ada klien yang terputus.
      * Mengembalikan false (dan mengisi [lastError]) bila gagal.
      */
-    fun ensureStarted(ctx: Context, w: Int, h: Int): Boolean = synchronized(lock) {
+    fun ensureStarted(
+        ctx: Context, w: Int, h: Int, backendOverride: Int? = null, presentOverride: Int? = null, fpsOverride: Int? = null,
+    ): Boolean = synchronized(lock) {
         val sock = socketFile()
+        // batas FPS sesi ini: pilihan khusus Shortcut atau Display > FPS; null (Open desktop) mengembalikan ke pengaturan utama
+        fpsLimitOverride = fpsOverride
+        // mode tampilan: pilihan khusus sebuah Shortcut ([backendOverride]) atau pengaturan desktop utama
+        val backendKey = backendOverride ?: Cfg.xppBackend
         // Vulkan -> backend 0, DisplayX -> 2; EGL dan Old Display -> EGL (Old Display pada X++ = EGL native, seperti Winlator).
-        val wantBackend = when (Cfg.xppBackend) {
+        val wantBackend = when (backendKey) {
             Cfg.XPP_VULKAN -> NativeX11.BACKEND_VULKAN
             Cfg.XPP_DISPLAYX -> NativeX11.BACKEND_DISPLAYX
             else -> NativeX11.BACKEND_EGL
         }
         // Present mode memakai setelan Display > VSync / present mode ([Cfg.presentMode]) yang sama dengan compositor Wayland,
         // dipetakan ke VkPresentModeKHR: 0 IMMEDIATE, 1 MAILBOX, 2 FIFO, 3 FIFO_RELAXED. Hanya dipakai backend Vulkan.
-        val wantPresent = if (wantBackend == NativeX11.BACKEND_VULKAN) vkPresentMode(Cfg.presentMode) else 2
+        val wantPresent = if (wantBackend == NativeX11.BACKEND_VULKAN) vkPresentMode(presentOverride ?: Cfg.presentMode) else 2
         if (handle != 0L && width == w && height == h && backend == wantBackend && presentMode == wantPresent &&
             boundSocket == sock.absolutePath) {
             return true
@@ -132,7 +140,7 @@ object XppHost {
             curY = h / 2
             applyOptionsLocked(ctx)
             surface?.let { NativeX11.nativeSurface(h0, it) }
-            val backendName = when (Cfg.xppBackend) {
+            val backendName = when (backendKey) {
                 Cfg.XPP_VULKAN -> "Vulkan (${vkPresentName(wantPresent)})"
                 Cfg.XPP_DISPLAYX -> "DisplayX"
                 Cfg.XPP_OLD_DISPLAY -> "Old Display (EGL)"
@@ -173,7 +181,7 @@ object XppHost {
         val soft = fit == Cfg.FIT_SOFT && backend != NativeX11.BACKEND_DISPLAYX
         // DisplayX menggambar Stretch biasa; beri tahu DisplayFit agar sentuhan/kursor tidak memakai kurva warp.
         DisplayFit.softSupported = backend != NativeX11.BACKEND_DISPLAYX
-        NativeX11.nativeOptions(handle, fit != Cfg.FIT_FIT, true, Cfg.fpsLimit, refreshHz)
+        NativeX11.nativeOptions(handle, fit != Cfg.FIT_FIT, true, fpsLimitOverride ?: Cfg.fpsLimit, refreshHz)
         // Cfg.upscaler: 2 = Nearest. Filter lain memakai bilinear (0 = linear, 1 = nearest di semua backend); efek lain milik
         // compositor Wayland tidak ada di server ini. Parameter stretch: 0 = Fit/Stretch biasa, 1 = Soft Stretch.
         NativeX11.nativeVisualOptions(handle, if (Cfg.upscaler == 2) 1 else 0, 0, if (soft) 1 else 0, 0.5f, false, null, 2, -1, 70, refreshHz, 0)
