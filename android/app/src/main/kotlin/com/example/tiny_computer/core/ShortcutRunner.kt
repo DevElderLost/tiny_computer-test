@@ -18,6 +18,41 @@ object ShortcutRunner {
     private const val GUEST_DIR = "/home/tiny/.local/share/tiny/shortcuts"
     private const val SESSION_SCRIPT = "app-session.sh"
 
+    /**
+     * Sound mode khusus aplikasi: PulseAudio atau ALSA langsung ke suara Android (plugin tinyaudio -> AAudio), apa pun mode
+     * global Direct audio. ALSA di guest mengikuti /etc/asound.conf dan ~/.asoundrc yang dibaca lewat alsa.conf sistem; skrip
+     * membuat salinan alsa.conf yang mengalihkan dua berkas itu ke konfigurasi mode ini lalu menunjuknya dengan ALSA_CONFIG_PATH.
+     * Hanya proses aplikasi ini yang terpengaruh (asound.conf global dan aplikasi lain tidak disentuh). Bila alsa.conf sistem tidak
+     * bisa dialihkan, hanya variabel lingkungan (SDL dan Pulse) yang dipasang.
+     */
+    private fun soundEnv(mode: String): String {
+        val direct = when (mode) {
+            ShortcutPrefs.SOUND_ALSA -> true
+            ShortcutPrefs.SOUND_PULSE -> false
+            else -> return ""
+        }
+        if (direct && !Launcher.directAudioAvailable()) return ""
+        val name = if (direct) "direct" else "pulse"
+        val conf = if (direct) Launcher.asoundConf() else "pcm.!default {\n    type pulse\n}\nctl.!default {\n    type pulse\n}\n"
+        val env = if (direct) "export SDL_AUDIODRIVER=alsa SDL_AUDIO_DRIVER=alsa AUDIODRIVER=alsa\n"
+        else "export PULSE_SERVER=tcp:127.0.0.1:${Cfg.defaultAudioPort} SDL_AUDIODRIVER=pulseaudio SDL_AUDIO_DRIVER=pulseaudio AUDIODRIVER=pulseaudio\n"
+        return """
+tiny_snd=/tmp/.tiny-alsa
+mkdir -p "${'$'}tiny_snd" 2>/dev/null
+cat > "${'$'}tiny_snd/$name.conf" <<'TINY_ALSA_EOF'
+$conf
+TINY_ALSA_EOF
+tiny_base=""
+for f in /usr/share/alsa/alsa.conf /usr/local/share/alsa/alsa.conf; do [ -r "${'$'}f" ] && { tiny_base="${'$'}f"; break; }; done
+if [ -n "${'$'}tiny_base" ] && sed -e "s#\"/etc/asound.conf\"#\"${'$'}tiny_snd/$name.conf\"#" -e 's#"~/.asoundrc"#"/dev/null"#' "${'$'}tiny_base" > "${'$'}tiny_snd/alsa-$name.conf" && grep -q "${'$'}tiny_snd/$name.conf" "${'$'}tiny_snd/alsa-$name.conf"; then
+  export ALSA_CONFIG_PATH="${'$'}tiny_snd/alsa-$name.conf"
+  echo "[tiny] sound mode $name: ALSA_CONFIG_PATH=${'$'}ALSA_CONFIG_PATH"
+else
+  echo "[tiny] sound mode $name: alsa.conf sistem tidak bisa dialihkan; hanya variabel lingkungan yang dipakai"
+fi
+""".trimStart() + env
+    }
+
     /** Berkas (di ~/.vnc guest) yang ditulis skrip aplikasi setelah desktop sesi Shortcut siap; dihapus Launcher sebelum peluncuran. */
     const val DESKTOP_READY_FILE = "shortcut-desktop-ready"
 
@@ -478,6 +513,7 @@ fi
                 if (!Cfg.dri3 || xpp) sb.append("export MESA_VK_WSI_DEBUG=sw\n")
             }
         }
+        sb.append(soundEnv(s.sound))
         // Batas memori Vulkan khusus aplikasi ini (lapisan VK_LAYER_TINY_memlimit): menimpa Pengaturan > Batas memori. Tanpa pilihan
         // khusus (-1) env dari pengaturan utama dibiarkan; 0 = tanpa batas (lapisan meneruskan semuanya bila batas 0).
         if (s.vulkanMem >= 0) {

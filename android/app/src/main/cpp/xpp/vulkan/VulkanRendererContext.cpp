@@ -562,6 +562,8 @@ void VulkanRendererContext::createSwapchain() {
     const bool wantsFrameGen = frameGenRequested && frameGenerationDeviceSupported() && frameGenSurfaceSupported;
 
     uint32_t imgCount=caps.minImageCount+1;
+    // Buffering pilihan pengguna (2 double, 3 triple, 4 quad); tidak boleh di bawah minImageCount perangkat
+    if (desiredBufferCount>0) imgCount=std::max<uint32_t>(caps.minImageCount,(uint32_t)desiredBufferCount);
     if (caps.maxImageCount>0&&imgCount>caps.maxImageCount) imgCount=caps.maxImageCount;
 
     uint32_t pmCount=0;
@@ -1140,7 +1142,7 @@ void VulkanRendererContext::destroyFrameGenTargets() {
         if (target.image != VK_NULL_HANDLE)
             vk_.DestroyImage(device, target.image, nullptr);
         if (target.memory != VK_NULL_HANDLE)
-            vk_.FreeMemory(device, target.memory, nullptr);
+            freeMem(target.memory);
     }
     frameGenTargets.clear();
     frameGenPrepared = false;
@@ -1303,7 +1305,7 @@ void VulkanRendererContext::createBuffer(VkDeviceSize sz, VkBufferUsageFlags usa
     if (vk_.CreateBuffer(device,&bi,nullptr,&buf)!=VK_SUCCESS) throw std::runtime_error("buffer");
     VkMemoryRequirements req; vk_.GetBufferMemoryRequirements(device,buf,&req);
     VkMemoryAllocateInfo ai{}; ai.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO; ai.allocationSize=req.size; ai.memoryTypeIndex=findMemType(req.memoryTypeBits,props);
-    if (vk_.AllocateMemory(device,&ai,nullptr,&mem)!=VK_SUCCESS) throw std::runtime_error("bufmem");
+    if (allocMem(&ai,&mem,false)!=VK_SUCCESS) throw std::runtime_error("bufmem");
     vk_.BindBufferMemory(device,buf,mem,0);
 }
 
@@ -1342,7 +1344,7 @@ bool VulkanRendererContext::createWinTexResources(WinTex& wt, int w, int h) {
     if (vk_.CreateImage(device,&ii,nullptr,&wt.img)!=VK_SUCCESS) return false;
     VkMemoryRequirements req; vk_.GetImageMemoryRequirements(device,wt.img,&req);
     VkMemoryAllocateInfo ai{}; ai.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO; ai.allocationSize=req.size; ai.memoryTypeIndex=findMemType(req.memoryTypeBits,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-    if (vk_.AllocateMemory(device,&ai,nullptr,&wt.mem)!=VK_SUCCESS){vk_.DestroyImage(device,wt.img,nullptr);wt.img=VK_NULL_HANDLE;return false;}
+    if (allocMem(&ai,&wt.mem,true)!=VK_SUCCESS){vk_.DestroyImage(device,wt.img,nullptr);wt.img=VK_NULL_HANDLE;return false;}
     vk_.BindImageMemory(device,wt.img,wt.mem,0);
     VkImageViewCreateInfo vi{}; vi.sType=VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO; vi.image=wt.img; vi.viewType=VK_IMAGE_VIEW_TYPE_2D; vi.format=VK_FORMAT_B8G8R8A8_UNORM; vi.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};
     vi.components={swapRB?VK_COMPONENT_SWIZZLE_B:VK_COMPONENT_SWIZZLE_IDENTITY,VK_COMPONENT_SWIZZLE_IDENTITY,swapRB?VK_COMPONENT_SWIZZLE_R:VK_COMPONENT_SWIZZLE_IDENTITY,VK_COMPONENT_SWIZZLE_IDENTITY};
@@ -1486,7 +1488,7 @@ void VulkanRendererContext::ensureCursorTex(short w, short h) {
     vk_.CreateImage(device,&ii,nullptr,&cursorImg);
     VkMemoryRequirements req; vk_.GetImageMemoryRequirements(device,cursorImg,&req);
     VkMemoryAllocateInfo ai{}; ai.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO; ai.allocationSize=req.size; ai.memoryTypeIndex=findMemType(req.memoryTypeBits,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-    vk_.AllocateMemory(device,&ai,nullptr,&cursorMem); vk_.BindImageMemory(device,cursorImg,cursorMem,0);
+    allocMem(&ai,&cursorMem,false); vk_.BindImageMemory(device,cursorImg,cursorMem,0);
     VkImageViewCreateInfo vi{}; vi.sType=VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO; vi.image=cursorImg; vi.viewType=VK_IMAGE_VIEW_TYPE_2D; vi.format=VK_FORMAT_B8G8R8A8_UNORM; vi.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};
     vk_.CreateImageView(device,&vi,nullptr,&cursorView);
     VkDescriptorImageInfo dii{}; dii.imageLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL; dii.imageView=cursorView; dii.sampler=sampler;
@@ -1502,11 +1504,11 @@ void VulkanRendererContext::cleanupCursorTex() {
 #endif
     if (cursorView!=VK_NULL_HANDLE){vk_.DestroyImageView(device,cursorView,nullptr);cursorView=VK_NULL_HANDLE;}
     if (cursorImg!=VK_NULL_HANDLE){vk_.DestroyImage(device,cursorImg,nullptr);cursorImg=VK_NULL_HANDLE;}
-    if (cursorMem!=VK_NULL_HANDLE){vk_.FreeMemory(device,cursorMem,nullptr);cursorMem=VK_NULL_HANDLE;}
+    if (cursorMem!=VK_NULL_HANDLE){freeMem(cursorMem);cursorMem=VK_NULL_HANDLE;}
     for (uint32_t slot=0; slot<MAX_FRAMES_IN_FLIGHT; ++slot) {
         if (cursorStg[slot]!=VK_NULL_HANDLE) {
             vk_.DestroyBuffer(device,cursorStg[slot],nullptr);
-            vk_.FreeMemory(device,cursorStgM[slot],nullptr);
+            freeMem(cursorStgM[slot]);
             cursorStg[slot]=VK_NULL_HANDLE; cursorStgM[slot]=VK_NULL_HANDLE;
             cursorStgP[slot]=nullptr; cursorStgC[slot]=0;
         }
@@ -1518,7 +1520,7 @@ void VulkanRendererContext::ensureCursorStaging(VkDeviceSize sz, uint32_t slot) 
     if (cursorStgC[slot]>=sz) return;
     if (cursorStg[slot]!=VK_NULL_HANDLE) {
         vk_.DestroyBuffer(device,cursorStg[slot],nullptr);
-        vk_.FreeMemory(device,cursorStgM[slot],nullptr);
+        freeMem(cursorStgM[slot]);
     }
     createBuffer(sz,VK_BUFFER_USAGE_TRANSFER_SRC_BIT,VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,cursorStg[slot],cursorStgM[slot]);
     vk_.MapMemory(device,cursorStgM[slot],0,sz,0,&cursorStgP[slot]); cursorStgC[slot]=sz;
@@ -1758,8 +1760,8 @@ void VulkanRendererContext::destroyTexNow(RetiredTex& retired) {
     if (wt.ds  !=VK_NULL_HANDLE) vk_.FreeDescriptorSets(device,winTexPool,1,&wt.ds);
     if (wt.view!=VK_NULL_HANDLE) vk_.DestroyImageView(device,wt.view,nullptr);
     if (wt.img !=VK_NULL_HANDLE) vk_.DestroyImage(device,wt.img,nullptr);
-    if (wt.mem !=VK_NULL_HANDLE) vk_.FreeMemory(device,wt.mem,nullptr);
-    if (wt.stg !=VK_NULL_HANDLE){vk_.DestroyBuffer(device,wt.stg,nullptr);vk_.FreeMemory(device,wt.stgMem,nullptr);}
+    if (wt.mem !=VK_NULL_HANDLE) freeMem(wt.mem);
+    if (wt.stg !=VK_NULL_HANDLE){vk_.DestroyBuffer(device,wt.stg,nullptr);freeMem(wt.stgMem);}
     if (retired.ahb) AHardwareBuffer_release(retired.ahb);
 }
 
@@ -2675,7 +2677,7 @@ void VulkanRendererContext::cleanupAllAHBCache() {
         if (wt.ds   != VK_NULL_HANDLE) vk_.FreeDescriptorSets(device, winTexPool, 1, &wt.ds);
         if (wt.view != VK_NULL_HANDLE) vk_.DestroyImageView(device, wt.view, nullptr);
         if (wt.img  != VK_NULL_HANDLE) vk_.DestroyImage(device, wt.img, nullptr);
-        if (wt.mem  != VK_NULL_HANDLE) vk_.FreeMemory(device, wt.mem, nullptr);
+        if (wt.mem  != VK_NULL_HANDLE) freeMem(wt.mem);
         AHardwareBuffer_release(ahb);
     }
     ahbImportCache.clear(); windowAhbs.clear();
@@ -2756,6 +2758,51 @@ void VulkanRendererContext::setSwapRB(bool enabled) {
     if (swapRB == enabled) return;
     swapRB = enabled;
     RLOG("setSwapRB: %d", (int)swapRB);
+}
+
+void VulkanRendererContext::setBufferCount(int count) {
+    const int target = (count >= 2 && count <= 8) ? count : 0;
+    if (desiredBufferCount == target) return;
+    RLOG("setBufferCount: %d -> %d",desiredBufferCount,target);
+    desiredBufferCount = target;
+    fbResized.store(true); dirtyCV.notify_one();   // swapchain dibangun ulang dengan jumlah gambar baru
+}
+
+void VulkanRendererContext::setMemoryLimitMb(int mb) {
+    const uint64_t bytes = mb > 0 ? (uint64_t)mb * 1048576ULL : 0;
+    memLimitBytes.store(bytes, std::memory_order_relaxed);
+    RLOG("setMemoryLimitMb: %d MiB (%s)",mb,bytes?"aktif":"tanpa batas");
+}
+
+// Alokasi memori renderer dengan anggaran. [enforce] false = tetap dihitung tetapi tidak pernah ditolak (staging, kursor:
+// kegagalannya tidak ditangani pemanggil). Tekstur jendela memakai enforce=true: gagal berarti jendela itu tidak digambar.
+VkResult VulkanRendererContext::allocMem(const VkMemoryAllocateInfo* info, VkDeviceMemory* mem, bool enforce) {
+    const uint64_t limit = memLimitBytes.load(std::memory_order_relaxed);
+    if (enforce && limit) {
+        std::lock_guard<std::mutex> lock(memBudgetMutex);
+        if ((uint64_t)memUsed + info->allocationSize > limit) {
+            RLOG("memlimit: alokasi %llu byte ditolak (terpakai %llu, batas %llu)",
+                 (unsigned long long)info->allocationSize,(unsigned long long)memUsed,(unsigned long long)limit);
+            return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+        }
+    }
+    const VkResult result = vk_.AllocateMemory(device, info, nullptr, mem);
+    if (result == VK_SUCCESS) {
+        std::lock_guard<std::mutex> lock(memBudgetMutex);
+        memSizes[*mem] = info->allocationSize;
+        memUsed += info->allocationSize;
+    }
+    return result;
+}
+
+void VulkanRendererContext::freeMem(VkDeviceMemory mem) {
+    if (mem == VK_NULL_HANDLE) return;
+    {
+        std::lock_guard<std::mutex> lock(memBudgetMutex);
+        auto it = memSizes.find(mem);
+        if (it != memSizes.end()) { memUsed -= it->second; memSizes.erase(it); }   // memori impor tidak pernah masuk tabel
+    }
+    vk_.FreeMemory(device, mem, nullptr);
 }
 
 void VulkanRendererContext::setPresentMode(VkPresentModeKHR mode) {

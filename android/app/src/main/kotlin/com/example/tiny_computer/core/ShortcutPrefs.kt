@@ -21,6 +21,8 @@ object ShortcutPrefs {
     const val DISPLAY_XWAYLAND = "xwayland"
     const val DISPLAY_WAYLAND = "wayland"
     const val DISPLAY_XPP = "xpp"
+    const val SOUND_PULSE = "pulse"
+    const val SOUND_ALSA = "alsa"
 
     data class Settings(
         /** Nama tampilan; kosong = nama dari berkas .desktop. */
@@ -61,6 +63,8 @@ object ShortcutPrefs {
         val compositorMem: Int = -1,
         /** Batas memori Vulkan aplikasi ini (MiB, 0 = tanpa batas); -1 = ikut Settings. */
         val vulkanMem: Int = -1,
+        /** Sound mode khusus aplikasi ini: default (ikut Settings) | pulse (PulseAudio) | alsa (ALSA langsung ke suara Android). */
+        val sound: String = DEFAULT,
         val hidden: Boolean = false,
     )
 
@@ -84,6 +88,7 @@ object ShortcutPrefs {
                 qtGpu = o.optString("qtGpu", DEFAULT),
                 fps = o.optInt("fps", -1), presentMode = o.optInt("presentMode", -1), buffering = o.optInt("buffering", -1),
                 compositorMem = o.optInt("compositorMem", -1), vulkanMem = o.optInt("vulkanMem", -1),
+                sound = o.optString("sound", DEFAULT),
                 hidden = o.optBoolean("hidden", false),
             )
         }.getOrDefault(Settings())
@@ -98,7 +103,7 @@ object ShortcutPrefs {
                 .put("display", s.display).put("xppBackend", s.xppBackend).put("compositor", s.compositor)
                 .put("desktopMode", s.desktopMode).put("qtGpu", s.qtGpu)
                 .put("fps", s.fps).put("presentMode", s.presentMode).put("buffering", s.buffering)
-                .put("compositorMem", s.compositorMem).put("vulkanMem", s.vulkanMem)
+                .put("compositorMem", s.compositorMem).put("vulkanMem", s.vulkanMem).put("sound", s.sound)
                 .put("hidden", s.hidden)
             sp.edit().putString("app.$id", o.toString()).apply()
         }

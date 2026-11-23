@@ -507,8 +507,8 @@ private fun AppSettingsDialog(app: DesktopApps.App, onRemoved: () -> Unit, onSho
                         mb < 1024 -> stringResource(R.string.tc_mem_mb, mb)
                         else -> stringResource(R.string.tc_mem_gb, mb / 1024)
                     }
-                    // buffering swapchain dan memori compositor hanya ada di compositor Wayland (Xwayland/Wayland), bukan X++
-                    if (!isXpp) {
+                    // buffering swapchain dan memori compositor: compositor Wayland (Xwayland/Wayland) dan X++ backend Vulkan
+                    if (!isXpp || ShortcutPrefs.xppBackend(app.id) == Cfg.XPP_VULKAN) {
                         DeckChoiceRow(
                             stringResource(R.string.tc_disp_buffering), stringResource(R.string.tc_disp_buffering_hint),
                             listOf(
@@ -531,6 +531,18 @@ private fun AppSettingsDialog(app: DesktopApps.App, onRemoved: () -> Unit, onSho
                         listOf(-1 to def) + VkMemLimit.STEPS.map { it to memLabel(it) },
                         s.vulkanMem,
                     ) { update(s.copy(vulkanMem = it)) }
+                }
+                // Sound mode khusus aplikasi ini: tidak mengubah mode audio global dan aplikasi lain.
+                DeckGroup(stringResource(R.string.tc_group_audio), help = stringResource(R.string.tc_sc_sound_hint)) {
+                    DeckChoiceRow(
+                        stringResource(R.string.tc_sc_sound_mode), null,
+                        listOf(
+                            ShortcutPrefs.DEFAULT to def,
+                            ShortcutPrefs.SOUND_PULSE to stringResource(R.string.tc_sc_sound_pulse),
+                            ShortcutPrefs.SOUND_ALSA to stringResource(R.string.tc_sc_sound_alsa),
+                        ),
+                        s.sound,
+                    ) { update(s.copy(sound = it)) }
                 }
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     DeckButton(stringResource(R.string.tc_sc_reset), Modifier.weight(1f), primary = false) {

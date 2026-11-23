@@ -411,6 +411,10 @@
     <string name="tc_ui_shortcut_desktop_hint">An app started from Shortcut runs inside the XFCE desktop (wallpaper, panel, window manager) instead of a single window on a black screen. Only the chosen app is started; the desktop closes when the app exits. Turn off for the old minimal session. Applies on the next Shortcut session.</string>
     <string name="tc_pad_overlay_exclusive_hint">Turns off Winlator-style controls: only one on-screen controller can be active at a time.</string>
     <string name="tc_sc_group_desktop">Desktop settings</string>
+    <string name="tc_sc_sound_mode">Sound mode</string>
+    <string name="tc_sc_sound_pulse">PulseAudio</string>
+    <string name="tc_sc_sound_alsa">ALSA direct (Android sound)</string>
+    <string name="tc_sc_sound_hint">Only this app is affected; it applies on its next launch. PulseAudio: the app uses the PulseAudio protocol (ALSA and SDL are routed to it). ALSA direct: ALSA plays straight to Android (AAudio) through the tinyaudio plugin. Default follows Settings &gt; Audio.</string>
     <string name="tc_sc_group_perf">Display &amp; memory</string>
     <string name="tc_sc_desktop_note">Overrides the main desktop settings for this app only, so you do not have to switch back to the desktop settings. Default follows Settings. Applies when this app starts a new session; an app opened while another session is running uses that session.</string>
     <string name="tc_ui_xpp_qt_gpu">Qt apps: EGL + Vulkan on X++</string>

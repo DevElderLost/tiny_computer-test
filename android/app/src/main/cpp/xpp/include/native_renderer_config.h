@@ -28,5 +28,8 @@ struct NativeRendererConfig {
     std::string driverPath, libraryName, nativeLibDir;
     bool swapRB = false;
     int presentMode = 2; // VK_PRESENT_MODE_FIFO_KHR
+    // Jumlah gambar swapchain Vulkan (2 double, 3 triple, 4 quad; 0 = otomatis: minImageCount + 1) dan batas memori Vulkan
+    // renderer (MiB; 0 = tanpa batas). Hanya backend Vulkan; dikirim lewat bit flags JNI (lihat nativeCreate).
+    int bufferCount = 0, memLimitMb = 0;
 };
 }

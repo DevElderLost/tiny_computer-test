@@ -46,6 +46,8 @@ public:
             }
             context->setPresentMode(static_cast<VkPresentModeKHR>(rendererConfig.presentMode));
             context->setSwapRB(rendererConfig.swapRB);
+            context->setMemoryLimitMb(rendererConfig.memLimitMb);
+            context->setBufferCount(rendererConfig.bufferCount);
         } else {
             if (!context->surfaceDetached.load()) context->detachSurface();
             bool attached = context->reattachSurface(window);

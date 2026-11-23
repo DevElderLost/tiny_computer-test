@@ -75,6 +75,8 @@ object Launcher {
     /** Present mode dan batas FPS yang dipakai server X++ sesi aplikasi yang berjalan. */
     @Volatile var appSessionPresent = 0
     @Volatile var appSessionFps = 0
+    @Volatile var appSessionBuffers = 0
+    @Volatile var appSessionMem = 0
 
     /**
      * Apakah aplikasi Shortcut berikutnya berjalan di desktop XFCE lengkap. Desktop yang dibuka lewat Open desktop sudah punya
@@ -127,7 +129,8 @@ object Launcher {
         return appSessionXpp != wantXpp ||
             appSessionDesktop != ShortcutPrefs.desktopMode(appId) ||
             (wantXpp && (appSessionBackend != ShortcutPrefs.xppBackend(appId) ||
-                appSessionPresent != ShortcutPrefs.presentMode(appId) || appSessionFps != ShortcutPrefs.fpsLimit(appId))) ||
+                appSessionPresent != ShortcutPrefs.presentMode(appId) || appSessionFps != ShortcutPrefs.fpsLimit(appId) ||
+                appSessionBuffers != ShortcutPrefs.swapBuffers(appId) || appSessionMem != ShortcutPrefs.compositorMemMb(appId))) ||
             (!wantXpp && appSessionWayland != (ShortcutPrefs.displayServer(appId) == Cfg.DISPLAY_WAYLAND)) ||
             (appSessionDesktop && appSessionComp != ShortcutPrefs.compositor(appId))
     }
@@ -467,9 +470,11 @@ object Launcher {
      * tanpa PulseAudio. Aktif bila toggle menyala dan plugin ada di folder extra (dibangun CI); selain itu
      * jalur lama (pulseaudio + OpenSL ES) dipakai seperti biasa.
      */
-    fun directAudioActive(): Boolean =
-        Cfg.directAudio && TinyAudio.available &&
-            File(TinyEnv.dataPath, "tiny/extra/libasound_module_pcm_tinyaudio.so").isFile
+    fun directAudioActive(): Boolean = Cfg.directAudio && directAudioAvailable()
+
+    /** Server native tinyaudio dan plugin ALSA-nya ada di build ini (dasar mode ALSA langsung, global maupun per Shortcut). */
+    fun directAudioAvailable(): Boolean =
+        TinyAudio.available && File(TinyEnv.dataPath, "tiny/extra/libasound_module_pcm_tinyaudio.so").isFile
 
     internal const val ASOUND_MARK = "# tiny-direct-audio"
 
@@ -1304,6 +1309,13 @@ fi
         // Desktop XFCE lengkap (panel + wallpaper) atau sesi minimal lama; ditetapkan sekali per sesi aplikasi
         val deskMode = shortcutDesktop(appId)
         val wayland = shortcutWayland(appId)
+        // Sound mode khusus Shortcut: server yang dibutuhkan harus hidup (jalurnya dipasang skrip aplikasi lewat ALSA_CONFIG_PATH)
+        when (ShortcutPrefs.get(appId).sound) {
+            ShortcutPrefs.SOUND_ALSA ->
+                if (!directAudioAvailable()) LaunchLog.write(appSessionLog, "audio", "ALSA langsung tidak tersedia di build ini; mode suara aplikasi diabaikan")
+                else if (!TinyAudio.running && !TinyAudio.start()) LaunchLog.write(appSessionLog, "audio", "server audio native gagal start; ALSA langsung tidak bersuara")
+            ShortcutPrefs.SOUND_PULSE -> ensurePulseForMic()
+        }
         val script = ShortcutRunner.prepare(ctx, appId, xpp, deskMode, wayland) ?: run {
             mainHandler.post {
                 if (appPhase == AppPhase.STARTING) appPhase = AppPhase.IDLE
@@ -1339,6 +1351,10 @@ fi
             appSessionBackend = backend
             appSessionPresent = present
             appSessionFps = fps
+            val buffers = ShortcutPrefs.swapBuffers(appId)
+            val compMem = ShortcutPrefs.compositorMemMb(appId)
+            appSessionBuffers = buffers
+            appSessionMem = compMem
             appSessionComp = comp
             appSessionWayland = wayland
             if (xpp) {
@@ -1351,7 +1367,7 @@ fi
                     else -> "EGL"
                 }
                 LaunchLog.write(sLog, "session", "sesi aplikasi Shortcut dimulai (X++ $backendName ${size.first}x${size.second}), dipicu oleh $appId")
-                if (!XppHost.ensureStarted(ctx, size.first, size.second, backend, present, fps)) {
+                if (!XppHost.ensureStarted(ctx, size.first, size.second, backend, present, fps, buffers, compMem)) {
                     val reason = XppHost.lastError ?: "unknown error"
                     LaunchLog.write(sLog, "session", "X++ gagal dinyalakan: $reason")
                     appSessionXpp = false

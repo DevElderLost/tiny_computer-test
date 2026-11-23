@@ -104,6 +104,9 @@ extern "C" JNIEXPORT jlong JNICALL JNI_NAME(nativeCreate)(JNIEnv* env, jclass, j
         config.disableRender = (flags & 64) != 0;
         config.disableComposite = (flags & 128) != 0;
         config.disableXkb = (flags & 256) != 0;
+        // bit 12-15: jumlah gambar swapchain; bit 16-30: batas memori renderer (MiB)
+        config.bufferCount = (flags >> 12) & 0xF;
+        config.memLimitMb = (flags >> 16) & 0x7FFF;
         auto server = std::make_shared<xorg::XServer>(nullptr, xorg::ScreenInfo(width, height, 4),
                 validation == JNI_TRUE, std::move(config));
         std::lock_guard lock(sessions_mutex); jlong handle = next_session++;

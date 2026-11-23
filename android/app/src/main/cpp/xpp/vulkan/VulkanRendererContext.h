@@ -124,6 +124,8 @@ struct VkTable {
 #include <jni.h>
 #include <vector>
 #include <unordered_map>
+#include <mutex>
+#include <atomic>
 #include <algorithm>
 #include <utility>
 #include <thread>
@@ -261,6 +263,10 @@ public:
     void setSharpness(float s);
     void setSwapRB(bool enabled);
     void setPresentMode(VkPresentModeKHR mode);
+    /** Jumlah gambar swapchain (2/3/4; 0 = otomatis). Swapchain dibangun ulang bila berubah. */
+    void setBufferCount(int count);
+    /** Batas memori Vulkan renderer (MiB; 0 = tanpa batas): alokasi tekstur jendela baru di atas batas ditolak. */
+    void setMemoryLimitMb(int mb);
     void configureFrameGeneration(bool enabled, const char* cachePath,
                                   int multiplier, int targetRate,
                                   int flowScalePercent, float refreshRate);
@@ -381,6 +387,14 @@ public:
     float maxAnisotropy           = 1.0f;
     VkPhysicalDeviceMemoryProperties memProperties{};
     VkPresentModeKHR requestedPresentMode = VK_PRESENT_MODE_FIFO_KHR;
+    int desiredBufferCount = 0;   // 0 = otomatis
+    // Anggaran memori: ukuran setiap VkDeviceMemory yang dialokasikan renderer ini (memori impor AHardwareBuffer tidak dihitung).
+    std::mutex memBudgetMutex;
+    std::unordered_map<VkDeviceMemory, VkDeviceSize> memSizes;
+    VkDeviceSize memUsed = 0;
+    std::atomic<uint64_t> memLimitBytes{0};
+    VkResult allocMem(const VkMemoryAllocateInfo* info, VkDeviceMemory* mem, bool enforce);
+    void freeMem(VkDeviceMemory mem);
     uint32_t graphicsQueueFamilyIndex = 0;
     std::vector<VkPresentModeKHR> availablePresentModes;
 

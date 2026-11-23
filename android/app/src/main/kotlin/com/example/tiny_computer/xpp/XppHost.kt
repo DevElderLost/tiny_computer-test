@@ -40,6 +40,8 @@ object XppHost {
     private var height = 0
     private var backend = NativeX11.BACKEND_EGL
     private var presentMode = 2
+    private var bufferCount = 0
+    private var memLimitMb = 0
     /** Batas FPS khusus sesi Shortcut yang menyalakan server ini; null = [Cfg.fpsLimit]. */
     @Volatile private var fpsLimitOverride: Int? = null
     private var boundSocket: String? = null
@@ -89,6 +91,7 @@ object XppHost {
      */
     fun ensureStarted(
         ctx: Context, w: Int, h: Int, backendOverride: Int? = null, presentOverride: Int? = null, fpsOverride: Int? = null,
+        bufferOverride: Int? = null, memLimitOverride: Int? = null,
     ): Boolean = synchronized(lock) {
         val sock = socketFile()
         // batas FPS sesi ini: pilihan khusus Shortcut atau Display > FPS; null (Open desktop) mengembalikan ke pengaturan utama
@@ -104,8 +107,12 @@ object XppHost {
         // Present mode memakai setelan Display > VSync / present mode ([Cfg.presentMode]) yang sama dengan compositor Wayland,
         // dipetakan ke VkPresentModeKHR: 0 IMMEDIATE, 1 MAILBOX, 2 FIFO, 3 FIFO_RELAXED. Hanya dipakai backend Vulkan.
         val wantPresent = if (wantBackend == NativeX11.BACKEND_VULKAN) vkPresentMode(presentOverride ?: Cfg.presentMode) else 2
+        // Buffering swapchain (jumlah gambar) dan batas memori renderer: sama dengan Display > Buffering dan Batas memori > Compositor
+        // di compositor Wayland; hanya backend Vulkan yang punya swapchain dan anggaran memori. Dikirim lewat bit flags nativeCreate.
+        val wantBuffer = if (wantBackend == NativeX11.BACKEND_VULKAN) (bufferOverride ?: Cfg.swapBuffers).coerceIn(0, 15) else 0
+        val wantMem = if (wantBackend == NativeX11.BACKEND_VULKAN) (memLimitOverride ?: Cfg.compositorMemMb).coerceIn(0, 32767) else 0
         if (handle != 0L && width == w && height == h && backend == wantBackend && presentMode == wantPresent &&
-            boundSocket == sock.absolutePath) {
+            bufferCount == wantBuffer && memLimitMb == wantMem && boundSocket == sock.absolutePath) {
             return true
         }
         stopLocked()
@@ -121,8 +128,9 @@ object XppHost {
             }
             // server tidak pernah menghapus soket yang masih ada; sisa soket dari proses sebelumnya dibuang di sini
             if (sock.exists()) sock.delete()
-            val flags = NativeX11.FLAG_NO_MIT_SHM or NativeX11.FLAG_NO_DRI3 or
+            var flags = NativeX11.FLAG_NO_MIT_SHM or NativeX11.FLAG_NO_DRI3 or
                 if (wantBackend == NativeX11.BACKEND_DISPLAYX) NativeX11.FLAG_PERFORMANCE or NativeX11.FLAG_PRESENT_AT_REFRESH else 0
+            flags = flags or (wantBuffer shl 12) or (wantMem shl 16) // bit 12-15 buffering, bit 16-30 batas memori (MiB)
             val h0 = NativeX11.nativeCreate(
                 w, h, false, "", "", ctx.applicationInfo.nativeLibraryDir, wantPresent, false, wantBackend, flags,
             )
@@ -132,6 +140,8 @@ object XppHost {
             height = h
             backend = wantBackend
             presentMode = wantPresent
+            bufferCount = wantBuffer
+            memLimitMb = wantMem
             // jalur shm tidak dipakai (MIT-SHM tidak diiklankan), tetap diberikan karena parameter wajib
             NativeX11.nativeStart(h0, sock.absolutePath, File(sock.parentFile, ".xpp-shm").absolutePath)
             boundSocket = sock.absolutePath
