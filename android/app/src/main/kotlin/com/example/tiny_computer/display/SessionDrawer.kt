@@ -76,6 +76,7 @@ import com.example.tiny_computer.controls.ControlsEditorActivity
 import com.example.tiny_computer.controls.ProfileStore
 import com.example.tiny_computer.core.Cfg
 import com.example.tiny_computer.core.ReshadeShaders
+import com.example.tiny_computer.core.ShortcutPrefs
 import com.example.tiny_computer.core.SoundControl
 import com.droiddeck.launcher.input.ControllerPrefs
 import kotlinx.coroutines.delay
@@ -344,11 +345,15 @@ private fun InputPage(state: DisplayUiState, onPadOverlayChange: (Boolean) -> Un
 @Composable
 private fun ProfileGroup(app: String?) {
     val ctx = LocalContext.current
-    var enabled by remember { mutableStateOf(ProfileStore.enabled(ctx)) }
-    // controller DroidDeck dinyalakan di sini atau di Pengaturan: Winlator ikut mati (ControllerMode)
-    androidx.compose.runtime.LaunchedEffect(ControllerMode.version) { enabled = ProfileStore.enabled(ctx) }
+    // keadaan efektif untuk aplikasi ini (pilihan Shortcut atau pengaturan global), bukan hanya saklar global
+    var enabled by remember { mutableStateOf(ControllerMode.resolve(ctx, app) == ControllerMode.Active.WINLATOR) }
     var fab by remember { mutableStateOf(ProfileStore.floatingButton(ctx)) }
-    var active by remember { mutableStateOf(ProfileStore.activeId(ctx)) }
+    var active by remember { mutableStateOf(ProfileStore.activeFor(ctx, app).id) }
+    // controller DroidDeck dinyalakan di sini atau di Pengaturan, atau profil diganti: keadaan ikut menyegar (ControllerMode)
+    androidx.compose.runtime.LaunchedEffect(ControllerMode.version) {
+        enabled = ControllerMode.resolve(ctx, app) == ControllerMode.Active.WINLATOR
+        active = ProfileStore.activeFor(ctx, app).id
+    }
     val profiles = remember { ProfileStore.profiles(ctx) }
     val pal = LocalPalette.current
     DeckGroup(stringResource(R.string.wl_title)) {
@@ -360,7 +365,9 @@ private fun ProfileGroup(app: String?) {
         if (enabled) {
             DeckChoiceRow(stringResource(R.string.wl_profile), null, profiles.map { it.id to it.name }, active) {
                 active = it
-                ProfileStore.setActiveId(ctx, it)
+                // di aplikasi Shortcut profil yang dipilih menjadi profil Shortcut itu; di desktop menjadi profil aktif utama
+                if (app != null) ShortcutPrefs.setProfile(app, it) else ProfileStore.setActiveId(ctx, it)
+                ControllerMode.notifyChanged()
             }
             DrawerToggleRow(stringResource(R.string.wl_fab), fab) {
                 fab = it
@@ -369,7 +376,7 @@ private fun ProfileGroup(app: String?) {
             Column(Modifier.fillMaxWidth().padding(10.dp)) {
                 DrawerActionButton(stringResource(R.string.wl_edit_layout), Icons.Outlined.Edit, pal.onBackground, {
                     // menu menutup agar layar editor terlihat; profil yang sedang dipakai yang diedit
-                    ctx.startActivity(Intent(ctx, ControlsEditorActivity::class.java).putExtra(ControlsEditorActivity.EXTRA_PROFILE, ProfileStore.activeId(ctx)))
+                    ctx.startActivity(Intent(ctx, ControlsEditorActivity::class.java).putExtra(ControlsEditorActivity.EXTRA_PROFILE, ProfileStore.activeFor(ctx, app).id))
                 })
             }
         }

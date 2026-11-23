@@ -22,6 +22,9 @@ object ShortcutPrefs {
     const val DISPLAY_WAYLAND = "wayland"
     const val DISPLAY_XPP = "xpp"
     const val SOUND_PULSE = "pulse"
+    const val CONTROLLER_DECK = "deck"
+    const val CONTROLLER_WINLATOR = "winlator"
+    const val CONTROLLER_NONE = "none"
     const val SOUND_ALSA = "alsa"
 
     data class Settings(
@@ -65,6 +68,10 @@ object ShortcutPrefs {
         val vulkanMem: Int = -1,
         /** Sound mode khusus aplikasi ini: default (ikut Settings) | pulse (PulseAudio) | alsa (ALSA langsung ke suara Android). */
         val sound: String = DEFAULT,
+        /** Controller layar khusus aplikasi ini: default (ikut Settings) | deck (DroidDeck) | winlator | none. */
+        val controller: String = DEFAULT,
+        /** Id profil kontrol gaya Winlator untuk aplikasi ini; -1 = ikut profil aktif di Pengaturan > Controller. */
+        val profile: Int = -1,
         val hidden: Boolean = false,
     )
 
@@ -89,6 +96,9 @@ object ShortcutPrefs {
                 fps = o.optInt("fps", -1), presentMode = o.optInt("presentMode", -1), buffering = o.optInt("buffering", -1),
                 compositorMem = o.optInt("compositorMem", -1), vulkanMem = o.optInt("vulkanMem", -1),
                 sound = o.optString("sound", DEFAULT),
+                // pilihan lama "pad = ON" (DroidDeck dipaksa nyala) otomatis menjadi controller = deck
+                controller = o.optString("controller", if (o.optString("pad", DEFAULT) == ON) CONTROLLER_DECK else DEFAULT),
+                profile = o.optInt("profile", -1),
                 hidden = o.optBoolean("hidden", false),
             )
         }.getOrDefault(Settings())
@@ -104,6 +114,7 @@ object ShortcutPrefs {
                 .put("desktopMode", s.desktopMode).put("qtGpu", s.qtGpu)
                 .put("fps", s.fps).put("presentMode", s.presentMode).put("buffering", s.buffering)
                 .put("compositorMem", s.compositorMem).put("vulkanMem", s.vulkanMem).put("sound", s.sound)
+                .put("controller", s.controller).put("profile", s.profile)
                 .put("hidden", s.hidden)
             sp.edit().putString("app.$id", o.toString()).apply()
         }
@@ -153,6 +164,17 @@ object ShortcutPrefs {
     }
 
     fun setPadOverlay(id: String, on: Boolean) = save(id, get(id).copy(pad = if (on) ON else OFF))
+
+    /** Mode controller khusus aplikasi ([CONTROLLER_DECK], [CONTROLLER_WINLATOR], [CONTROLLER_NONE]); [DEFAULT] = ikut Settings. */
+    fun controllerMode(id: String?): String = id?.let { get(it).controller } ?: DEFAULT
+
+    /** Memilih mode controller aplikasi; pilihan lama `pad` dihapus supaya hanya satu sumber yang menentukan. */
+    fun setController(id: String, mode: String) = save(id, get(id).copy(controller = mode, pad = DEFAULT))
+
+    /** Id profil kontrol Winlator khusus aplikasi; -1 = ikut profil aktif. */
+    fun profileId(id: String?): Int = id?.let { get(it).profile } ?: -1
+
+    fun setProfile(id: String, profile: Int) = save(id, get(id).copy(profile = profile))
 
     /** `1280x720` (huruf x kecil/besar, boleh spasi) -> (1280, 720); null bila bukan ukuran yang wajar. */
     fun parseSize(text: String): Pair<Int, Int>? {

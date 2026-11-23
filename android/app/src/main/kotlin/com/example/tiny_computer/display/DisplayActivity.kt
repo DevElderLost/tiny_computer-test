@@ -224,6 +224,8 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
         val overlay = ComposeView(this).apply {
             setContent {
                 TinyTheme {
+                    // mode controller atau profil berubah dari menu sesi atau Pengaturan: muat ulang controller layar ini
+                    androidx.compose.runtime.LaunchedEffect(ControllerMode.version) { applyProfileMode() }
                     DisplayOverlay(
                         state = ui,
                         pad = p,
@@ -365,7 +367,7 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
             extHandler?.profile = null
             return
         }
-        val prof = ProfileStore.active(this)
+        val prof = ProfileStore.activeFor(this, currentApp)   // profil khusus Shortcut ini, atau profil aktif utama
         // profil diganti/diedit: muat ulang; kalau sama dan tidak berubah, tidak perlu
         view.profile = prof
         bindingDispatcher?.cursorSpeed = prof.cursorSpeed

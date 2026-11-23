@@ -411,6 +411,11 @@
     <string name="tc_ui_shortcut_desktop_hint">An app started from Shortcut runs inside the XFCE desktop (wallpaper, panel, window manager) instead of a single window on a black screen. Only the chosen app is started; the desktop closes when the app exits. Turn off for the old minimal session. Applies on the next Shortcut session.</string>
     <string name="tc_pad_overlay_exclusive_hint">Turns off Winlator-style controls: only one on-screen controller can be active at a time.</string>
     <string name="tc_sc_group_desktop">Desktop settings</string>
+    <string name="tc_sc_controller_mode">On-screen controller</string>
+    <string name="tc_sc_controller_deck">DroidDeck</string>
+    <string name="tc_sc_controller_winlator">Winlator style</string>
+    <string name="tc_sc_controller_none">None</string>
+    <string name="tc_sc_profile_follow">Follow Settings (active profile)</string>
     <string name="tc_sc_sound_mode">Sound mode</string>
     <string name="tc_sc_sound_pulse">PulseAudio</string>
     <string name="tc_sc_sound_alsa">ALSA direct (Android sound)</string>

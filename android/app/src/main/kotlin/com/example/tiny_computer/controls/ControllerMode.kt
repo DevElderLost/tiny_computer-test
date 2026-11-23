@@ -25,37 +25,58 @@ object ControllerMode {
         private set
 
     /**
-     * Controller yang aktif untuk [app] (id Shortcut; null = desktop). Pilihan eksplisit sebuah Shortcut "DroidDeck ON"
-     * menang atas Winlator global untuk aplikasi itu saja; selain itu Winlator menang atas DroidDeck.
+     * Controller yang aktif untuk [app] (id Shortcut; null = desktop). Pilihan eksplisit sebuah Shortcut (DroidDeck, Winlator,
+     * atau Tidak ada) menang untuk aplikasi itu saja; tanpa pilihan Shortcut berlaku pengaturan global: Winlator menang atas
+     * DroidDeck. Hasilnya selalu tepat satu mode.
      */
     fun resolve(ctx: Context, app: String?): Active {
-        val perApp = ShortcutPrefs.padOverlay(app)
+        when (ShortcutPrefs.controllerMode(app)) {
+            ShortcutPrefs.CONTROLLER_DECK -> return Active.DECK
+            ShortcutPrefs.CONTROLLER_WINLATOR -> return Active.WINLATOR
+            ShortcutPrefs.CONTROLLER_NONE -> return Active.NONE
+        }
+        val perApp = ShortcutPrefs.padOverlay(app)   // pilihan lama (pad ON/OFF) yang belum memakai mode controller
         if (perApp == true) return Active.DECK
         if (ProfileStore.enabled(ctx)) return Active.WINLATOR
         return if (perApp ?: Cfg.padOverlay) Active.DECK else Active.NONE
     }
 
     /**
-     * Saklar controller gaya Winlator. Dinyalakan: controller DroidDeck global dimatikan, dan bila dipanggil dari sebuah
-     * aplikasi Shortcut yang memaksa DroidDeck ON, pilihan itu diganti OFF agar Winlator benar-benar tampil di aplikasi itu.
-     * [Cfg.padOverlay] ditulis lebih dulu karena penulisan [ProfileStore] memicu pemuatan ulang di DisplayActivity.
+     * Memilih SATU controller: global ([app] = null) menulis kedua saklar sekaligus (yang lain pasti mati; [Cfg.padOverlay] ditulis
+     * lebih dulu karena penulisan [ProfileStore] memicu pemuatan ulang di DisplayActivity), atau milik satu Shortcut
+     * (mode controller aplikasi itu; pengaturan global tidak berubah).
      */
-    fun enableWinlator(ctx: Context, on: Boolean, app: String? = null) {
-        if (on) {
-            Cfg.padOverlay = false
-            if (app != null && ShortcutPrefs.padOverlay(app) == true) ShortcutPrefs.setPadOverlay(app, false)
+    fun select(ctx: Context, app: String?, mode: Active) {
+        if (app == null) {
+            Cfg.padOverlay = mode == Active.DECK
+            ProfileStore.setEnabled(ctx, mode == Active.WINLATOR)
+        } else {
+            ShortcutPrefs.setController(
+                app,
+                when (mode) {
+                    Active.DECK -> ShortcutPrefs.CONTROLLER_DECK
+                    Active.WINLATOR -> ShortcutPrefs.CONTROLLER_WINLATOR
+                    Active.NONE -> ShortcutPrefs.CONTROLLER_NONE
+                },
+            )
         }
-        ProfileStore.setEnabled(ctx, on)
         version++
     }
 
-    /**
-     * Saklar controller layar DroidDeck: global ([app] = null, Pengaturan atau menu desktop) atau milik satu Shortcut.
-     * Dinyalakan: controller gaya Winlator dimatikan, supaya saklar keduanya tidak pernah tampil aktif bersamaan.
-     */
-    fun enableDeck(ctx: Context, app: String?, on: Boolean) {
-        if (app != null) ShortcutPrefs.setPadOverlay(app, on) else Cfg.padOverlay = on
-        if (on) ProfileStore.setEnabled(ctx, false)
-        version++
+    /** Saklar controller gaya Winlator: menyalakannya memilih Winlator (DroidDeck mati); mematikannya hanya bila Winlator yang aktif. */
+    fun enableWinlator(ctx: Context, on: Boolean, app: String? = null) {
+        if (on) select(ctx, app, Active.WINLATOR)
+        else if (resolve(ctx, app) == Active.WINLATOR) select(ctx, app, Active.NONE)
+        else version++
     }
+
+    /** Saklar controller layar DroidDeck: menyalakannya memilih DroidDeck (Winlator mati); mematikannya hanya bila DroidDeck yang aktif. */
+    fun enableDeck(ctx: Context, app: String?, on: Boolean) {
+        if (on) select(ctx, app, Active.DECK)
+        else if (resolve(ctx, app) == Active.DECK) select(ctx, app, Active.NONE)
+        else version++
+    }
+
+    /** Memberi tahu pendengar (menu sesi, DisplayActivity) bahwa pilihan profil kontrol berubah. */
+    fun notifyChanged() { version++ }
 }

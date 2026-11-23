@@ -74,7 +74,7 @@ import com.example.tiny_computer.core.Launcher
 import com.example.tiny_computer.core.ShortcutPrefs
 import com.example.tiny_computer.core.VkMemLimit
 import com.example.tiny_computer.core.Cfg
-import com.example.tiny_computer.controls.ControllerMode
+import com.example.tiny_computer.controls.ProfileStore
 import com.example.tiny_computer.core.ShortcutRunner
 import com.example.tiny_computer.core.Startup
 import com.example.tiny_computer.core.TinyEnv
@@ -427,14 +427,25 @@ private fun AppSettingsDialog(app: DesktopApps.App, onRemoved: () -> Unit, onSho
                         DeckTextRow(stringResource(R.string.tc_ui_width), cw, number = true) { cw = it; commit() }
                         DeckTextRow(stringResource(R.string.tc_ui_height), ch, number = true) { ch = it; commit() }
                     }
+                    // Controller layar khusus aplikasi ini: DroidDeck ATAU Winlator style (tidak pernah keduanya) atau tidak ada
                     DeckChoiceRow(
-                        stringResource(R.string.tc_pad_overlay), null,
-                        listOf(ShortcutPrefs.DEFAULT to def, ShortcutPrefs.ON to on, ShortcutPrefs.OFF to off),
-                        s.pad,
-                    ) { pick ->
-                        // DroidDeck ON mematikan controller gaya Winlator (tidak pernah aktif bersamaan)
-                        if (pick == ShortcutPrefs.ON) { ControllerMode.enableDeck(ctx, app.id, true); s = ShortcutPrefs.get(app.id) }
-                        else update(s.copy(pad = pick))
+                        stringResource(R.string.tc_sc_controller_mode), null,
+                        listOf(
+                            ShortcutPrefs.DEFAULT to def,
+                            ShortcutPrefs.CONTROLLER_DECK to stringResource(R.string.tc_sc_controller_deck),
+                            ShortcutPrefs.CONTROLLER_WINLATOR to stringResource(R.string.tc_sc_controller_winlator),
+                            ShortcutPrefs.CONTROLLER_NONE to stringResource(R.string.tc_sc_controller_none),
+                        ),
+                        s.controller,
+                    ) { update(s.copy(controller = it, pad = ShortcutPrefs.DEFAULT)) }
+                    // Winlator style dipilih: pilihan profil kontrol muncul di bawahnya
+                    if (s.controller == ShortcutPrefs.CONTROLLER_WINLATOR) {
+                        val profiles = remember { ProfileStore.profiles(ctx) }
+                        DeckChoiceRow(
+                            stringResource(R.string.wl_profile), null,
+                            listOf(-1 to stringResource(R.string.tc_sc_profile_follow)) + profiles.map { it.id to it.name },
+                            s.profile,
+                        ) { update(s.copy(profile = it)) }
                     }
                     DeckToggleRow(stringResource(R.string.tc_sc_hide), null, s.hidden) { update(s.copy(hidden = it)) }
                 }

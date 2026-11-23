@@ -309,6 +309,15 @@ object ProfileStore {
         runCatching { Profile.fromJson(JSONObject(file(c, id).readText())) }.getOrNull()
 
     /** Profil yang sedang dipakai; bila hilang jatuh ke profil pertama. */
+    /**
+     * Profil yang dipakai [app] (id Shortcut; null = desktop): pilihan khusus Shortcut ([com.example.tiny_computer.core.ShortcutPrefs.profileId])
+     * bila ada dan profilnya masih ada, kalau tidak profil aktif utama.
+     */
+    fun activeFor(c: Context, app: String?): Profile {
+        val id = com.example.tiny_computer.core.ShortcutPrefs.profileId(app)
+        return (if (id >= 0) get(c, id) else null) ?: active(c)
+    }
+
     fun active(c: Context): Profile {
         val want = activeId(c)
         return get(c, want) ?: profiles(c).first().also { setActiveId(c, it.id) }
