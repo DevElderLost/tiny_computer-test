@@ -172,6 +172,16 @@ object Cfg {
     var shortcutDesktop: Boolean
         get() = TinyPrefs.getBool("shortcutDesktop", true)
         set(v) = TinyPrefs.setBool("shortcutDesktop", v)
+
+    /**
+     * Aplikasi Qt di server X++ memakai EGL (QT_XCB_GL_INTEGRATION=xcb_egl) dan Vulkan (QSG_RHI_BACKEND=vulkan) alih-alih GLX.
+     * X++ tidak punya DRI3, dan jalur GLX + Zink + Kopper membuat jendela Qt Quick tetap hitam (Audacity 4: tidak ada satu pun
+     * frame yang sampai ke server). EGL dan Vulkan langsung ke Turnip terbukti tampil normal tanpa lag. Hanya berlaku bila
+     * Turnip (GPU) aktif; variabel buatan pengguna di env Shortcut tetap menimpa. Bawaan aktif.
+     */
+    var xppQtGpu: Boolean
+        get() = TinyPrefs.getBool("xppQtGpu", true)
+        set(v) = TinyPrefs.setBool("xppQtGpu", v)
     /** Catat peluncuran aplikasi/.exe (Shortcut + Open desktop) ke Download/Wayland-logs, satu berkas per sesi proot. */
     var launchLog: Boolean
         get() = TinyPrefs.getBool("launchLog", false)

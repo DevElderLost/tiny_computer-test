@@ -478,6 +478,11 @@ fi
                 if (!Cfg.dri3 || xpp) sb.append("export MESA_VK_WSI_DEBUG=sw\n")
             }
         }
+        // Qt di X++: EGL + Vulkan RHI (bukan GLX + Zink/Kopper, yang membuat jendela Qt Quick hitam karena tidak ada DRI3).
+        // Hanya bila GPU Turnip dipakai aplikasi ini; env buatan pengguna di bawah bisa menimpa (mis. QT_QUICK_BACKEND=software).
+        if (xpp && turnipOn && Cfg.xppQtGpu) {
+            sb.append("export QT_XCB_GL_INTEGRATION=xcb_egl QSG_RHI_BACKEND=vulkan\n")
+        }
         // Program Vulkan/SDL memakai WSI Wayland langsung ke compositor, bukan X11 lewat Xwayland (tanpa DRI3):
         // itu jalur yang terbukti jalan (vkcube --wsi wayland dengan Turnip). Berlaku untuk GPU Turnip yang dipilih
         // per aplikasi DAN untuk GPU "default" saat Turnip global menyala (dulu hanya yang pertama, sehingga aplikasi
@@ -651,6 +656,7 @@ exec sh -c "${'$'}TINY_CMD"
         }
         val xsGpu = if (xpp) {
             (if (Cfg.turnip) "export ${Launcher.turnipOpt(ctx)} LIBGL_KOPPER_DRI2=true MESA_VK_WSI_DEBUG=sw\n" else "") +
+                Launcher.qtGpuEnv() +
                 "export TINY_NO_WAYLAND=1 GDK_CORE_DEVICE_EVENTS=1 QT_XCB_NO_XI2=1\nunset WAYLAND_DISPLAY\n"
         } else ""
         val desktopBlock = if (!desktop) "" else """

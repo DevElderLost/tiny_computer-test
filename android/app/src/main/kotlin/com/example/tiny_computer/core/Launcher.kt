@@ -831,6 +831,14 @@ export PROOT_LOADER_32=${'$'}DATA_DIR/applib/libproot-loader32.so""".trimIndent(
      * Xwayland berjalan rootful (satu jendela xdg-toplevel di compositor) lalu sesi X11
      * Debian (`/etc/X11/xinit/Xsession`, tak berubah) dijalankan di DISPLAY=:4.
      */
+    /**
+     * Qt di X++: EGL (bukan GLX) dan Vulkan RHI langsung ke Turnip. Kosong bila dimatikan ([Cfg.xppQtGpu]) atau tanpa GPU
+     * (Turnip mati). Dipakai skrip desktop X++ dan sesi desktop Shortcut; skrip aplikasi Shortcut memasangnya sendiri per
+     * pilihan GPU aplikasi ([ShortcutRunner.script]).
+     */
+    internal fun qtGpuEnv(): String =
+        if (Cfg.turnip && Cfg.xppQtGpu) "export QT_XCB_GL_INTEGRATION=xcb_egl QSG_RHI_BACKEND=vulkan\n" else ""
+
     internal fun waylandSessionEnv(): String = if (Cfg.desktopWayland) {
         "XDG_RUNTIME_DIR=/tmp WAYLAND_DISPLAY=wayland-0 SDL_VIDEODRIVER=wayland,x11 " +
             "GDK_BACKEND=x11 QT_QPA_PLATFORM=xcb MOZ_ENABLE_WAYLAND=0 ELECTRON_OZONE_PLATFORM_HINT=x11 CLUTTER_BACKEND=x11 "
@@ -883,7 +891,7 @@ ${WsiWayland.probeForDesktop(sessionEnv)}
         val compEnv = if (Cfg.xfceCompositor) "TINY_XFCE_COMPOSITOR=1 " else ""
         // Turnip/Zink: GPU merender, hasilnya sampai ke X++ lewat WSI software (PutImage) karena DRI3 tidak dipakai. Variabel
         // diekspor lagi di sini supaya berlaku walau pengaturan diubah setelah shell kontainer menyala.
-        val gpuEnv = if (Cfg.turnip) "export ${turnipOpt(ctx)} LIBGL_KOPPER_DRI2=true MESA_VK_WSI_DEBUG=sw\n" else ""
+        val gpuEnv = (if (Cfg.turnip) "export ${turnipOpt(ctx)} LIBGL_KOPPER_DRI2=true MESA_VK_WSI_DEBUG=sw\n" else "") + qtGpuEnv()
         runCatching {
             val vnc = File(TinyEnv.containerDir(), "home/tiny/.vnc").apply { mkdirs() }
             File(vnc, "tiny-session.sh").writeText(Rootfs.asset(ctx, "tiny/xsession.sh"))
