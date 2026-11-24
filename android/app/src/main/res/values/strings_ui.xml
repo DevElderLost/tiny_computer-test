@@ -350,6 +350,9 @@
     <string name="tc_sc_no_match">No app matches your search.</string>
     <string name="tc_sc_show_hidden">Show hidden (%1$d)</string>
     <string name="tc_sc_hide_hidden">Hide hidden</string>
+    <string name="tc_sc_view_list">List view</string>
+    <string name="tc_sc_view_icons">Icon view</string>
+    <string name="tc_sc_search_close">Close search</string>
     <string name="tc_sc_settings_hint">These settings only apply to this app. The main desktop settings are not changed.</string>
     <string name="tc_sc_group_launch">Launch</string>
     <string name="tc_sc_group_display">Graphics and input</string>
@@ -591,4 +594,21 @@
     <string name="tc_sc_remove_confirm">Remove</string>
     <string name="tc_sc_removed">Shortcut removed: %1$s</string>
     <string name="tc_sc_remove_failed">Could not remove the shortcut: %1$s</string>
+    <string name="tc_cs_group">Custom scripts</string>
+    <string name="tc_cs_group_help">Add your own scripts, for example to install something. Run executes the script in the Terminal tab (the container is started first if it is not running). Tap the pencil to edit or delete a script, and + to add a new one.</string>
+    <string name="tc_cs_empty">No custom scripts yet. Tap + to add one.</string>
+    <string name="tc_cs_add">Add custom script</string>
+    <string name="tc_cs_edit">Edit script</string>
+    <string name="tc_cs_run">Run</string>
+    <string name="tc_cs_name">Name</string>
+    <string name="tc_cs_desc">Description (optional)</string>
+    <string name="tc_cs_script">Script</string>
+    <string name="tc_cs_delete">Delete</string>
+    <string name="tc_cs_delete_title">Delete this script?</string>
+    <string name="tc_cs_delete_body">“%1$s” will be removed from the list.</string>
+    <string name="tc_cs_name_empty">Enter a name</string>
+    <string name="tc_cs_script_empty">Enter a script</string>
+    <string name="tc_cs_running">Running: %1$s</string>
+    <string name="tc_cs_no_system">Install the system first (press Open desktop once), then run the script.</string>
+    <string name="tc_cs_write_failed">Could not prepare the script: %1$s</string>
 </resources>

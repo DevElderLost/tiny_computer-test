@@ -1,6 +1,25 @@
 package com.example.tiny_computer.ui
 
 import android.widget.Toast
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.ViewList
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import com.example.tiny_computer.core.TinyPrefs
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -101,6 +120,10 @@ fun ShortcutScreen(onLaunch: (String) -> Unit, onShowTerminal: () -> Unit = {}) 
     var refresh by remember { mutableIntStateOf(0) }
     var query by remember { mutableStateOf("") }
     var showHidden by remember { mutableStateOf(false) }
+    // kolom cari hanya terbuka setelah tombol cari ditekan (seperti SearchView di toolbar Winlator)
+    var searching by remember { mutableStateOf(false) }
+    // mode tampilan seperti tombol grid/list Winlator: true = hanya ikon rapat (gaya pemilih game PS5), false = daftar dengan nama
+    var iconMode by remember { mutableStateOf(TinyPrefs.getBool(PREF_ICON_MODE, true)) }
     var editing by remember { mutableStateOf<DesktopApps.App?>(null) }
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -170,42 +193,34 @@ fun ShortcutScreen(onLaunch: (String) -> Unit, onShowTerminal: () -> Unit = {}) 
     }
 
     Column(Modifier.fillMaxSize()) {
-        ScreenTitle(
-            stringResource(R.string.tc_nav_shortcut),
-            if (ready && list != null) stringResource(R.string.tc_sc_count, list.count { !it.system }) else stringResource(R.string.tc_sc_hint),
-        )
+        if (ready && list != null) {
+            // Seperti header Library Winlator: judul di kiri, tombol ikon tanpa teks di kanan (cari, mode tampilan,
+            // tampilkan yang disembunyikan/aplikasi sistem, refresh, tambah/pasang .exe atau AppImage)
+            ShortcutHeader(
+                searching = searching, query = query, onQuery = { query = it },
+                onSearch = { searching = true }, onCloseSearch = { query = ""; searching = false },
+                iconMode = iconMode, onToggleMode = { iconMode = !iconMode; TinyPrefs.setBool(PREF_ICON_MODE, iconMode) },
+                showHidden = showHidden, hiddenCount = hiddenCount, onToggleHidden = { showHidden = !showHidden },
+                onRefresh = { refresh++ }, onAdd = { exePicker.launch(arrayOf("*/*")) },
+            )
+        } else {
+            ScreenTitle(stringResource(R.string.tc_nav_shortcut), stringResource(R.string.tc_sc_hint))
+        }
         when {
             !ready -> DeckGroup(stringResource(R.string.tc_nav_shortcut)) { DeckNote(stringResource(R.string.tc_sc_not_ready)) }
             list == null -> Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = pal.signal)
             }
             else -> {
-                // Seperti etalase Flathub: kolom cari, chip "Show hidden" dan petunjuk ikut bergulir bersama ikon.
-                // Semuanya item satu baris penuh di dalam grid yang sama, jadi tampil lagi saat digulir ke atas dan tidak
-                // hilang walau hasil pencarian kosong (kolom cari tetap bisa diubah).
+                // Mode ikon: ikon besar tanpa teks yang saling berdekatan (gaya pemilih game PS5); mode daftar: satu
+                // baris per aplikasi dengan nama. Petunjuk kosong/tidak cocok tetap item satu baris penuh di grid yang sama.
                 LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 88.dp),
+                    columns = if (iconMode) GridCells.Adaptive(minSize = 76.dp) else GridCells.Adaptive(minSize = 280.dp),
                     modifier = Modifier.fillMaxWidth().weight(1f),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(if (iconMode) 6.dp else 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(if (iconMode) 6.dp else 4.dp),
                 ) {
-                    item(key = "search", span = { GridItemSpan(maxLineSpan) }) {
-                        SearchBar(
-                            query, { query = it }, onRefresh = { refresh++ },
-                            onAdd = { exePicker.launch(arrayOf("*/*")) },
-                        )
-                    }
-                    if (hiddenCount > 0) {
-                        item(key = "hidden-chip", span = { GridItemSpan(maxLineSpan) }) {
-                            Row(Modifier.padding(horizontal = 4.dp, vertical = 4.dp)) {
-                                KeyChip(
-                                    if (showHidden) stringResource(R.string.tc_sc_hide_hidden) else stringResource(R.string.tc_sc_show_hidden, hiddenCount),
-                                    selected = showHidden,
-                                ) { showHidden = !showHidden }
-                            }
-                        }
-                    }
                     if (visible.isEmpty()) {
                         item(key = "empty", span = { GridItemSpan(maxLineSpan) }) {
                             HintText(stringResource(if (list.none { !it.system }) R.string.tc_sc_empty else R.string.tc_sc_no_match))
@@ -213,10 +228,18 @@ fun ShortcutScreen(onLaunch: (String) -> Unit, onShowTerminal: () -> Unit = {}) 
                     }
                     items(visible, key = { it.id }) { app ->
                         val s = settings[app.id]
-                        AppTile(
-                            app = app, label = s?.name?.ifBlank { null } ?: app.name, dimmed = isHidden(app),
-                            onClick = { onLaunch(app.id) }, onLongClick = { editing = app },
-                        )
+                        val label = s?.name?.ifBlank { null } ?: app.name
+                        if (iconMode) {
+                            AppTile(
+                                app = app, label = label, dimmed = isHidden(app),
+                                onClick = { onLaunch(app.id) }, onLongClick = { editing = app },
+                            )
+                        } else {
+                            AppRow(
+                                app = app, label = label, dimmed = isHidden(app),
+                                onClick = { onLaunch(app.id) }, onLongClick = { editing = app },
+                            )
+                        }
                     }
                 }
             }
@@ -228,63 +251,120 @@ fun ShortcutScreen(onLaunch: (String) -> Unit, onShowTerminal: () -> Unit = {}) 
     }
 }
 
+/** Tombol ikon tanpa teks bergaya LibraryTopIcon Winlator: kotak 44 dp bersudut membulat; [selected] memberi latar tipis berwarna sinyal. */
 @Composable
-private fun SearchBar(query: String, onQuery: (String) -> Unit, onRefresh: () -> Unit, onAdd: () -> Unit) {
+private fun IconAction(icon: ImageVector, description: String, selected: Boolean = false, enabled: Boolean = true, onClick: () -> Unit) {
     val pal = LocalPalette.current
     val shape = RoundedCornerShape(12.dp)
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier.padding(horizontal = 1.dp).size(42.dp).clip(shape)
+            .background(if (selected) pal.signal.copy(alpha = 0.16f) else Color.Transparent, shape)
+            .alpha(if (enabled) 1f else 0.4f)
+            .semantics { contentDescription = description; role = Role.Button }
+            .clickable(enabled = enabled, onClick = onClick),
     ) {
-        OutlinedTextField(
-            value = query, onValueChange = onQuery, singleLine = true, shape = shape,
-            label = { Text(stringResource(R.string.tc_sc_search)) },
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = pal.signal, unfocusedBorderColor = pal.line2,
-                focusedLabelColor = pal.signal, unfocusedLabelColor = pal.onSurfaceVariant,
-                focusedTextColor = pal.onBackground, unfocusedTextColor = pal.onBackground,
-                cursorColor = pal.signal, focusedContainerColor = pal.surfaceVariant.copy(alpha = 0.5f),
-                unfocusedContainerColor = Color.Transparent,
-            ),
-            modifier = Modifier.weight(1f),
-        )
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier.size(48.dp).clip(shape).background(Color.White.copy(alpha = 0.03f), shape)
-                .border(1.dp, pal.line2, shape).clickableNoRipple(onRefresh),
-        ) {
-            Icon(Icons.Filled.Refresh, stringResource(R.string.tc_sc_refresh), tint = pal.onBackground, modifier = Modifier.size(20.dp))
-        }
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier.size(48.dp).clip(shape).background(Color.White.copy(alpha = 0.03f), shape)
-                .border(1.dp, pal.line2, shape).clickableNoRipple(onAdd),
-        ) {
-            Icon(Icons.Filled.Add, stringResource(R.string.tc_sc_add), tint = pal.onBackground, modifier = Modifier.size(22.dp))
+        Icon(icon, null, tint = if (selected) pal.signal else pal.onSurfaceVariant, modifier = Modifier.size(23.dp))
+    }
+}
+
+/**
+ * Header halaman Shortcut: judul di kiri dan deretan tombol ikon di kanan (semuanya tanpa teks, penjelasan hanya untuk
+ * aksesibilitas). Tombol cari mengganti seluruh baris dengan kolom cari (seperti SearchView Winlator) dan ikon tutup.
+ */
+@Composable
+private fun ShortcutHeader(
+    searching: Boolean, query: String, onQuery: (String) -> Unit, onSearch: () -> Unit, onCloseSearch: () -> Unit,
+    iconMode: Boolean, onToggleMode: () -> Unit,
+    showHidden: Boolean, hiddenCount: Int, onToggleHidden: () -> Unit,
+    onRefresh: () -> Unit, onAdd: () -> Unit,
+) {
+    val pal = LocalPalette.current
+    val land = isLandscape()
+    Row(
+        Modifier.fillMaxWidth().padding(start = 20.dp, end = 10.dp, top = if (land) 6.dp else 12.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (searching) {
+            val focus = remember { FocusRequester() }
+            LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+            val shape = RoundedCornerShape(12.dp)
+            OutlinedTextField(
+                value = query, onValueChange = onQuery, singleLine = true, shape = shape,
+                leadingIcon = { Icon(Icons.Filled.Search, stringResource(R.string.tc_sc_search), tint = pal.onSurfaceVariant) },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = pal.signal, unfocusedBorderColor = pal.line2,
+                    focusedTextColor = pal.onBackground, unfocusedTextColor = pal.onBackground,
+                    cursorColor = pal.signal, focusedContainerColor = pal.surfaceVariant.copy(alpha = 0.5f),
+                    unfocusedContainerColor = Color.Transparent,
+                ),
+                modifier = Modifier.weight(1f).focusRequester(focus),
+            )
+            IconAction(Icons.Filled.Close, stringResource(R.string.tc_sc_search_close), onClick = onCloseSearch)
+        } else {
+            Text(
+                stringResource(R.string.tc_nav_shortcut), style = MaterialTheme.typography.titleLarge, color = pal.onBackground,
+                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(end = 6.dp),
+            )
+            IconAction(Icons.Filled.Search, stringResource(R.string.tc_sc_search), onClick = onSearch)
+            // mode tampilan: ikon menunjukkan mode yang akan dituju (seperti tombol grid/list Winlator)
+            IconAction(
+                if (iconMode) Icons.Filled.ViewList else Icons.Filled.GridView,
+                stringResource(if (iconMode) R.string.tc_sc_view_list else R.string.tc_sc_view_icons), onClick = onToggleMode,
+            )
+            // sembunyikan/tampilkan aplikasi sistem dan yang disembunyikan pengguna; jumlahnya ada di keterangan aksesibilitas
+            IconAction(
+                if (showHidden) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
+                if (showHidden) stringResource(R.string.tc_sc_hide_hidden) else stringResource(R.string.tc_sc_show_hidden, hiddenCount),
+                selected = showHidden, enabled = hiddenCount > 0 || showHidden, onClick = onToggleHidden,
+            )
+            IconAction(Icons.Filled.Refresh, stringResource(R.string.tc_sc_refresh), onClick = onRefresh)
+            IconAction(Icons.Filled.Add, stringResource(R.string.tc_sc_add), onClick = onAdd)
         }
     }
 }
 
-/** Satu aplikasi: ikon kecil bersudut membulat dengan nama di bawahnya. Ketuk = jalankan, tekan lama = pengaturan. */
+/**
+ * Mode ikon: kotak persegi berisi ikon saja, tanpa judul, saling berdekatan seperti pemilih game PS5. Nama aplikasi
+ * hanya ada di keterangan aksesibilitas dan di dialog pengaturan. Ketuk = jalankan, tekan lama = pengaturan.
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun AppTile(app: DesktopApps.App, label: String, dimmed: Boolean, onClick: () -> Unit, onLongClick: () -> Unit) {
+    val haptics = LocalHapticFeedback.current
+    BoxWithConstraints(
+        Modifier.fillMaxWidth().aspectRatio(1f).alpha(if (dimmed) 0.5f else 1f)
+            .semantics { contentDescription = label }
+            .clip(RoundedCornerShape(18.dp))
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = { haptics.performHapticFeedback(HapticFeedbackType.LongPress); onLongClick() },
+            ),
+    ) { AppIcon(app, maxWidth, label) }
+}
+
+/** Mode daftar: ikon kecil + nama (satu baris) + keterangan; ketuk = jalankan, tekan lama = pengaturan. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun AppRow(app: DesktopApps.App, label: String, dimmed: Boolean, onClick: () -> Unit, onLongClick: () -> Unit) {
     val pal = LocalPalette.current
     val haptics = LocalHapticFeedback.current
-    Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
+    Row(
+        Modifier.fillMaxWidth().alpha(if (dimmed) 0.5f else 1f).clip(RoundedCornerShape(14.dp))
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = { haptics.performHapticFeedback(HapticFeedbackType.LongPress); onLongClick() },
             )
-            .padding(horizontal = 4.dp, vertical = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+            .padding(horizontal = 6.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        AppIcon(app, 56.dp, label)
-        Text(
-            label, fontSize = 11.sp, lineHeight = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
-            color = if (dimmed) pal.onSurfaceVariant else pal.onBackground, modifier = Modifier.padding(top = 6.dp),
-        )
+        AppIcon(app, 44.dp, label)
+        Column(Modifier.weight(1f)) {
+            Text(label, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = pal.onBackground, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (app.comment.isNotBlank()) {
+                Text(app.comment, fontSize = 11.sp, color = pal.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
     }
 }
 
@@ -317,6 +397,9 @@ private val SCREEN_PRESETS = listOf(
 )
 
 private const val SCREEN_CUSTOM = "custom"
+
+/** Kunci TinyPrefs: true = mode ikon rapat tanpa teks (bawaan), false = mode daftar dengan nama. */
+private const val PREF_ICON_MODE = "shortcutIconMode"
 
 /**
  * Pengaturan satu aplikasi (tekan lama). Semua pilihan hanya berlaku untuk aplikasi ini dan

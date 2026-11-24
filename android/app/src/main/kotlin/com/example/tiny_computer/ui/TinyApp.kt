@@ -288,7 +288,7 @@ private fun TinyShell(
     val content: @Composable () -> Unit = {
         if (showSettings) SettingsPage()
         else when (Page.values()[page].takeIf { it != Page.FLATHUB || FlatpakManager.enabled } ?: Page.HOME) {
-            Page.HOME -> HomeScreen(onOpenDesktop, onOpenSettings)
+            Page.HOME -> HomeScreen(onOpenDesktop, onOpenSettings, onShowTerminal = { onPage(Page.TERMINAL.ordinal) })
             Page.SHORTCUT -> ShortcutScreen(onLaunchApp, onShowTerminal = { onPage(Page.TERMINAL.ordinal) })
             Page.TERMINAL -> if (started) TerminalScreen() else TerminalGate()
             Page.CONTROLLER -> ControllerScreen()
@@ -355,7 +355,7 @@ private fun TinyShell(
 }
 
 @Composable
-private fun HomeScreen(onOpen: () -> Unit, onSettings: () -> Unit) {
+private fun HomeScreen(onOpen: () -> Unit, onSettings: () -> Unit, onShowTerminal: () -> Unit) {
     val pal = LocalPalette.current
     val ctx = LocalContext.current
     val land = isLandscape()
@@ -442,11 +442,11 @@ private fun HomeScreen(onOpen: () -> Unit, onSettings: () -> Unit) {
         if (land) {
             // dua kolom: kartu mulai di kiri, info sesi di kanan; tinggi layar lanskap sempit
             Row(Modifier.fillMaxWidth()) {
-                Column(Modifier.weight(1f)) { StartupNotice(); mainCard(); note() }
+                Column(Modifier.weight(1f)) { StartupNotice(); mainCard(); CustomScriptsGroup(onShowTerminal); note() }
                 Column(Modifier.weight(1f)) { session() }
             }
         } else {
-            StartupNotice(); mainCard(); session(); note()
+            StartupNotice(); mainCard(); CustomScriptsGroup(onShowTerminal); session(); note()
         }
     }
 }
