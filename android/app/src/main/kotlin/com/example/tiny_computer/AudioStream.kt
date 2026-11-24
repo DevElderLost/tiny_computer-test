@@ -30,11 +30,16 @@ object AudioStream {
 
     val running: Boolean get() = isStreaming
 
+    /** Klien di guest sudah tersambung ke soket (perekam Android berjalan, indikator mikrofon menyala). */
+    @Volatile var connected = false
+        private set
+
     @SuppressLint("MissingPermission") // RECORD_AUDIO diperiksa pemanggil (SettingsScreen)
     @Synchronized
     fun startStreaming(path: String) {
         if (isStreaming) return
         isStreaming = true
+        connected = false
         val previous = recordingThread
         val t = Thread({
             try {
@@ -45,6 +50,7 @@ object AudioStream {
                 Log.e(TAG, "streaming berhenti karena galat", e)
             } finally {
                 nativeClose()
+                connected = false
                 synchronized(this) { if (recordingThread === Thread.currentThread()) isStreaming = false }
             }
         }, "tiny-audio-stream")
@@ -67,6 +73,7 @@ object AudioStream {
             return
         }
         Log.d(TAG, "Client connected!")
+        connected = true
 
         val bufferSize = AudioRecord.getMinBufferSize(SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
         if (bufferSize <= 0) {

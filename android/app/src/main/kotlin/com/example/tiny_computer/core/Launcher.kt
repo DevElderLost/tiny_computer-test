@@ -1089,6 +1089,34 @@ fi
         return guestEnvScript(spec) + "\nexec " + prefix + " /bin/sh " + guestScript + "\n"
     }
 
+    private val guestJobs = HashMap<String, Process>()
+
+    /**
+     * Menjalankan [script] (isi skrip `sh` guest) di proot TERPISAH tanpa terminal, seperti aplikasi Shortcut. proot-nya
+     * tanpa `--kill-on-exit`, jadi proses latar yang dinyalakan skrip (mis. klien mikrofon `socat`/`pacat`) tetap hidup
+     * sampai [stopGuestJob]. Dipakai mikrofon saat sesi berasal dari Shortcut: terminal kontainer tidak berjalan di
+     * dalam proot, sehingga perintah yang ditulis ke sana tidak pernah dijalankan di guest.
+     */
+    fun startGuestJob(ctx: Context, name: String, script: String) {
+        stopGuestJob(name)
+        val file = File(TinyEnv.runtimeDir(), ".tiny-job-$name.sh")
+        file.writeText(script + "\n")
+        val proc = spawnDetached(appProotScript(ctx, "/tmp/.tiny-job-$name.sh", killOnExit = false), "TinyJob-$name")
+        synchronized(guestJobs) { guestJobs[name] = proc }
+    }
+
+    /** Hentikan proot milik [startGuestJob] beserta seluruh anak prosesnya. */
+    fun stopGuestJob(name: String) {
+        val proc = synchronized(guestJobs) { guestJobs.remove(name) } ?: return
+        val pid = pids.remove(proc) ?: 0
+        if (pid > 0) runCatching { killTree(pid) }
+        runCatching { proc.destroy() }
+    }
+
+    /** Jalankan [script] sekali di proot guest dan tunggu selesai (panggil dari thread latar). */
+    fun runGuestScript(ctx: Context, script: String): Int =
+        runGuest(ctx, listOf("/bin/sh", "-c", script), "") { Log.d("Launcher", it) }
+
     /** Kutip satu argumen untuk /system/bin/sh. */
     private fun shq(s: String) = "'" + s.replace("'", "'\\''") + "'"
 

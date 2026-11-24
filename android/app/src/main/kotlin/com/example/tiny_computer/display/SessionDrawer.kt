@@ -179,7 +179,7 @@ fun SessionDrawer(
                         DrawerPage.POINTER -> PointerPage(state)
                         DrawerPage.INPUT -> InputPage(state, onPadOverlayChange)
                         DrawerPage.EFFECT -> EffectPage()
-                        DrawerPage.SOUND -> SoundPage()
+                        DrawerPage.SOUND -> SoundPage(state.currentApp)
                         DrawerPage.SESSION -> SessionPage(
                             onBack = { state.menuOpen = false; onBackToTerminal() },
                         )
@@ -384,23 +384,24 @@ private fun ProfileGroup(app: String?) {
  * Mode keluaran suara sendiri hanya diganti dari Pengaturan > Audio.
  */
 @Composable
-private fun SoundPage() {
+private fun SoundPage(app: String?) {
     val ctx = LocalContext.current
+    val allowed = SoundControl.micAllowedFor(app)
     LaunchedEffect(SoundControl.micOn) { if (SoundControl.micOn) SoundControl.watchMic(ctx) }
     DeckGroup(stringResource(R.string.tc_sound_title)) {
         DeckToggleRow(
             stringResource(R.string.tc_ui_start_streaming),
-            if (SoundControl.micAllowed) null else stringResource(R.string.tc_sound_mic_need_pulse),
+            if (allowed) null else stringResource(R.string.tc_sound_mic_need_pulse),
             SoundControl.micOn,
-            enabled = SoundControl.micAllowed,
-        ) { on -> if (on) SoundControl.startMic(ctx) else SoundControl.stopMic(ctx) }
+            enabled = allowed,
+        ) { on -> if (on) SoundControl.startMic(ctx, app) else SoundControl.stopMic(ctx) }
         DeckToggleRow(
             stringResource(R.string.tc_ui_mic_monitoring),
             if (SoundControl.micOn) null else stringResource(R.string.tc_ui_mic_monitoring_hint),
             SoundControl.monitorOn && SoundControl.micOn,
             enabled = SoundControl.micOn,
         ) { on -> SoundControl.setMonitor(ctx, on) }
-        if (!SoundControl.micAllowed) DeckNote(stringResource(R.string.tc_sound_mic_need_pulse))
+        if (!allowed) DeckNote(stringResource(R.string.tc_sound_mic_need_pulse))
     }
 }
 

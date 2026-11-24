@@ -38,6 +38,33 @@ object SoundControl {
     val micAllowed: Boolean get() = !directMode
 
     /**
+     * Seperti [micAllowed] tetapi untuk aplikasi Shortcut [app]: mode suara milik Shortcut itu (Pulse/ALSA) menang atas
+     * pengaturan global; `null` (desktop) memakai pengaturan global.
+     */
+    fun micAllowedFor(app: String?): Boolean = when (if (app == null) null else ShortcutPrefs.get(app).sound) {
+        ShortcutPrefs.SOUND_PULSE -> true
+        ShortcutPrefs.SOUND_ALSA -> false
+        else -> micAllowed
+    }
+
+    /**
+     * Perintah mikrofon dijalankan di terminal kontainer hanya bila desktop menyala (shell-nya benar-benar di dalam
+     * proot). Selain itu (sesi Shortcut) lewat proot terpisah, kalau tidak klien mikrofon tidak pernah tersambung
+     * dan perekam Android tidak mulai.
+     */
+    private fun runInGuest(ctx: Context, script: String, job: String? = null) {
+        if (Launcher.guiStarted) {
+            TermSessions.forCurrent(ctx).writeLine(script)
+            return
+        }
+        // proot dibuat di thread latar (menulis skrip dan memulai proses), bukan di thread UI
+        Thread({
+            runCatching { if (job != null) Launcher.startGuestJob(ctx.applicationContext, job, script) else Launcher.runGuestScript(ctx.applicationContext, script) }
+                .onFailure { android.util.Log.w("SoundControl", "perintah mikrofon di guest gagal: ${it.message}") }
+        }, "tiny-mic-cmd").apply { isDaemon = true; start() }
+    }
+
+    /**
      * Dipanggil Pengaturan > Audio saat saklar "Direct audio" berubah (mode keluaran hanya diganti dari sana).
      * Pindah ke Direct langsung mematikan mikrofon; mode keluaran berlaku penuh pada peluncuran berikutnya.
      */
@@ -48,8 +75,8 @@ object SoundControl {
     }
 
     /** Hidupkan mikrofon; false bila ditolak (mode Direct, atau izin RECORD_AUDIO belum diberikan). */
-    fun startMic(ctx: Context): Boolean {
-        if (!micAllowed) return false
+    fun startMic(ctx: Context, app: String? = null): Boolean {
+        if (!micAllowedFor(app)) return false
         if (micOn) return true
         if (ctx.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             ctx.findActivity()?.requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 2)
@@ -58,14 +85,16 @@ object SoundControl {
         // server soket di sisi Android dulu (guest menyambung), lalu klien di guest
         Launcher.ensurePulseForMic()
         AudioStream.startStreaming("${TinyEnv.dataPath}/containers/${TinyEnv.currentContainer}$MIC_SOCKET")
-        TermSessions.forCurrent(ctx).writeLine(Launcher.micCommand(MIC_SOCKET))
+        runInGuest(ctx, Launcher.micCommand(MIC_SOCKET), job = "mic")
         micOn = true
         return true
     }
 
     fun stopMic(ctx: Context) {
         if (!micOn && !monitorOn) return
-        TermSessions.forCurrent(ctx).writeLine(Launcher.micStopCommand(MIC_SOCKET)) // modul loopback ikut dibongkar
+        if (Launcher.guiStarted) TermSessions.forCurrent(ctx).writeLine(Launcher.micStopCommand(MIC_SOCKET)) // modul loopback ikut dibongkar
+        else runInGuest(ctx, Launcher.micStopCommand(MIC_SOCKET))
+        Launcher.stopGuestJob("mic")
         AudioStream.stopStreaming() // tidak memblokir thread UI
         micOn = false
         monitorOn = false
@@ -74,7 +103,7 @@ object SoundControl {
     /** Monitor realtime; hanya bisa menyala selama mikrofon hidup. */
     fun setMonitor(ctx: Context, on: Boolean) {
         if (on && !micOn) return
-        TermSessions.forCurrent(ctx).writeLine(Launcher.micMonitorCommand(on))
+        runInGuest(ctx, Launcher.micMonitorCommand(on))
         monitorOn = on
     }
 
@@ -83,9 +112,16 @@ object SoundControl {
      * saklar tetap "hidup" padahal tidak ada suara yang mengalir. Dipanggil dari LaunchedEffect(micOn).
      */
     suspend fun watchMic(ctx: Context) {
+        var waited = 0
         while (micOn) {
             delay(1000)
-            if (!AudioStream.running) stopMic(ctx)
+            if (!AudioStream.running) { stopMic(ctx); break }
+            // klien di guest tidak pernah tersambung (socat/pacat tidak ada, atau proot gagal): saklar jangan tampak hidup
+            if (!AudioStream.connected && ++waited >= 25) {
+                android.widget.Toast.makeText(ctx.applicationContext, "Microphone client did not connect. Run: sudo apt install -y socat pulseaudio-utils", android.widget.Toast.LENGTH_LONG).show()
+                stopMic(ctx)
+                break
+            }
         }
     }
 }
