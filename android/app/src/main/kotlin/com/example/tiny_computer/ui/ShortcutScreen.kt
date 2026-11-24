@@ -215,7 +215,7 @@ fun ShortcutScreen(onLaunch: (String) -> Unit, onShowTerminal: () -> Unit = {}) 
                 // Mode ikon: ikon besar tanpa teks yang saling berdekatan (gaya pemilih game PS5); mode daftar: satu
                 // baris per aplikasi dengan nama. Petunjuk kosong/tidak cocok tetap item satu baris penuh di grid yang sama.
                 LazyVerticalGrid(
-                    columns = if (iconMode) GridCells.Adaptive(minSize = 76.dp) else GridCells.Adaptive(minSize = 280.dp),
+                    columns = if (iconMode) GridCells.Adaptive(minSize = ICON_TILE_MIN) else GridCells.Adaptive(minSize = 280.dp),
                     modifier = Modifier.fillMaxWidth().weight(1f),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(if (iconMode) 6.dp else 8.dp),
@@ -340,8 +340,14 @@ private fun AppTile(app: DesktopApps.App, label: String, dimmed: Boolean, onClic
                 onClick = onClick,
                 onLongClick = { haptics.performHapticFeedback(HapticFeedbackType.LongPress); onLongClick() },
             ),
-    ) { AppIcon(app, maxWidth, label) }
+    ) { AppIcon(app, maxWidth, label, inset = ICON_TILE_INSET) }
 }
+
+/** Lebar minimum kotak ikon di mode ikon: makin kecil, makin banyak kolom dan makin kecil tiap ikon (dulu 76 dp). */
+private val ICON_TILE_MIN = 64.dp
+
+/** Jarak gambar ikon ke tepi kotaknya, sebagai pecahan ukuran kotak (dulu 0,12): lebih besar = gambar lebih kecil. */
+private const val ICON_TILE_INSET = 0.18f
 
 /** Mode daftar: ikon kecil + nama (satu baris) + keterangan; ketuk = jalankan, tekan lama = pengaturan. */
 @OptIn(ExperimentalFoundationApi::class)
@@ -370,7 +376,7 @@ private fun AppRow(app: DesktopApps.App, label: String, dimmed: Boolean, onClick
 
 /** Ikon dari tema ikon Linux (dimuat di thread latar); tanpa ikon: huruf pertama nama di atas permukaan yang sama. */
 @Composable
-private fun AppIcon(app: DesktopApps.App, size: Dp, label: String) {
+private fun AppIcon(app: DesktopApps.App, size: Dp, label: String, inset: Float = 0.12f) {
     val pal = LocalPalette.current
     val px = with(LocalDensity.current) { size.roundToPx() }
     val bitmap by produceState<ImageBitmap?>(initialValue = null, app.id, app.icon, px) {
@@ -383,7 +389,7 @@ private fun AppIcon(app: DesktopApps.App, size: Dp, label: String) {
     ) {
         val b = bitmap
         if (b != null) {
-            Image(bitmap = b, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize().padding(size * 0.12f))
+            Image(bitmap = b, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize().padding(size * inset))
         } else {
             Text(label.firstOrNull()?.uppercase() ?: "?", color = pal.signal, fontWeight = FontWeight.Bold, fontSize = (size.value * 0.42f).sp)
         }

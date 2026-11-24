@@ -22,7 +22,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -57,8 +59,10 @@ import com.example.tiny_computer.core.CustomScripts
 
 /**
  * Grup "Custom scripts" di Beranda, tepat di bawah kartu Open desktop. Tiap skrip tampil sebagai baris (nama,
- * deskripsi, ikon pensil untuk mengedit, tombol Run); tombol ikon + di bawah daftar membuka dialog untuk menambah
- * skrip baru. Run menjalankan skrip di terminal kontainer ([CustomScripts.run]) lalu membuka tab Terminal.
+ * deskripsi, ikon pensil untuk mengedit, ikon tempat sampah untuk menghapus, ikon play untuk menjalankan); tombol
+ * ikon + di header, di samping tombol "?", membuka dialog untuk menambah skrip baru. Play menjalankan skrip di
+ * terminal kontainer ([CustomScripts.run]) lalu membuka tab Terminal; setelah skrip selesai tanpa galat, terminal
+ * ditutup otomatis dan tampilan kembali ke Beranda.
  */
 @Composable
 fun CustomScriptsGroup(onShowTerminal: () -> Unit) {
@@ -67,9 +71,14 @@ fun CustomScriptsGroup(onShowTerminal: () -> Unit) {
     // null = dialog tertutup; id kosong = skrip baru; selain itu = edit skrip dengan id tersebut
     var editing by remember { mutableStateOf<CustomScripts.Item?>(null) }
     var adding by remember { mutableStateOf(false) }
+    // skrip yang menunggu konfirmasi hapus dari ikon tempat sampah di barisnya
+    var deleting by remember { mutableStateOf<CustomScripts.Item?>(null) }
     val items = CustomScripts.items
 
-    DeckGroup(stringResource(R.string.tc_cs_group), help = stringResource(R.string.tc_cs_group_help)) {
+    DeckGroup(
+        stringResource(R.string.tc_cs_group), help = stringResource(R.string.tc_cs_group_help),
+        headerAction = { DeckHeaderIconAction(Icons.Filled.Add, stringResource(R.string.tc_cs_add)) { adding = true } },
+    ) {
         if (items.isEmpty()) {
             Text(
                 stringResource(R.string.tc_cs_empty), fontSize = 13.sp, lineHeight = 18.sp,
@@ -79,7 +88,7 @@ fun CustomScriptsGroup(onShowTerminal: () -> Unit) {
         items.forEach { item ->
             Row(
                 Modifier.fillMaxWidth().padding(start = 14.dp, end = 10.dp, top = 8.dp, bottom = 8.dp),
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Column(Modifier.weight(1f)) {
                     Text(
@@ -94,13 +103,12 @@ fun CustomScriptsGroup(onShowTerminal: () -> Unit) {
                     }
                 }
                 ScriptIconButton(Icons.Filled.Edit, stringResource(R.string.tc_cs_edit)) { editing = item }
-                DeckButton(stringResource(R.string.tc_cs_run), Modifier.widthIn(min = 72.dp)) { CustomScripts.run(ctx, item, onShowTerminal) }
+                ScriptIconButton(Icons.Filled.Delete, stringResource(R.string.tc_cs_delete)) { deleting = item }
+                ScriptIconButton(Icons.Filled.PlayArrow, stringResource(R.string.tc_cs_run), primary = true, iconSize = 26.dp) {
+                    CustomScripts.run(ctx, item, onShowTerminal)
+                }
             }
-            Box(Modifier.fillMaxWidth().height(1.dp).background(pal.line))
-        }
-        // tombol image + di bawah daftar: membuka dialog tambah skrip
-        Box(Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
-            ScriptIconButton(Icons.Filled.Add, stringResource(R.string.tc_cs_add)) { adding = true }
+            if (item !== items.last()) Box(Modifier.fillMaxWidth().height(1.dp).background(pal.line))
         }
     }
 
@@ -109,6 +117,12 @@ fun CustomScriptsGroup(onShowTerminal: () -> Unit) {
             initial = null, onDismiss = { adding = false },
             onSave = { name, desc, script -> CustomScripts.add(name, desc, script); adding = false },
             onDelete = null,
+        )
+    }
+    deleting?.let { item ->
+        ConfirmDeleteScriptDialog(
+            name = item.name, onDismiss = { deleting = null },
+            onConfirm = { CustomScripts.remove(item.id); deleting = null },
         )
     }
     editing?.let { item ->
@@ -120,16 +134,37 @@ fun CustomScriptsGroup(onShowTerminal: () -> Unit) {
     }
 }
 
-/** Tombol ikon kotak 48 dp, gaya sama dengan roda gigi pengaturan di kartu Open desktop. */
+/**
+ * Tombol ikon kotak 48 dp, gaya sama dengan roda gigi pengaturan di kartu Open desktop. [primary] = terisi warna
+ * sinyal (tombol play), seperti DeckButton utama.
+ */
 @Composable
-private fun ScriptIconButton(icon: ImageVector, description: String, onClick: () -> Unit) {
+private fun ScriptIconButton(
+    icon: ImageVector, description: String, primary: Boolean = false, iconSize: Dp = 20.dp, onClick: () -> Unit,
+) {
     val pal = LocalPalette.current
     val shape = RoundedCornerShape(12.dp)
+    val base = Modifier.size(48.dp).clip(shape)
     Box(
         contentAlignment = Alignment.Center,
-        modifier = Modifier.size(48.dp).clip(shape).background(Color.White.copy(alpha = 0.03f)).border(1.dp, pal.line2, shape)
+        modifier = (if (primary) base.background(pal.signal) else base.background(Color.White.copy(alpha = 0.03f)).border(1.dp, pal.line2, shape))
             .clickable(onClick = onClick),
-    ) { Icon(icon, description, tint = pal.onBackground, modifier = Modifier.size(20.dp)) }
+    ) { Icon(icon, description, tint = if (primary) pal.onSignal else pal.onBackground, modifier = Modifier.size(iconSize)) }
+}
+
+/** Konfirmasi hapus skrip; dipakai ikon tempat sampah di baris dan tombol Delete di dialog edit. */
+@Composable
+private fun ConfirmDeleteScriptDialog(name: String, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    val pal = LocalPalette.current
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = colors.surface,
+        title = { Text(stringResource(R.string.tc_cs_delete_title), fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = colors.onBackground) },
+        text = { Text(stringResource(R.string.tc_cs_delete_body, name), fontSize = 14.sp, color = colors.onSurfaceVariant) },
+        confirmButton = { TextButton(onClick = onConfirm) { Text(stringResource(R.string.tc_cs_delete), color = pal.signal) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.tc_btn_cancel), color = pal.signal) } },
+    )
 }
 
 /**
@@ -184,13 +219,9 @@ private fun CustomScriptDialog(
         }
     }
     if (confirmDelete && onDelete != null) {
-        AlertDialog(
-            onDismissRequest = { confirmDelete = false },
-            containerColor = colors.surface,
-            title = { Text(stringResource(R.string.tc_cs_delete_title), fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = colors.onBackground) },
-            text = { Text(stringResource(R.string.tc_cs_delete_body, initial?.name ?: ""), fontSize = 14.sp, color = colors.onSurfaceVariant) },
-            confirmButton = { TextButton(onClick = { confirmDelete = false; onDelete() }) { Text(stringResource(R.string.tc_cs_delete), color = pal.signal) } },
-            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text(stringResource(R.string.tc_btn_cancel), color = pal.signal) } },
+        ConfirmDeleteScriptDialog(
+            name = initial?.name ?: "", onDismiss = { confirmDelete = false },
+            onConfirm = { confirmDelete = false; onDelete() },
         )
     }
 }

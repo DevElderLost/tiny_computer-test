@@ -31,6 +31,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.MaterialTheme
@@ -82,6 +83,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.tiny_computer.R
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 
@@ -93,7 +95,10 @@ import kotlin.math.roundToInt
 private val DeckGroupShape = RoundedCornerShape(14.dp)
 
 @Composable
-fun DeckGroup(title: String, modifier: Modifier = Modifier, help: String? = null, content: @Composable ColumnScope.() -> Unit) {
+fun DeckGroup(
+    title: String, modifier: Modifier = Modifier, help: String? = null,
+    headerAction: (@Composable () -> Unit)? = null, content: @Composable ColumnScope.() -> Unit,
+) {
     val colors = MaterialTheme.colorScheme
     val pal = LocalPalette.current
     var showHelp by remember { mutableStateOf(false) }
@@ -101,10 +106,12 @@ fun DeckGroup(title: String, modifier: Modifier = Modifier, help: String? = null
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
-            modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = if (help != null) 0.dp else 6.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = if (help != null || headerAction != null) 0.dp else 6.dp),
         ) {
             Text(title.uppercase(), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.5.sp, color = colors.onSurfaceVariant)
             Box(Modifier.weight(1f).height(1.dp).background(pal.line))
+            // aksi opsional (mis. tombol +) tepat di samping tombol "?"
+            headerAction?.invoke()
             if (help != null) DeckHelpIcon { showHelp = true }
         }
         Column(
@@ -133,6 +140,18 @@ fun DeckHelpIcon(onClick: () -> Unit) {
             Text("?", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = colors.onSurfaceVariant)
         }
     }
+}
+
+/** Tombol ikon kotak membulat di header kelompok (bentuk sama dengan tombol ikon di baris skrip), mis. + untuk menambah item. */
+@Composable
+fun DeckHeaderIconAction(icon: ImageVector, description: String, onClick: () -> Unit) {
+    val pal = LocalPalette.current
+    val shape = RoundedCornerShape(12.dp)
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier.size(40.dp).clip(shape).background(Color.White.copy(alpha = 0.03f)).border(1.dp, pal.line2, shape)
+            .semantics { contentDescription = description }.clickable(role = Role.Button, onClick = onClick),
+    ) { Icon(icon, null, tint = pal.onBackground, modifier = Modifier.size(20.dp)) }
 }
 
 /** Dialog penjelasan sebuah pengaturan (dibuka tombol "?"). */

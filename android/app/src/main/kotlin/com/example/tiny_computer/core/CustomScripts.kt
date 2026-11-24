@@ -2,7 +2,10 @@ package com.example.tiny_computer.core
 
 import android.content.Context
 import android.widget.Toast
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import com.example.tiny_computer.R
 import org.json.JSONArray
 import org.json.JSONObject
@@ -26,6 +29,19 @@ object CustomScripts {
 
     /** Daftar yang diamati Compose; diisi dari [TinyPrefs] sekali, saat objek ini pertama dipakai. */
     val items = mutableStateListOf<Item>()
+
+    /**
+     * Id skrip yang sedang berjalan di terminal. TinyApp menunggu penanda selesai ([isDone]) lalu menutup tampilan
+     * terminal, mematikan shell-nya, dan kembali ke Beranda (kartu Open desktop). Bila skrip gagal, penanda tidak
+     * ditulis sehingga terminal tetap terbuka dan galatnya bisa dibaca.
+     */
+    var watching by mutableStateOf<String?>(null)
+        private set
+
+    fun stopWatching(id: String) { if (watching == id) watching = null }
+
+    /** Skrip [id] selesai tanpa galat (penanda `<id>.done` ditulis shell setelah `bash <id>.sh` berkode keluar 0). */
+    fun isDone(id: String) = File(hostDir(), "$id.done").exists()
 
     init { load() }
 
@@ -70,6 +86,7 @@ object CustomScripts {
     fun remove(id: String) {
         if (items.removeAll { it.id == id }) save()
         runCatching { File(hostDir(), "$id.sh").delete() }
+        runCatching { File(hostDir(), "$id.done").delete() }
     }
 
     private fun hostDir() = File(TinyEnv.containerDir(), "home/tiny/.local/share/custom-scripts")
@@ -86,13 +103,17 @@ object CustomScripts {
         file.writeText(item.script.replace("\r\n", "\n").replace('\r', '\n').trimEnd() + "\n")
         file.setReadable(true, false)
         file.setExecutable(true, false)
-        return "clear; bash $GUEST_DIR/${item.id}.sh"
+        // penanda selesai dari proses sebelumnya dihapus supaya tidak dianggap selesai lebih awal
+        File(dir, "${item.id}.done").delete()
+        // penanda ditulis hanya bila skrip berakhir sukses (&&): gagal -> terminal tetap terbuka agar galatnya terbaca
+        return "clear; bash $GUEST_DIR/${item.id}.sh && : > $GUEST_DIR/${item.id}.done"
     }
 
     /**
      * Run: jalankan [item] di terminal. Kontainer yang sudah berjalan langsung menerima perintah dan tab Terminal
      * dibuka lewat [onShowTerminal]; bila belum, kontainer dinyalakan dulu ([Startup.beginForTerminal]) dan
-     * perintahnya ditulis begitu siap (TinyApp lalu membuka tab Terminal).
+     * perintahnya ditulis begitu siap (TinyApp lalu membuka tab Terminal). Setelah skrip selesai tanpa galat,
+     * TinyApp menutup terminal dan kembali ke Beranda ([watching]).
      */
     fun run(ctx: Context, item: Item, onShowTerminal: () -> Unit) {
         val command = runCatching { prepare(item) }.getOrElse {
@@ -103,6 +124,7 @@ object CustomScripts {
             Toast.makeText(ctx, R.string.tc_cs_no_system, Toast.LENGTH_LONG).show()
             return
         }
+        watching = item.id
         if (Startup.phase == Startup.Phase.DONE && Launcher.isStarted) {
             Launcher.runInTerminal(ctx, command)
             onShowTerminal()

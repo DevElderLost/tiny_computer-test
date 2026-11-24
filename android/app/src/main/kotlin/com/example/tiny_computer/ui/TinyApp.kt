@@ -87,6 +87,7 @@ import com.example.tiny_computer.R
 import com.example.tiny_computer.core.AppImageInstaller
 import com.example.tiny_computer.core.Cfg
 import com.example.tiny_computer.core.Containers
+import com.example.tiny_computer.core.CustomScripts
 import com.example.tiny_computer.core.FlatpakManager
 import com.example.tiny_computer.core.Launcher
 import com.example.tiny_computer.core.NavRequest
@@ -201,6 +202,25 @@ fun TinyApp() {
             delay(INSTALL_POLL_MS)
         }
         AppImageInstaller.stopWatching(id)
+    }
+    // Custom scripts selesai di terminal: tutup tampilan terminal, matikan shell-nya, dan kembali ke Beranda (kartu Open
+    // desktop). Bila skrip gagal, penanda selesai tidak ditulis dan terminal dibiarkan terbuka agar galatnya terbaca.
+    val customScript = CustomScripts.watching
+    LaunchedEffect(customScript) {
+        val id = customScript ?: return@LaunchedEffect
+        val deadline = System.currentTimeMillis() + INSTALL_WAIT_MS
+        while (System.currentTimeMillis() < deadline) {
+            if (withContext(Dispatchers.IO) { CustomScripts.isDone(id) }) {
+                delay(INSTALL_DONE_PAUSE_MS)
+                if (page == Page.TERMINAL.ordinal) page = Page.HOME.ordinal
+                // bila desktop sedang berjalan di kontainer yang sama, biarkan hidup
+                if (!Launcher.guiStarted) Launcher.shutdownTerminal()
+                CustomScripts.stopWatching(id)
+                return@LaunchedEffect
+            }
+            delay(INSTALL_POLL_MS)
+        }
+        CustomScripts.stopWatching(id)
     }
     // uninstall AppImage selesai: sama seperti pemasangan, terminal ditutup dan tampilan kembali ke tab Shortcut.
     // Sisa pembersihan sisi Android (pengaturan, log, cache ikon) dikerjakan setelah skrip menulis penanda selesai.
