@@ -68,6 +68,33 @@ echo "[tiny] desktop sesi Shortcut: xfwm4=${'$'}(pgrep -x xfwm4 | head -1) panel
 : > "${'$'}HOME/.vnc/$DESKTOP_READY_FILE"
 """.trimStart()
 
+    /**
+     * Sesi Shortcut dengan desktop XFCE penuh: aplikasi berjalan di proot TERPISAH yang tidak lewat Xsession, jadi tidak
+     * mewarisi lingkungan sesi desktop (modul input method GTK/Qt/XIM, bus D-Bus sesi, XDG_*). Aplikasi yang dibuka dari
+     * Open desktop mewarisinya. SDL milik Ren'Py mati dengan SIGSEGV tepat setelah inisialisasi keyboard (GetKeyboardMapping +
+     * GetModifierMapping, sebelum CreateWindow) bila lingkungan itu tidak ada; di Open desktop jalan. Di sini daftar
+     * variabel yang sama disalin dari proses sesi (xfce4-session, cadangan xfwm4) sebelum aplikasi dijalankan. Hanya
+     * variabel yang ada di sesi yang disalin; variabel tampilan/GPU/SDL milik skrip ini dan env buatan pengguna di bawahnya
+     * tetap menimpa karena diekspor sesudahnya.
+     */
+    private val DESKTOP_ENV_SYNC: String = """
+tiny_sp="${'$'}(pgrep -x xfce4-session | head -1)"
+[ -n "${'$'}tiny_sp" ] || tiny_sp="${'$'}(pgrep -x xfwm4 | head -1)"
+if [ -n "${'$'}tiny_sp" ] && [ -r "/proc/${'$'}tiny_sp/environ" ]; then
+  tiny_synced=""
+  for k in DBUS_SESSION_BUS_ADDRESS XDG_CURRENT_DESKTOP DESKTOP_SESSION XDG_MENU_PREFIX XDG_DATA_DIRS XDG_CONFIG_DIRS GTK_IM_MODULE QT_IM_MODULE XMODIFIERS SDL_IM_MODULE SESSION_MANAGER; do
+    v="${'$'}(tr '\0' '\n' < "/proc/${'$'}tiny_sp/environ" 2>/dev/null | sed -n "s/^${'$'}k=//p" | head -1)"
+    [ -n "${'$'}v" ] || continue
+    export "${'$'}k=${'$'}v"
+    tiny_synced="${'$'}tiny_synced ${'$'}k"
+  done
+  echo "[tiny] env sesi desktop disalin dari pid ${'$'}tiny_sp:${'$'}{tiny_synced:- (tidak ada)}"
+else
+  echo "[tiny] env sesi desktop: proses sesi tidak ditemukan, env tidak disalin"
+fi
+unset tiny_sp tiny_synced k v
+""".trimStart()
+
     private fun hostDir() = File(TinyEnv.dataPath, "tiny/shortcuts").apply { mkdirs() }
 
     private fun safe(id: String) = id.replace(Regex("[^A-Za-z0-9._-]"), "_")
@@ -450,7 +477,10 @@ fi
         // dan panel/wallpaper hidup (maks 40 detik), supaya jendelanya tidak muncul di layar kosong lalu tertimpa wallpaper,
         // dan supaya bus D-Bus milik sesi XFCE sudah ada untuk dipakai aplikasi (pencarian di bawah). Berkas penanda
         // ~/.vnc/shortcut-desktop-ready dibaca Launcher untuk layar progres.
-        if (desktop) sb.append(DESKTOP_WAIT)
+        if (desktop) {
+            sb.append(DESKTOP_WAIT)
+            sb.append(DESKTOP_ENV_SYNC)
+        }
 
         // Aplikasi Wine? (dipakai untuk memilih jalur Wayland di bawah)
         val prog = effectiveCommand(app, s).substringBefore(' ').substringAfterLast('/')
@@ -643,6 +673,22 @@ done
         sb.append("TINY_CMD=${q(cmd)}\n")
         sb.append(
             """
+# Dengan launch log menyala aplikasi tidak di-exec: kode keluarnya dicatat (139 = SIGSEGV) supaya crash klien X tidak
+# tampak sebagai "keluar normal".
+if [ -n "${'$'}TINY_LAUNCH_LOG" ]; then
+  if [ -z "${'$'}DBUS_SESSION_BUS_ADDRESS" ] && command -v dbus-launch >/dev/null 2>&1; then
+    dbus-launch --exit-with-session sh -c "${'$'}TINY_CMD"
+  else
+    sh -c "${'$'}TINY_CMD"
+  fi
+  tiny_rc=${'$'}?
+  if [ ${'$'}tiny_rc -gt 128 ]; then
+    echo "[tiny] aplikasi mati karena sinyal ${'$'}((tiny_rc-128)) (rc=${'$'}tiny_rc; 11 = SIGSEGV, 6 = SIGABRT)"
+  else
+    echo "[tiny] aplikasi selesai rc=${'$'}tiny_rc"
+  fi
+  exit ${'$'}tiny_rc
+fi
 if [ -z "${'$'}DBUS_SESSION_BUS_ADDRESS" ] && command -v dbus-launch >/dev/null 2>&1; then
   exec dbus-launch --exit-with-session sh -c "${'$'}TINY_CMD"
 fi
