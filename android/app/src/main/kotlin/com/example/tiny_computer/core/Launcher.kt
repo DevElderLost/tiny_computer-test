@@ -844,6 +844,9 @@ export PROOT_LOADER=${'$'}DATA_DIR/applib/libproot-loader.so
 export PROOT_LOADER_32=${'$'}DATA_DIR/applib/libproot-loader32.so""".trimIndent()
     }
 
+    /** Nilai PULSE_SERVER yang benar untuk guest: server PulseAudio sisi Android lewat TCP lokal. */
+    fun pulseServerValue(): String = "tcp:127.0.0.1:${Cfg.defaultAudioPort}"
+
     fun launchCurrentContainer(ctx: Context) {
         val idx = TinyEnv.currentContainer
         // pad virtual disiapkan ulang hanya bila tidak ada aplikasi Shortcut yang sedang memakainya
@@ -855,7 +858,12 @@ export PROOT_LOADER_32=${'$'}DATA_DIR/applib/libproot-loader32.so""".trimIndent(
         val spec = guestSpec(ctx, log)
         val boot = Containers.boot(idx, TinyEnv.defaultBoot)
         val term = TermSessions.forCurrent(ctx)
-        term.writeLine(guestEnvScript(spec) + "\n" + boot + "\n" + TinyEnv.postCommand + "\nclear")
+        // PULSE_SERVER tanpa port (mis. "127.0.0.1" dari boot lama atau profil rootfs) membuat klien Pulse memakai port 4713,
+        // padahal server Android di Cfg.defaultAudioPort: "Connection refused" dan Volume Control macet. Dipaksa benar di boot
+        // dan sekali lagi sesudah login shell (profil rootfs dibaca `bash -l` dan bisa menimpa nilai dari boot).
+        val pulse = pulseServerValue()
+        val fixedBoot = boot.replace(Regex("PULSE_SERVER=\\S*"), "PULSE_SERVER=$pulse")
+        term.writeLine(guestEnvScript(spec) + "\n" + fixedBoot + "\nexport PULSE_SERVER=$pulse\n" + TinyEnv.postCommand + "\nclear")
         started = true
         guiStarted = false
     }
@@ -898,6 +906,7 @@ export PROOT_LOADER_32=${'$'}DATA_DIR/applib/libproot-loader32.so""".trimIndent(
         }
         return stopApps + """
 mkdir -p "${'$'}HOME/.vnc"
+export PULSE_SERVER=${pulseServerValue()}
 ${ExtraSetup.guardScript()}command -v Xwayland >/dev/null 2>&1 || { echo "Memasang xwayland..."; sudo apt update && sudo apt install -y xwayland; }
 unset WAYLAND_DISPLAY
 rm -f /tmp/.X11-unix/X4 /tmp/.X4-lock
@@ -932,6 +941,7 @@ ${WsiWayland.probeForDesktop(sessionEnv)}
         }
         return """
 mkdir -p "${'$'}HOME/.vnc"
+export PULSE_SERVER=${pulseServerValue()}
 ${ExtraSetup.guardScript()}unset WAYLAND_DISPLAY
 export TINY_NO_WAYLAND=1
 export GDK_CORE_DEVICE_EVENTS=1 QT_XCB_NO_XI2=1
