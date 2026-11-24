@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -21,6 +22,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -32,6 +34,7 @@ import com.droiddeck.launcher.input.ControllerPrefs
 import com.example.tiny_computer.R
 import com.example.tiny_computer.controller.ControllerEditorActivity
 import com.example.tiny_computer.controls.ControllerMode
+import com.example.tiny_computer.controls.ProfileStore
 import com.example.tiny_computer.controls.WinlatorControlsGroup
 import com.example.tiny_computer.controls.WinlatorControlsPage
 import com.example.tiny_computer.core.Cfg
@@ -61,6 +64,8 @@ fun ControllerScreen() {
     var size by remember { mutableIntStateOf((Cfg.padOverlayScale * 100).roundToInt().coerceIn(SIZE_RANGE.first, SIZE_RANGE.last)) }
     var mappingOpen by remember { mutableStateOf(false) }
     var winPad by remember { mutableStateOf<String?>(null) }
+    // tab pengaturan: 0 = controller layar DroidDeck, 1 = controller gaya Winlator; awalnya mengikuti mode yang sedang aktif
+    var tab by rememberSaveable { mutableIntStateOf(if (ProfileStore.enabled(ctx) && !Cfg.padOverlay) 1 else 0) }
     var gyro by remember { mutableStateOf(ControllerPrefs.gyroEnabled(ctx)) }
     var gyroTarget by remember { mutableStateOf(ControllerPrefs.gyroTarget(ctx)) }
     var gyroSens by remember { mutableIntStateOf(ControllerPrefs.gyroSensitivity(ctx)) }
@@ -147,8 +152,6 @@ fun ControllerScreen() {
                 format = { "$it%" },
             ) { size = it }
         }
-        // pengaturan controller gaya Winlator tepat di bawah grup On-screen buttons
-        WinlatorControlsGroup { winPad = it }
     }
 
     val behaviour: @Composable () -> Unit = {
@@ -226,16 +229,37 @@ fun ControllerScreen() {
         }
     }
 
+    // pengaturan controller gaya Winlator dipisah ke tab sendiri supaya tidak tercampur dengan pengaturan DroidDeck
+    val winlator: @Composable () -> Unit = { WinlatorControlsGroup { winPad = it } }
+
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
         ScreenTitle(stringResource(R.string.tc_ctrl_title), stringResource(R.string.tc_ctrl_title_hint))
-        if (land) {
-            Row(Modifier.fillMaxWidth()) {
-                Column(Modifier.weight(1f)) { basics() }
-                Column(Modifier.weight(1f)) { behaviour() }
+        Row(
+            Modifier.fillMaxWidth(if (land) 0.5f else 1f).padding(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            DeckButton("DroidDeck", Modifier.weight(1f), primary = tab == 0) { tab = 0 }
+            DeckButton("Winlator", Modifier.weight(1f), primary = tab == 1) { tab = 1 }
+        }
+        if (tab == 0) {
+            if (land) {
+                Row(Modifier.fillMaxWidth()) {
+                    Column(Modifier.weight(1f)) { basics() }
+                    Column(Modifier.weight(1f)) { behaviour() }
+                }
+            } else {
+                basics()
+                behaviour()
             }
         } else {
-            basics()
-            behaviour()
+            if (land) {
+                Row(Modifier.fillMaxWidth()) {
+                    Column(Modifier.weight(1f)) { winlator() }
+                    Spacer(Modifier.weight(1f))
+                }
+            } else {
+                winlator()
+            }
         }
     }
 }
