@@ -159,11 +159,30 @@ private fun WlSwitchRow(label: String, hint: String?, checked: Boolean, onChange
     }
 }
 
+/** Tombol besar "Controls Editor" (`EditorButton` Winlator). */
+@Composable
+internal fun WlEditorButton(onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().height(52.dp),
+        shape = RoundedCornerShape(14.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary),
+    ) {
+        Icon(Icons.Outlined.SportsEsports, null)
+        Spacer(Modifier.width(10.dp))
+        Text(stringResource(R.string.wl_controls_editor), style = MaterialTheme.typography.titleMedium)
+    }
+}
+
+private fun openEditor(ctx: android.content.Context, profileId: Int) {
+    ctx.startActivity(Intent(ctx, ControlsEditorActivity::class.java).putExtra(ControlsEditorActivity.EXTRA_PROFILE, profileId))
+}
+
 /**
  * Grup di halaman Controller: saklar mode, controller eksternal, lalu (bila mode menyala) seluruh pengaturan profil
  * langsung di bawah saklar: pilih/buat/ganti nama/duplikat/hapus profil, opacity overlay, kecepatan kursor,
- * impor/ekspor profil, dan daftar controller eksternal. Editor tata letak sudah ada di grup Layout, jadi tidak ada
- * tombol Controls Editor atau Manage profiles lagi. [onOpenController] membuka halaman pemetaan tombol satu controller.
+ * impor/ekspor profil, tombol Controls Editor (di bawah impor/ekspor), dan daftar controller eksternal. Tombol Manage profiles dan halaman
+ * lamanya sudah dihapus. [onOpenController] membuka halaman pemetaan tombol satu controller.
  */
 @Composable
 fun WinlatorControlsGroup(onOpenController: (String) -> Unit) = WlTheme { WinlatorControlsGroupBody(onOpenController) }
@@ -310,6 +329,8 @@ private fun ProfileSection(onOpenController: (String) -> Unit) {
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         ) { Icon(Icons.Outlined.FileUpload, null); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.wl_export)) }
     }
+    // tombol Controls Editor tepat di bawah Import/Export, sebelum daftar controller eksternal
+    WlEditorButton { openEditor(ctx, p.id) }
     Text(
         stringResource(R.string.wl_ext_controllers),
         modifier = Modifier.padding(top = 6.dp, bottom = 2.dp),
