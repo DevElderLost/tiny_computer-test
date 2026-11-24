@@ -92,7 +92,29 @@ if [ -n "${'$'}tiny_sp" ] && [ -r "/proc/${'$'}tiny_sp/environ" ]; then
 else
   echo "[tiny] env sesi desktop: proses sesi tidak ditemukan, env tidak disalin"
 fi
-unset tiny_sp tiny_synced k v
+# Variabel lain di sesi yang belum ada di proot aplikasi (mis. XDG_RUNTIME_DIR, LANG, XDG_SESSION_*) diisi juga. Yang sudah
+  # ada tidak ditimpa, dan variabel tampilan/GPU/audio/preload milik skrip ini dilewati.
+if [ -n "${'$'}tiny_sp" ] && [ -r "/proc/${'$'}tiny_sp/environ" ]; then
+  tiny_filled=""
+  tiny_ef="/tmp/.tiny-sess-env.${'$'}${'$'}"
+  tr '\0' '\n' < "/proc/${'$'}tiny_sp/environ" 2>/dev/null | grep -E '^[A-Za-z_][A-Za-z0-9_]*=' > "${'$'}tiny_ef" 2>/dev/null
+  while IFS= read -r line; do
+    k="${'$'}{line%%=*}"; v="${'$'}{line#*=}"
+    case "${'$'}k" in
+      _|SHLVL|PWD|OLDPWD|TERM|HOME|USER|LOGNAME|SHELL|PATH|DISPLAY|WAYLAND_*|TINY_*|LD_*|SDL_*|PULSE_*|ALSA_*|GDK_*|QT_QPA_*|QT_XCB_*|QSG_*|MESA_*|VK_*|LIBGL_*|GALLIUM_*|XDG_VTNR|XDG_SESSION_ID|XDG_SEAT) continue ;;
+    esac
+    eval "tiny_isset=\${'$'}{${'$'}k+x}"
+    [ -n "${'$'}tiny_isset" ] && continue
+    export "${'$'}k=${'$'}v"
+    tiny_filled="${'$'}tiny_filled ${'$'}k"
+  done < "${'$'}tiny_ef"
+  rm -f "${'$'}tiny_ef"
+  echo "[tiny] env sesi desktop (isi yang kosong):${'$'}{tiny_filled:- (tidak ada)}"
+fi
+# Sesi X++ tidak punya compositor Wayland sehingga skrip ini tidak mengatur XDG_RUNTIME_DIR; di Open desktop nilainya /tmp.
+[ -n "${'$'}XDG_RUNTIME_DIR" ] || export XDG_RUNTIME_DIR=/tmp
+echo "[tiny] XDG_RUNTIME_DIR=${'$'}XDG_RUNTIME_DIR LANG=${'$'}{LANG:-unset} XMODIFIERS=${'$'}{XMODIFIERS:-unset} GTK_IM_MODULE=${'$'}{GTK_IM_MODULE:-unset}"
+unset tiny_sp tiny_synced tiny_filled tiny_ef tiny_isset line k v
 """.trimStart()
 
     private fun hostDir() = File(TinyEnv.dataPath, "tiny/shortcuts").apply { mkdirs() }
