@@ -60,7 +60,7 @@ fun ControllerScreen() {
     var opacity by remember { mutableIntStateOf((Cfg.padOverlayOpacity * 100).roundToInt().coerceIn(OPACITY_RANGE.first, OPACITY_RANGE.last)) }
     var size by remember { mutableIntStateOf((Cfg.padOverlayScale * 100).roundToInt().coerceIn(SIZE_RANGE.first, SIZE_RANGE.last)) }
     var mappingOpen by remember { mutableStateOf(false) }
-    var winOpen by remember { mutableStateOf(false) }
+    var winPad by remember { mutableStateOf<String?>(null) }
     var gyro by remember { mutableStateOf(ControllerPrefs.gyroEnabled(ctx)) }
     var gyroTarget by remember { mutableStateOf(ControllerPrefs.gyroTarget(ctx)) }
     var gyroSens by remember { mutableIntStateOf(ControllerPrefs.gyroSensitivity(ctx)) }
@@ -94,8 +94,9 @@ fun ControllerScreen() {
         if (ControllerPrefs.gyroSensitivity(ctx) != gyroSens) ControllerPrefs.setGyroSensitivity(ctx, gyroSens)
     }
 
-    if (winOpen) {
-        WinlatorControlsPage(onBack = { winOpen = false })
+    val openPad = winPad
+    if (openPad != null) {
+        WinlatorControlsPage(openPad, onBack = { winPad = null })
         return
     }
 
@@ -147,7 +148,7 @@ fun ControllerScreen() {
             ) { size = it }
         }
         // pengaturan controller gaya Winlator tepat di bawah grup On-screen buttons
-        WinlatorControlsGroup { winOpen = true }
+        WinlatorControlsGroup { winPad = it }
     }
 
     val behaviour: @Composable () -> Unit = {
