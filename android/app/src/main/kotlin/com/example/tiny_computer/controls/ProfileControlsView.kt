@@ -24,9 +24,6 @@ import kotlin.math.min
  * Ditaruh sebagai View saudara di atas layar compositor (bukan di dalam Compose), sehingga sentuhan di luar elemen
  * jatuh ke layar compositor seperti biasa.
  *
- * Tombol mengambang kecil ([ProfileStore.floatingButton]): ketuk = tampil/sembunyikan semua tombol profil, tekan
- * lama = buka keyboard PC ([onKeyboard]), seret = pindahkan.
- *
  * [editing] = mode editor ([ControlsEditorActivity]): tidak mengirim masukan; seret elemen untuk memindahkan, ketuk
  * untuk memilih ([onSelect]).
  */
@@ -34,7 +31,6 @@ class ProfileControlsView(
     context: Context,
     private val dispatcher: BindingDispatcher?,
     private val editing: Boolean = false,
-    private val onKeyboard: () -> Unit = {},
 ) : View(context) {
 
     var profile: Profile? = null
@@ -91,20 +87,6 @@ class ProfileControlsView(
 
     private val touches = HashMap<Int, Touch>()
     private val toggled = HashSet<Element>()
-    // tombol mengambang
-    private var fabPointer = -1
-    private var fabMoved = false
-    private var fabLong = false
-    private var fabDownX = 0f
-    private var fabDownY = 0f
-    private val fabLongTask = Runnable {
-        if (fabPointer != -1 && !fabMoved) {
-            fabLong = true
-            performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-            onKeyboard()
-        }
-    }
-
     /** Sama dengan `snappingSize` Winlator: lebar / 100 dengan pembagian bilangan bulat. */
     private val snap: Float get() = max(1, width / 100).toFloat()
 
@@ -149,23 +131,6 @@ class ProfileControlsView(
     private fun topHit(x: Float, y: Float): Element? =
         profile?.elements?.lastOrNull { hit(it, x, y) }
 
-    // ---- tombol mengambang
-
-    private fun fabRadius() = 20f * density
-    private fun fabCenter(): Pair<Float, Float> {
-        val (px, py) = ProfileStore.floatingPos(context)
-        val r = fabRadius() + 4 * density
-        return (px * width).coerceIn(r, width - r) to (py * height).coerceIn(r, height - r)
-    }
-
-    private fun fabVisible() = !editing && ProfileStore.floatingButton(context)
-
-    private fun fabHit(x: Float, y: Float): Boolean {
-        if (!fabVisible()) return false
-        val (cx, cy) = fabCenter()
-        return hypot(x - cx, y - cy) <= fabRadius() * 1.25f
-    }
-
     // ---- sentuhan
 
     override fun onTouchEvent(ev: MotionEvent): Boolean {
@@ -176,12 +141,6 @@ class ProfileControlsView(
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
                 val x = ev.getX(idx)
                 val y = ev.getY(idx)
-                if (fabPointer == -1 && fabHit(x, y)) {
-                    fabPointer = id; fabMoved = false; fabLong = false
-                    fabDownX = x; fabDownY = y
-                    main.postDelayed(fabLongTask, 450)
-                    return true
-                }
                 if (prof == null || (!controlsShown && !editing)) return emptyTouch(ev, id)
                 val e = topHit(x, y)
                 if (editing) {
@@ -211,10 +170,9 @@ class ProfileControlsView(
                 return true
             }
             MotionEvent.ACTION_MOVE -> {
-                var used = fabPointer != -1 || passIds.isNotEmpty()
+                var used = passIds.isNotEmpty()
                 for (i in 0 until ev.pointerCount) {
                     val pid = ev.getPointerId(i)
-                    if (pid == fabPointer) { fabMove(ev.getX(i), ev.getY(i)); continue }
                     val t = touches[pid] ?: continue
                     used = true
                     if (editing) editMove(t, ev.getX(i), ev.getY(i)) else move(t, ev.getX(i), ev.getY(i))
@@ -235,7 +193,6 @@ class ProfileControlsView(
                     passIds.remove(id)
                     return true
                 }
-                if (id == fabPointer) { fabUp(); return true }
                 val t = touches.remove(id) ?: return false
                 if (!editing) up(t) else onEdited()
                 invalidate()
@@ -252,7 +209,7 @@ class ProfileControlsView(
      */
     private fun emptyTouch(ev: MotionEvent, id: Int): Boolean {
         if (swallowEmptyTouches || editing) return swallowEmptyTouches
-        val isTarget = fabPointer != -1 || touches.isNotEmpty() || passIds.isNotEmpty()
+        val isTarget = touches.isNotEmpty() || passIds.isNotEmpty()
         if (!isTarget || passthrough == null) return false
         if (passIds.isEmpty()) passDownTime = ev.eventTime
         passIds.add(id)
@@ -287,23 +244,6 @@ class ProfileControlsView(
             ev.metaState, ev.buttonState, ev.xPrecision, ev.yPrecision, ev.deviceId, ev.edgeFlags, ev.source, ev.flags,
         )
         try { sink(sub) } finally { sub.recycle() }
-    }
-
-    private fun fabMove(x: Float, y: Float) {
-        if (!fabMoved && hypot(x - fabDownX, y - fabDownY) > slop * 1.5f) {
-            fabMoved = true
-            main.removeCallbacks(fabLongTask)
-        }
-        if (fabMoved && width > 0 && height > 0) ProfileStore.setFloatingPos(context, x / width, y / height)
-    }
-
-    private fun fabUp() {
-        main.removeCallbacks(fabLongTask)
-        if (!fabMoved && !fabLong) {
-            controlsShown = !controlsShown
-        }
-        fabPointer = -1
-        invalidate()
     }
 
     private fun editMove(t: Touch, x: Float, y: Float) {
@@ -503,12 +443,10 @@ class ProfileControlsView(
 
     /** Lepas semua tombol/sumbu yang masih ditahan (profil diganti, controller disembunyikan, layar berhenti). */
     fun releaseAll() {
-        main.removeCallbacks(fabLongTask)
         for (t in touches.values.toList()) up(t)
         touches.clear()
         for (e in toggled.toList()) for (b in e.bindings) dispatcher?.handle(b, false)
         toggled.clear()
-        fabPointer = -1
         passIds.clear()
         dispatcher?.releaseAll()
     }
@@ -568,7 +506,6 @@ class ProfileControlsView(
             if (editing) drawGrid(c)
             for (e in prof.elements) drawElement(c, e)
         }
-        if (fabVisible()) drawFab(c)
     }
 
     private fun drawGrid(c: Canvas) {
@@ -828,23 +765,6 @@ class ProfileControlsView(
         Element.Range.FROM_0_TO_9 -> ((i + 1) % 10).toString()
         Element.Range.FROM_F1_TO_F12 -> "F${i + 1}"
         Element.Range.FROM_NP0_TO_NP9 -> "NP${(i + 1) % 10}"
-    }
-
-    private fun drawFab(c: Canvas) {
-        val (cx, cy) = fabCenter()
-        val r = fabRadius()
-        paint.style = Paint.Style.FILL
-        paint.color = if (controlsShown) 0xAA1A9FFF.toInt() else 0x88444A55.toInt()
-        c.drawCircle(cx, cy, r, paint)
-        paint.style = Paint.Style.STROKE; paint.strokeWidth = 2f * density; paint.color = 0xCCFFFFFF.toInt()
-        c.drawCircle(cx, cy, r, paint)
-        // lambang keyboard kecil: tiga baris titik
-        paint.style = Paint.Style.FILL; paint.color = 0xFFFFFFFF.toInt()
-        val d = r * 0.12f
-        for (row in -1..1) for (col in -2..2) {
-            if (row == 1 && (col == -2 || col == 2)) continue
-            c.drawCircle(cx + col * r * 0.28f, cy + row * r * 0.3f, d, paint)
-        }
     }
 
     /** Ukuran bantu untuk editor: tinggi/lebar elemen dalam piksel layar. */

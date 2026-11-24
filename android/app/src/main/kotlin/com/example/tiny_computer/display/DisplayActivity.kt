@@ -215,7 +215,7 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
         val dispatcher = BindingDispatcher(p)
         bindingDispatcher = dispatcher
         extHandler = ExternalControllerHandler(dispatcher)
-        val profileControls = ProfileControlsView(this, dispatcher, onKeyboard = { ui.pcKeyboard = !ui.pcKeyboard }).apply {
+        val profileControls = ProfileControlsView(this, dispatcher).apply {
             visibility = android.view.View.GONE
             // jari yang tidak memegang tombol/tombol mengambang tetap menggerakkan kursor di layar sesi
             passthrough = { handleTouch(it) }

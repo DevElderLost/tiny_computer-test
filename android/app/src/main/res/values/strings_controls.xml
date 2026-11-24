@@ -5,8 +5,6 @@
     <string name="wl_mode">Mode</string>
     <string name="wl_enable">Use Winlator-style controls</string>
     <string name="wl_enable_hint">Replaces the DroidDeck on-screen controller in desktop and app sessions with the active profile</string>
-    <string name="wl_fab">Floating button</string>
-    <string name="wl_fab_hint">Tap: show/hide controls. Long press: PC keyboard. Drag: move</string>
     <string name="wl_external">External controller bindings</string>
     <string name="wl_external_hint">Physical controller buttons mapped in the profile become keyboard, mouse or gamepad bindings; unmapped buttons pass through to the pad</string>
     <string name="wl_profiles">Profiles</string>

@@ -73,6 +73,9 @@ import com.example.tiny_computer.ui.DeckButton
 import com.example.tiny_computer.ui.DeckGroup
 import com.example.tiny_computer.ui.DeckNote
 import com.example.tiny_computer.ui.DeckRow
+import com.example.tiny_computer.ui.DeckToggle
+import com.example.tiny_computer.ui.LocalPalette
+import com.example.tiny_computer.ui.onSignal
 import com.example.tiny_computer.ui.ScreenTitle
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
@@ -106,6 +109,26 @@ object ControllerCapture {
     }
 }
 
+/**
+ * Tema Material untuk halaman pengaturan Winlator: warna "primary" Material diganti warna sinyal palet (yang dipakai DroidDeck untuk
+ * yang aktif). Tanpa ini saklar, slider, dan tombol utama memakai primary palet, yang putih di tema Paper, sehingga tidak
+ * mengikuti warna tema seperti baris DroidDeck lainnya.
+ */
+@Composable
+internal fun WlTheme(content: @Composable () -> Unit) {
+    val pal = LocalPalette.current
+    val base = MaterialTheme.colorScheme
+    MaterialTheme(
+        colorScheme = base.copy(
+            primary = pal.signal, onPrimary = pal.onSignal,
+            primaryContainer = pal.signal.copy(alpha = 0.25f), onPrimaryContainer = pal.onBackground,
+            secondaryContainer = pal.signal.copy(alpha = 0.25f), onSecondaryContainer = pal.onBackground,
+        ),
+        typography = MaterialTheme.typography,
+        content = content,
+    )
+}
+
 /** Kartu gaya Winlator (`SettingsCard` di InputControlsComposeHost). */
 @Composable
 internal fun WlCard(title: String?, content: @Composable () -> Unit) {
@@ -132,7 +155,7 @@ private fun WlSwitchRow(label: String, hint: String?, checked: Boolean, onChange
             Text(label, style = MaterialTheme.typography.bodyLarge)
             if (hint != null) Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Switch(checked = checked, onCheckedChange = onChange)
+        DeckToggle(checked = checked, onChange = onChange)   // saklar yang sama dengan baris DroidDeck lain (warna sinyal tema)
     }
 }
 
@@ -155,12 +178,14 @@ private fun openEditor(ctx: android.content.Context, profileId: Int) {
     ctx.startActivity(Intent(ctx, ControlsEditorActivity::class.java).putExtra(ControlsEditorActivity.EXTRA_PROFILE, profileId))
 }
 
-/** Grup di halaman Controller: saklar mode, tombol mengambang, controller eksternal, editor, dan pintu ke halaman profil. */
+/** Grup di halaman Controller: saklar mode, controller eksternal, editor, dan pintu ke halaman profil. */
 @Composable
-fun WinlatorControlsGroup(onManage: () -> Unit) {
+fun WinlatorControlsGroup(onManage: () -> Unit) = WlTheme { WinlatorControlsGroupBody(onManage) }
+
+@Composable
+private fun WinlatorControlsGroupBody(onManage: () -> Unit) {
     val ctx = LocalContext.current
     var enabled by remember { mutableStateOf(ProfileStore.enabled(ctx)) }
-    var fab by remember { mutableStateOf(ProfileStore.floatingButton(ctx)) }
     var ext by remember { mutableStateOf(ProfileStore.externalEnabled(ctx)) }
     // controller DroidDeck dinyalakan di halaman yang sama: Winlator ikut mati (ControllerMode), saklar ini menyusul
     androidx.compose.runtime.LaunchedEffect(ControllerMode.version) { enabled = ProfileStore.enabled(ctx) }
@@ -171,9 +196,6 @@ fun WinlatorControlsGroup(onManage: () -> Unit) {
                 enabled = it; ControllerMode.enableWinlator(ctx, it)
             }
             if (enabled) {
-                WlSwitchRow(stringResource(R.string.wl_fab), stringResource(R.string.wl_fab_hint), fab) {
-                    fab = it; ProfileStore.setFloatingButton(ctx, it)
-                }
                 WlSwitchRow(stringResource(R.string.wl_external), stringResource(R.string.wl_external_hint), ext) {
                     ext = it; ProfileStore.setExternalEnabled(ctx, it)
                 }
@@ -181,12 +203,7 @@ fun WinlatorControlsGroup(onManage: () -> Unit) {
         }
         if (enabled) {
             WlEditorButton { openEditor(ctx, ProfileStore.activeId(ctx)) }
-            OutlinedButton(
-                onClick = onManage,
-                modifier = Modifier.fillMaxWidth().height(48.dp),
-                shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-            ) { Text(stringResource(R.string.wl_manage_profiles)) }
+            DeckButton(stringResource(R.string.wl_manage_profiles), Modifier.fillMaxWidth(), primary = false, onClick = onManage)
         }
     }
 }
@@ -289,7 +306,10 @@ private fun EmptyControllers() {
 
 /** Halaman Input Controls (port `InputControlsScreen` Winlator 4.1) dan halaman penetapan tombol controller fisik. */
 @Composable
-fun WinlatorControlsPage(onBack: () -> Unit) {
+fun WinlatorControlsPage(onBack: () -> Unit) = WlTheme { WinlatorControlsPageBody(onBack) }
+
+@Composable
+private fun WinlatorControlsPageBody(onBack: () -> Unit) {
     val ctx = LocalContext.current
     var rev by remember { mutableIntStateOf(0) }
     var resumeRev by remember { mutableIntStateOf(0) }

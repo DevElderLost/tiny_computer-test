@@ -250,10 +250,6 @@ object ProfileStore {
     fun enabled(c: Context) = prefs(c).getBoolean("enabled", false)
     fun setEnabled(c: Context, on: Boolean) = prefs(c).edit().putBoolean("enabled", on).apply()
 
-    /** Tombol mengambang kecil untuk menampilkan/menyembunyikan controller dan membuka keyboard PC. */
-    fun floatingButton(c: Context) = prefs(c).getBoolean("floatingButton", true)
-    fun setFloatingButton(c: Context, on: Boolean) = prefs(c).edit().putBoolean("floatingButton", on).apply()
-
     /** Controller fisik memakai pemetaan profil (tombol tanpa pemetaan tetap diteruskan ke pad Deck/Xbox). */
     fun externalEnabled(c: Context) = prefs(c).getBoolean("external", true)
     fun setExternalEnabled(c: Context, on: Boolean) = prefs(c).edit().putBoolean("external", on).apply()
@@ -264,9 +260,6 @@ object ProfileStore {
 
     fun activeId(c: Context) = prefs(c).getInt("activeProfile", 0)
     fun setActiveId(c: Context, id: Int) = prefs(c).edit().putInt("activeProfile", id).apply()
-
-    fun floatingPos(c: Context): Pair<Float, Float> = prefs(c).let { it.getFloat("fabX", 0.96f) to it.getFloat("fabY", 0.12f) }
-    fun setFloatingPos(c: Context, x: Float, y: Float) = prefs(c).edit().putFloat("fabX", x).putFloat("fabY", y).apply()
 
     fun profiles(c: Context): List<Profile> {
         seedDefaults(c)

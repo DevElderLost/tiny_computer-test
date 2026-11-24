@@ -111,7 +111,7 @@ class ControlsEditorActivity : ComponentActivity() {
         root.setBackgroundColor(0xFF0B0F14.toInt())
         root.addView(view, FrameLayout.LayoutParams(-1, -1))
         // chrome Compose di atas kanvas; sentuhan di luar bilah/panel jatuh ke kanvas
-        val chrome = ComposeView(this).apply { setContent { TinyTheme { Editor() } } }
+        val chrome = ComposeView(this).apply { setContent { TinyTheme { WlTheme { Editor() } } } }   // WlTheme: warna aktif mengikuti warna sinyal tema
         root.addView(chrome, FrameLayout.LayoutParams(-1, -1))
         setContentView(root)
     }

@@ -146,6 +146,8 @@ fun ControllerScreen() {
                 format = { "$it%" },
             ) { size = it }
         }
+        // pengaturan controller gaya Winlator tepat di bawah grup On-screen buttons
+        WinlatorControlsGroup { winOpen = true }
     }
 
     val behaviour: @Composable () -> Unit = {
@@ -190,7 +192,6 @@ fun ControllerScreen() {
                 DeckSliderRow(stringResource(R.string.tc_ctrl_trackpad_speed), null, trackpadSpeed, 1..10) { trackpadSpeed = it }
             }
         }
-        WinlatorControlsGroup { winOpen = true }
         DeckGroup(stringResource(R.string.ctrl_layout)) {
             DeckRow(
                 stringResource(R.string.ctrl_layout),

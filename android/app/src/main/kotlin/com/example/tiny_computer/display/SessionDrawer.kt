@@ -339,7 +339,7 @@ private fun InputPage(state: DisplayUiState, onPadOverlayChange: (Boolean) -> Un
 }
 
 /**
- * Controller gaya Winlator (profil): saklar mode, pilihan profil aktif, tombol mengambang, dan editor tata letak.
+ * Controller gaya Winlator (profil): saklar mode, pilihan profil aktif, dan editor tata letak.
  * Manajer profil (controller eksternal, impor/ekspor) ada di Pengaturan > Controller. Disimpan di [ProfileStore]; DisplayActivity memuat ulang sendiri.
  */
 @Composable
@@ -347,7 +347,6 @@ private fun ProfileGroup(app: String?) {
     val ctx = LocalContext.current
     // keadaan efektif untuk aplikasi ini (pilihan Shortcut atau pengaturan global), bukan hanya saklar global
     var enabled by remember { mutableStateOf(ControllerMode.resolve(ctx, app) == ControllerMode.Active.WINLATOR) }
-    var fab by remember { mutableStateOf(ProfileStore.floatingButton(ctx)) }
     var active by remember { mutableStateOf(ProfileStore.activeFor(ctx, app).id) }
     // controller DroidDeck dinyalakan di sini atau di Pengaturan, atau profil diganti: keadaan ikut menyegar (ControllerMode)
     androidx.compose.runtime.LaunchedEffect(ControllerMode.version) {
@@ -368,10 +367,6 @@ private fun ProfileGroup(app: String?) {
                 // di aplikasi Shortcut profil yang dipilih menjadi profil Shortcut itu; di desktop menjadi profil aktif utama
                 if (app != null) ShortcutPrefs.setProfile(app, it) else ProfileStore.setActiveId(ctx, it)
                 ControllerMode.notifyChanged()
-            }
-            DrawerToggleRow(stringResource(R.string.wl_fab), fab) {
-                fab = it
-                ProfileStore.setFloatingButton(ctx, it)
             }
             Column(Modifier.fillMaxWidth().padding(10.dp)) {
                 DrawerActionButton(stringResource(R.string.wl_edit_layout), Icons.Outlined.Edit, pal.onBackground, {
