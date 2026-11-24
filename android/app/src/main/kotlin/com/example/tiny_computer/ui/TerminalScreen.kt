@@ -124,7 +124,7 @@ private fun CommandsDialog(onDismiss: () -> Unit, onRun: (String) -> Unit) {
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.tc_ui_add_shortcut_command)) },
+        title = { ImmersiveWindow(); Text(stringResource(R.string.tc_ui_add_shortcut_command)) },
         text = {
             if (adding) {
                 Column {

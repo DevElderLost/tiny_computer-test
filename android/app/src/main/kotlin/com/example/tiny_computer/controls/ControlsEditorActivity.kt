@@ -71,6 +71,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.example.tiny_computer.R
+import com.example.tiny_computer.ui.ImmersiveWindow
 import com.example.tiny_computer.ui.TinyTheme
 import org.json.JSONArray
 import org.json.JSONObject
@@ -373,6 +374,7 @@ private fun <T> Choice(label: String, selected: T, options: List<T>, text: (T) -
             Text("\u25BE")
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            ImmersiveWindow()
             options.forEach { option ->
                 DropdownMenuItem(text = { Text(text(option)) }, onClick = { expanded = false; onSelected(option) })
             }

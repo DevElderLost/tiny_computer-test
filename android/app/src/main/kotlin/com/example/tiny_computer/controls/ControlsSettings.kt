@@ -69,6 +69,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.example.tiny_computer.R
+import com.example.tiny_computer.ui.ImmersiveWindow
 import com.example.tiny_computer.ui.DeckButton
 import com.example.tiny_computer.ui.DeckGroup
 import com.example.tiny_computer.ui.DeckNote
@@ -234,7 +235,7 @@ private fun ProfileSection(onOpenController: (String) -> Unit) {
         val text = runCatching { ctx.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() } }.getOrNull()
         val imported = text?.let { ProfileStore.import(ctx, it) }
         if (imported == null) {
-            dialog = { AlertDialog(onDismissRequest = { dialog = null }, text = { Text(stringResource(R.string.wl_import_failed)) }, confirmButton = { TextButton(onClick = { dialog = null }) { Text(stringResource(R.string.wl_ok)) } }) }
+            dialog = { AlertDialog(onDismissRequest = { dialog = null }, text = { ImmersiveWindow(); Text(stringResource(R.string.wl_import_failed)) }, confirmButton = { TextButton(onClick = { dialog = null }) { Text(stringResource(R.string.wl_ok)) } }) }
         } else ProfileStore.setActiveId(ctx, imported.id)
         rev++
     }
@@ -389,6 +390,7 @@ private fun ProfilePicker(profiles: List<Profile>, activeId: Int, onPick: (Int) 
             }
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.fillMaxWidth(0.82f)) {
+            ImmersiveWindow()
             for (p in profiles) {
                 DropdownMenuItem(
                     text = { Text(p.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },

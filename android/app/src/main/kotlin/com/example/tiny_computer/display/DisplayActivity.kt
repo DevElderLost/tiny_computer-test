@@ -151,6 +151,17 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
         if (currentApp == null) (if (Launcher.guiStarted) Launcher.desktopIsXpp else Cfg.desktopXpp)
         else Launcher.shortcutXpp(currentApp)
 
+    // bilah sistem muncul lagi setelah dialog/dropdown/papan ketik menutup: sembunyikan ulang saat fokus kembali (seperti MainActivity)
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            WindowInsetsControllerCompat(window, window.decorView).apply {
+                systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                hide(WindowInsetsCompat.Type.systemBars())
+            }
+        }
+    }
+
     @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

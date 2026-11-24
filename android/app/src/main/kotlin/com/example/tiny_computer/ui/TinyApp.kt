@@ -372,7 +372,7 @@ private fun HomeScreen(onOpen: () -> Unit, onSettings: () -> Unit, onShowTermina
     pendingImport?.let { (uri, name, size) ->
         AlertDialog(
             onDismissRequest = { pendingImport = null },
-            title = { Text(stringResource(R.string.tc_import_confirm_title)) },
+            title = { ImmersiveWindow(); Text(stringResource(R.string.tc_import_confirm_title)) },
             text = { Text(stringResource(R.string.tc_import_confirm_body, name, formatSize(size))) },
             confirmButton = {
                 TextButton(onClick = { pendingImport = null; Startup.beginImport(ctx, uri, name) }) {

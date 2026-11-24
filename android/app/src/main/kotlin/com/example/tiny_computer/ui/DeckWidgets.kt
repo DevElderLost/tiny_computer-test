@@ -147,6 +147,7 @@ fun DeckHelpDialog(title: String?, text: String, onDismiss: () -> Unit) {
             { Text(title, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = colors.onBackground) }
         } else null,
         text = {
+            ImmersiveWindow()
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 Text(text, fontSize = 14.sp, lineHeight = 20.sp, color = colors.onSurfaceVariant)
             }
@@ -241,6 +242,7 @@ fun <T> DeckChoiceRow(label: String, hint: String?, options: List<Pair<T, String
         Box {
             DeckValueChip(options.firstOrNull { it.first == selected }?.second ?: "-", open) { open = !open }
             DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                ImmersiveWindow()
                 options.forEach { (value, text) ->
                     val on = value == selected
                     DropdownMenuItem(
@@ -420,6 +422,7 @@ private fun DeckTextEditDialog(title: String, initial: String, onDismiss: () -> 
     val fieldShape = RoundedCornerShape(10.dp)
     val maxH = (LocalConfiguration.current.screenHeightDp * 0.9f).dp
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnClickOutside = false)) {
+        ImmersiveWindow()
         Box(Modifier.fillMaxSize().imePadding().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
             Column(
                 Modifier.widthIn(max = 560.dp).fillMaxWidth(0.92f).heightIn(max = maxH)

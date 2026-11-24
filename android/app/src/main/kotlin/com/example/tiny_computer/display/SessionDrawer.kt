@@ -70,6 +70,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.tiny_computer.R
+import com.example.tiny_computer.ui.ImmersiveWindow
 import com.example.tiny_computer.controller.ControllerEditorActivity
 import com.example.tiny_computer.controls.ControllerMode
 import com.example.tiny_computer.controls.ControlsEditorActivity
@@ -195,7 +196,7 @@ fun SessionDrawer(
             containerColor = pal.surface,
             titleContentColor = pal.onBackground,
             textContentColor = pal.onBackground,
-            title = { Text(stringResource(R.string.tc_display_shutdown)) },
+            title = { ImmersiveWindow(); Text(stringResource(R.string.tc_display_shutdown)) },
             text = { Text(stringResource(R.string.tc_display_shutdown_confirm)) },
             confirmButton = {
                 TextButton(onClick = { confirmStop = false; state.menuOpen = false; onShutdown() }) {

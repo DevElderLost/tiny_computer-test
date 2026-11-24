@@ -33,6 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.tiny_computer.R
+import com.example.tiny_computer.ui.ImmersiveWindow
 import com.example.tiny_computer.ui.LocalPalette
 import com.example.tiny_computer.ui.onSignal
 
@@ -64,7 +65,7 @@ fun NameDialog(title: String, initial: String, onDismiss: () -> Unit, onOk: (Str
     var text by remember { mutableStateOf(initial) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title) },
+        title = { ImmersiveWindow(); Text(title) },
         text = { OutlinedTextField(value = text, onValueChange = { text = it }, singleLine = true) },
         confirmButton = { TextButton(onClick = { onOk(text.trim()) }) { Text(stringResource(R.string.wl_ok)) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.wl_cancel)) } },
@@ -75,7 +76,7 @@ fun NameDialog(title: String, initial: String, onDismiss: () -> Unit, onOk: (Str
 fun ConfirmDialog(message: String, onDismiss: () -> Unit, onOk: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        text = { Text(message) },
+        text = { ImmersiveWindow(); Text(message) },
         confirmButton = { TextButton(onClick = onOk) { Text(stringResource(R.string.wl_ok)) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.wl_cancel)) } },
     )
@@ -99,7 +100,7 @@ fun BindingPickerDialog(current: Binding, onDismiss: () -> Unit, onPick: (Bindin
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.wl_pick_binding)) },
+        title = { ImmersiveWindow(); Text(stringResource(R.string.wl_pick_binding)) },
         text = {
             Column {
                 ChipRow(

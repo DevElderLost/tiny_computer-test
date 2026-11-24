@@ -433,6 +433,7 @@ private fun AppSettingsDialog(app: DesktopApps.App, onRemoved: () -> Unit, onSho
     var ch by remember(app.id) { mutableStateOf(ShortcutPrefs.parseSize(s.screen)?.second?.toString().orEmpty()) }
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        ImmersiveWindow()
         Box(Modifier.fillMaxSize().clickableNoRipple(onDismiss), contentAlignment = Alignment.Center) {
             Column(
                 Modifier.widthIn(max = 560.dp).fillMaxWidth(0.92f).heightIn(max = maxH)
@@ -682,7 +683,7 @@ private fun AppSettingsDialog(app: DesktopApps.App, onRemoved: () -> Unit, onSho
                 if (confirmRemove) {
                     AlertDialog(
                         onDismissRequest = { confirmRemove = false },
-                        title = { Text(stringResource(R.string.tc_sc_remove_confirm_title)) },
+                        title = { ImmersiveWindow(); Text(stringResource(R.string.tc_sc_remove_confirm_title)) },
                         text = { Text(stringResource(R.string.tc_sc_remove_confirm_body, app.id)) },
                         confirmButton = {
                             TextButton(onClick = {
