@@ -118,6 +118,8 @@ private:
     int socket_fd{};
     bool is_dead{};
     bool authenticated{};
+    // Klien yang crash bila XKEYBOARD diiklankan (mis. Ren'Py/SDL): ekstensi disembunyikan hanya untuk klien ini.
+    bool hideXkb{};
     bool big_request{};
     bool requestsPending{};
     u16 sequence{};

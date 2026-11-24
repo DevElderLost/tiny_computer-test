@@ -192,7 +192,7 @@ void XClient::ProcCompat() {
         if (server.RendererConfig().disableDri3) names.erase(std::find(names.begin(), names.end(), "DRI3"));
         if (server.RendererConfig().disableRender) names.erase(std::find(names.begin(), names.end(), "RENDER"));
         if (server.RendererConfig().disableComposite) names.erase(std::find(names.begin(), names.end(), "Composite"));
-        if (server.RendererConfig().disableXkb) names.erase(std::find(names.begin(), names.end(), "XKEYBOARD"));
+        if (server.RendererConfig().disableXkb || hideXkb) names.erase(std::find(names.begin(), names.end(), "XKEYBOARD"));
         std::vector<u8> bytes; for (auto& n : names) { bytes.push_back(n.size()); bytes.insert(bytes.end(), n.begin(), n.end()); }
         xListExtensionsReply r{}; r.type = X_Reply; r.sequenceNumber = sequence;
         r.nExtensions = names.size(); r.length = (bytes.size()+3)/4;

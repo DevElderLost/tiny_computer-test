@@ -5,6 +5,9 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <fmt/core.h>
+#include <cstdlib>
+#include <string>
+#include <string_view>
 // clang-format off
 #include <X11/X.h>
 #include <X11/Xproto.h>
@@ -32,6 +35,42 @@
 #include "core/xscreen.h"
 #include "core/xserver.h"
 #include "native_screen.h"
+
+namespace {
+// Nama proses (/proc/<pid>/comm) pemilik soket klien, lewat SO_PEERCRED. String kosong bila tidak bisa dibaca.
+std::string PeerComm(int fd) {
+    struct { pid_t pid; uid_t uid; gid_t gid; } cred{};  // sama dengan struct ucred
+    socklen_t credLen = sizeof(cred);
+    if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &cred, &credLen) != 0 || cred.pid <= 0) return {};
+    char path[48], comm[32] = {};
+    std::snprintf(path, sizeof(path), "/proc/%d/comm", int(cred.pid));
+    FILE* f = std::fopen(path, "r");
+    if (!f) return {};
+    if (!std::fgets(comm, sizeof(comm), f)) comm[0] = 0;
+    std::fclose(f);
+    comm[std::strcspn(comm, "\n")] = 0;
+    return comm;
+}
+
+// Klien yang tidak diberi ekstensi XKEYBOARD. Bawaan: "renpy" (SDL milik Ren'Py mati dengan SIGSEGV tepat setelah
+// XkbGetMap/XkbGetState; tanpa XKB, SDL memakai GetKeyboardMapping inti). Tambahan lewat variabel lingkungan
+// XPP_NO_XKB (daftar nama proses dipisah koma); XPP_NO_XKB=- mematikan daftar bawaan.
+bool ClientNeedsNoXkb(const std::string& comm) {
+    if (comm.empty()) return false;
+    const char* extra = std::getenv("XPP_NO_XKB");
+    if (extra && std::string_view(extra) == "-") return false;
+    if (comm == "renpy") return true;
+    if (!extra) return false;
+    std::string_view list(extra);
+    while (!list.empty()) {
+        const size_t comma = list.find(',');
+        if (list.substr(0, comma) == comm) return true;
+        if (comma == std::string_view::npos) break;
+        list.remove_prefix(comma + 1);
+    }
+    return false;
+}
+}  // namespace
 
 namespace xorg {
 
@@ -151,6 +190,11 @@ void XClient::ProcAuthenticateRequest() {
     Write(&argb_vis, sizeof(argb_vis));
     Flush();
     authenticated = true;
+    {
+        const std::string comm = PeerComm(socket_fd);
+        hideXkb = ClientNeedsNoXkb(comm);
+        if (hideXkb && TraceOnFast()) Trace("XKEYBOARD disembunyikan untuk klien comm=%s (kompatibilitas)", comm.c_str());
+    }
     if (TraceOnFast()) {
         // Jejak diagnosis: proses mana yang memegang klien ini (pid dan nama dari /proc) dan basis ID sumber dayanya, supaya
         // baris REQ di bawah bisa dikaitkan dengan aplikasi (mis. ld-linux = AppImage, xfwm4, xfce4-panel).
@@ -357,7 +401,7 @@ void XClient::ProcQueryExtension() {
                         (server.RendererConfig().disableDri3 && name == "DRI3") ||
                         (server.RendererConfig().disableRender && name == "RENDER") ||
                         (server.RendererConfig().disableComposite && name == "Composite") ||
-                        (server.RendererConfig().disableXkb && name == "XKEYBOARD");
+                        ((server.RendererConfig().disableXkb || hideXkb) && name == "XKEYBOARD");
     if (const auto extension = hidden ? nullptr : server.GetExtensionManager().FindExtension(name)) {
         reply.present = xTrue;
         reply.major_opcode = extension->base;
