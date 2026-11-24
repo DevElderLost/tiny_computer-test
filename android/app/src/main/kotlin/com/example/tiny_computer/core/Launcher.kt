@@ -898,7 +898,7 @@ export PROOT_LOADER_32=${'$'}DATA_DIR/applib/libproot-loader32.so""".trimIndent(
         }
         return stopApps + """
 mkdir -p "${'$'}HOME/.vnc"
-command -v Xwayland >/dev/null 2>&1 || { echo "Memasang xwayland..."; sudo apt update && sudo apt install -y xwayland; }
+${ExtraSetup.guardScript()}command -v Xwayland >/dev/null 2>&1 || { echo "Memasang xwayland..."; sudo apt update && sudo apt install -y xwayland; }
 unset WAYLAND_DISPLAY
 rm -f /tmp/.X11-unix/X4 /tmp/.X4-lock
 for i in ${'$'}(seq 1 150); do [ -S /tmp/wayland-0 ] && break; sleep 0.2; done
@@ -932,7 +932,7 @@ ${WsiWayland.probeForDesktop(sessionEnv)}
         }
         return """
 mkdir -p "${'$'}HOME/.vnc"
-unset WAYLAND_DISPLAY
+${ExtraSetup.guardScript()}unset WAYLAND_DISPLAY
 export TINY_NO_WAYLAND=1
 export GDK_CORE_DEVICE_EVENTS=1 QT_XCB_NO_XI2=1
 ${gpuEnv}rm -f /tmp/.X4-lock

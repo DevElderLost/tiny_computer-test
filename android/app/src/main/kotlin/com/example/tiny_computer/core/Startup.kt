@@ -140,9 +140,20 @@ object Startup {
         pendingTerminal = null
     }
 
+    /** Percobaan ulang tahap tambahan pada kontainer yang sudah menyala hanya sekali per proses (hindari terblokir selamanya bila satu paket memang tidak bisa dipasang). */
+    @Volatile private var extrasRetried = false
+
+    /** Kontainer sudah menyala tetapi paket pendukung (Xwayland, mikrofon, dll.) masih kurang dan belum dicoba ulang. */
+    fun needsExtras(): Boolean = phase == Phase.DONE && !hostMode && !extrasRetried && ExtraSetup.missing().isNotEmpty()
+
     @Synchronized
     fun begin(ctx: Context, openDesktop: Boolean) {
-        if (phase == Phase.RUNNING || phase == Phase.DONE) return
+        if (phase == Phase.RUNNING) return
+        // Kontainer sudah menyala (DONE) tetapi paket pendukung (Xwayland, mikrofon, dll.) masih kurang: jangan langsung
+        // buka desktop; jalankan lagi tahap tambahan lewat layar progres. Berlaku untuk semua Display server, termasuk X++.
+        val wasDone = phase == Phase.DONE
+        if (wasDone && !needsExtras()) return
+        if (wasDone) extrasRetried = true
         // tanpa data sistem di APK dan belum ada sistem terpasang: arahkan ke tombol Import, jangan memasang rootfs kosong
         if (!Launcher.isStarted && needsImport(ctx)) { notice = ctx.getString(R.string.tc_no_system_notice); return }
         val app = ctx.applicationContext
@@ -152,6 +163,7 @@ object Startup {
         resumed = Launcher.isStarted
         firstInstall = !installed && !resumed
         withExtras = ExtraSetup.missing().isNotEmpty()
+        Log.i(TAG, "begin: openDesktop=$openDesktop xpp=${Cfg.desktopXpp} resumed=$resumed firstInstall=$firstInstall kurang=${ExtraSetup.missing()}")
         notice = null
         error = null
         openWhenReady = openDesktop
@@ -175,10 +187,16 @@ object Startup {
                     phase = Phase.DONE
                 } else {
                     notice = problem
-                    openWhenReady = false
-                    pendingApp = null
-                    pendingTerminal = null
-                    phase = Phase.IDLE
+                    if (wasDone) {
+                        // kontainer sudah menyala sebelumnya: tetap lanjut (desktop dibuka dengan peringatan di Beranda);
+                        // jaring pengaman guardScript di perintah desktop mencoba memasang lagi dari dalam shell
+                        phase = Phase.DONE
+                    } else {
+                        openWhenReady = false
+                        pendingApp = null
+                        pendingTerminal = null
+                        phase = Phase.IDLE
+                    }
                 }
             } catch (t: Throwable) {
                 Log.e(TAG, "startup gagal", t)

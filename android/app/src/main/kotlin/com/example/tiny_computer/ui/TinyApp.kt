@@ -135,7 +135,9 @@ fun TinyApp() {
             Startup.hostMode -> Startup.warn(ctx.getString(R.string.tc_host_no_desktop))
             Startup.needsImport(ctx) -> Startup.warn(ctx.getString(R.string.tc_no_system_notice))
             Startup.installed && Containers.isGeneric(Cfg.defaultContainer) -> Startup.warn(ctx.getString(R.string.tc_generic_no_desktop))
-            Startup.phase == Startup.Phase.DONE -> openDesktop()
+            // kontainer sudah menyala DAN paket pendukung lengkap: langsung buka; bila masih ada yang kurang (mis. X++ yang
+            // dulu melewati tahap ini), Startup.begin menjalankan tahap pemasangan dulu dengan layar progres
+            Startup.phase == Startup.Phase.DONE && !Startup.needsExtras() -> openDesktop()
             else -> Startup.begin(ctx, openDesktop = true)
         }
     }

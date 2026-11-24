@@ -25,6 +25,10 @@ import java.nio.file.LinkOption
  *                        keluar sendiri sebelum membuat window: layar tetap hitam dan sesi Shortcut berakhir.
  * Semuanya dipasang ONLINE lewat apt (butuh internet sekali, saat instalasi pertama). Hanya paket yang
  * BELUM terpasang yang dipasang, sehingga peluncuran berikutnya tidak butuh internet.
+ *
+ * Berlaku sama untuk semua Display server (Xwayland, Wayland, X++): X++ tidak memakai Xwayland untuk desktop-nya,
+ * tetapi sesi Shortcut dan Flatpak tetap membutuhkan paket yang sama, jadi tahap ini tidak boleh dilewati.
+ * [guardScript] adalah jaring pengaman di sisi shell kontainer bila tahap ini terlewat.
  */
 object ExtraSetup {
     private const val TAG = "TinyExtras"
@@ -71,12 +75,36 @@ object ExtraSetup {
         }.getOrNull()
     }
 
+    /**
+     * Ada jaringan aktif yang berkemampuan internet. Penanda VALIDATED sengaja TIDAK disyaratkan: ROM tanpa layanan Google
+     * (atau jaringan dengan DNS pribadi / VPN / portal) tidak pernah menandai jaringan sebagai tervalidasi walau apt
+     * bisa mengunduh. Syarat lama membuat tahap ini berhenti dengan pesan "Internet is not active" tanpa pernah mencoba.
+     * Bila memang tidak ada koneksi, apt sendiri gagal dan [failure] yang melaporkannya.
+     */
     fun internetActive(ctx: Context): Boolean {
         val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val net = cm.activeNetwork ?: return false
         val caps = cm.getNetworkCapabilities(net) ?: return false
-        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
-            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    }
+
+    /**
+     * Skrip shell (dijalankan di terminal kontainer) yang memasang paket yang masih kurang, memeriksa berkas penanda tiap
+     * paket di [PACKAGES]. Dipasang di awal perintah desktop ([Launcher.guiCommand] dan guiCommandXpp) sebagai jaring
+     * pengaman bila [run] terlewat atau gagal. Tidak melakukan apa pun bila semuanya sudah ada.
+     */
+    fun guardScript(): String {
+        val sb = StringBuilder("_tiny_need=\"\"\n")
+        for ((pkg, probe) in PACKAGES) {
+            sb.append("[ -e /$probe ] || [ -L /$probe ] || _tiny_need=\"\$_tiny_need $pkg\"\n")
+        }
+        sb.append("if [ -n \"\$_tiny_need\" ]; then\n")
+        sb.append("  echo \"[tiny] memasang paket pendukung:\$_tiny_need\"\n")
+        sb.append("  export DEBIAN_FRONTEND=noninteractive\n")
+        sb.append("  timeout 300 sudo apt update; timeout 1200 sudo apt install -y \$_tiny_need\n")
+        sb.append("fi\n")
+        sb.append("unset _tiny_need\n")
+        return sb.toString()
     }
 
     /**
@@ -91,8 +119,9 @@ object ExtraSetup {
         Rootfs.statusText = "installingExtras"
 
         if (!internetActive(ctx)) return ctx.getString(R.string.tc_extras_no_internet)
-        val code = runInTerminal(ctx, "sudo apt update && sudo apt install -y ${need.joinToString(" ")}")
-        Log.i(TAG, "apt kode=$code, diminta=$need, masih kurang=${missing()}")
+        // `;` bukan `&&`: apt update bisa berstatus gagal hanya karena satu mirror, padahal daftar paket sudah cukup untuk install
+        val code = runInTerminal(ctx, "sudo apt update; sudo apt install -y ${need.joinToString(" ")}")
+        Log.i(TAG, "apt kode=$code, diminta=$need, masih kurang=${missing()}, xpp=${Cfg.desktopXpp}")
         if (code == -2) return failure(ctx)
         return if (missing().isEmpty()) null else failure(ctx)
     }
