@@ -572,6 +572,9 @@ fi
             val layerEnv = if (s.vulkanMem > 0) VkMemLimit.envList(s.vulkanMem) else null
             if (layerEnv != null) layerEnv.forEach { sb.append("export $it\n") } else sb.append("export TINY_VK_MEM_LIMIT_MB=0\n")
         }
+        // DisplayX+ untuk aplikasi Vulkan guest di atas X++. Backend dipilih per Shortcut, jadi lapisan ditambahkan di sini
+        // (digabung dengan env memlimit yang sudah ada, tanpa menggandakan env global).
+        DisplayXLayer.shellExports(xpp, ShortcutPrefs.xppBackend(id))?.let { sb.append(it) }
         // Qt di X++: EGL + Vulkan RHI (bukan GLX + Zink/Kopper, yang membuat jendela Qt Quick hitam karena tidak ada DRI3).
         // Hanya bila GPU Turnip dipakai aplikasi ini; env buatan pengguna di bawah bisa menimpa (mis. QT_QUICK_BACKEND=software).
         if (xpp && turnipOn && (ShortcutPrefs.triState(s.qtGpu) ?: Cfg.xppQtGpu)) {

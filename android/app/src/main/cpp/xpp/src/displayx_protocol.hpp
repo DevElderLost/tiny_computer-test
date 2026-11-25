@@ -10,7 +10,18 @@
 #include <sys/socket.h>
 
 namespace displayx_wire {
-enum : uint32_t { Create = 1, Destroy = 2, Present = 3, Complete = 4, Reset = 5, Hdr = 6 };
+enum : uint32_t { Create = 1, Destroy = 2, Present = 3, Complete = 4, Reset = 5, Hdr = 6,
+    // Protokol v2 untuk guest glibc (tanpa AHardwareBuffer): buffer dialokasikan HOST lalu dikirim sebagai dma-buf.
+    //  CreateHost (guest -> host), 29 byte: u32 op, u8 id, u32 count, u32 window, u32 mode, u32 width, u32 height, u32 colorSpace.
+    //    width/height 0 = ukuran window X.
+    //  Buffers (host -> guest), SCM_RIGHTS `count` fd dma-buf: u32 op, u8 id, u32 count, u32 width, u32 height,
+    //    u32 drmFourcc, u32 flags, lalu per buffer {u32 strideBytes, u32 offset, u64 sizeHint, u64 drmModifier}.
+    //    count 0 = alokasi gagal. Present/Complete/Reset/Destroy sama persis dengan v1 (indeks = urutan fd).
+    //  Geometry (guest -> host), 8 byte: u32 op, u32 window. GeometryReply (host -> guest): u32 op, u32 window,
+    //    u32 width, u32 height (0, 0 bila window tidak ada).
+    CreateHost = 7, Buffers = 8, Geometry = 9, GeometryReply = 10 };
+constexpr uint32_t kFourccAbgr8888 = 0x34324241;   // 'A','B','2','4': byte R,G,B,A (sama dengan VK_FORMAT_R8G8B8A8_UNORM)
+constexpr uint64_t kModifierLinear = 0;
 struct Packet {
     std::array<uint8_t, 64> bytes{};
     size_t size{};
@@ -68,6 +79,23 @@ inline std::vector<uint8_t> completion(const std::vector<Completion>& values) {
         for (const auto& v : group) append(packet, v.index);
     }
     return packet;
+}
+// Kirim satu paket SEQPACKET beserta `count` descriptor (SCM_RIGHTS). Memblokir sampai terkirim.
+inline bool sendWithFds(int fd, const std::vector<uint8_t>& packet, const int* fds, size_t count) {
+    iovec data{const_cast<uint8_t*>(packet.data()), packet.size()};
+    alignas(cmsghdr) char control[CMSG_SPACE(16 * sizeof(int))]{};
+    msghdr message{};
+    message.msg_iov = &data; message.msg_iovlen = 1;
+    if (count) {
+        if (count > 16) return false;
+        message.msg_control = control; message.msg_controllen = CMSG_SPACE(count * sizeof(int));
+        auto *h = CMSG_FIRSTHDR(&message);
+        h->cmsg_level = SOL_SOCKET; h->cmsg_type = SCM_RIGHTS; h->cmsg_len = CMSG_LEN(count * sizeof(int));
+        memcpy(CMSG_DATA(h), fds, count * sizeof(int));
+    }
+    ssize_t sent;
+    do { sent = sendmsg(fd, &message, MSG_NOSIGNAL); } while (sent < 0 && errno == EINTR);
+    return sent == ssize_t(packet.size());
 }
 inline bool sendPacket(int fd, const std::vector<uint8_t>& packet) {
     ssize_t sent;

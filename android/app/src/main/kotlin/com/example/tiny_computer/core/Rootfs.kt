@@ -221,6 +221,17 @@ object Rootfs {
                 dst.setExecutable(true, false)
             }
         }.onFailure { Log.i(TAG, "lapisan Vulkan memlimit tidak ada di assets (${it.message})") }
+        // VK_LAYER_TINY_displayx (extra/displayx-layer): WSI DisplayX+ untuk guest glibc, tiny/extra/displayx
+        val displayx = File(TinyEnv.dataPath, "tiny/extra/displayx")
+        runCatching {
+            displayx.mkdirs()
+            for (name in listOf("libVkLayer_tiny_displayx.so", "VkLayer_tiny_displayx.json")) {
+                val dst = File(displayx, name)
+                copyAsset(ctx, "displayx/$name", dst)
+                dst.setReadable(true, false)
+                dst.setExecutable(true, false)
+            }
+        }.onFailure { Log.i(TAG, "lapisan Vulkan displayx tidak ada di assets (${it.message})") }
     }
 
     /**
