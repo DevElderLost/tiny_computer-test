@@ -169,7 +169,8 @@ struct WindowPushConstantsPostFX  { float ndcX0, ndcY0, ndcX1, ndcY1;
                                     int   effectId;
                                     float sharpness;
                                     float resW, resH;
-                                    float _pad[4];
+                                    // colour grade layar (offset 32..47, di bawah cosR=48); netral = 0, 1, 1, 1
+                                    float brightness = 0.f, contrast = 1.f, gamma = 1.f, saturation = 1.f;
                                     float cosR = 1.f, sinR = 0.f; };
 
 static_assert(offsetof(WindowPushConstants,       cosR) == 48, "cosR offset must match window_vert.txt layout(offset=48)");
@@ -260,6 +261,8 @@ public:
     void setFilterMode(int mode);
     void setStretchMode(int mode);
     void setPostFXMode(int mode);
+    /** Colour grade layar (brightness -1..1, contrast 0..2, gamma 0.1..5, saturation 0..2; netral 0, 1, 1, 1). */
+    void setColorGrade(float brightness, float contrast, float gamma, float saturation);
     void setSharpness(float s);
     void setSwapRB(bool enabled);
     void setPresentMode(VkPresentModeKHR mode);
@@ -383,6 +386,7 @@ public:
     float stretchStrength = 0.40f;
     float stretchProfile  = 0.60f;
     float sharpness = 0.5f;
+    float gradeBrightness = 0.f, gradeContrast = 1.f, gradeGamma = 1.f, gradeSaturation = 1.f;
     bool swapRB = false;
     float maxAnisotropy           = 1.0f;
     VkPhysicalDeviceMemoryProperties memProperties{};

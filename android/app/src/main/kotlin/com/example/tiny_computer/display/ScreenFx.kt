@@ -1,10 +1,13 @@
 package com.example.tiny_computer.display
 
 import android.content.Context
+import android.widget.Toast
 import com.droiddeck.launcher.wayland.CompositorHost
 import com.droiddeck.launcher.wayland.WaylandCompositor
 import com.example.tiny_computer.core.Cfg
+import com.example.tiny_computer.R
 import com.example.tiny_computer.core.ReshadeShaders
+import com.example.tiny_computer.core.TinyEnv
 import com.example.tiny_computer.core.TinyPrefs
 import com.example.tiny_computer.xpp.XppHost
 
@@ -60,6 +63,29 @@ object ScreenFx {
     /** Dari menu sesi (tab Effect): berlaku langsung bila compositor sedang hidup, selain itu saat sesi berikutnya. */
     fun applyIfRunning() {
         if (CompositorHost.isStarted) apply()
+        // X++ tidak memakai compositor Wayland, jadi setter native di atas tidak sampai ke layarnya. HDR dan colour grade
+        // dikirim ke renderer X++ (Vulkan, EGL, Old Display); efek lain (CAS, debanding, FXAA, ReShade) belum ada di sana.
+        if (XppHost.isRunning) {
+            XppHost.applyOptions(TinyEnv.app)
+            noteXppLimits()
+        }
+    }
+
+    private var notedXppDisplayX = false
+    private var notedXppPartial = false
+
+    /** Satu kali per proses: beri tahu pengguna efek mana yang tidak berlaku di sesi X++ yang sedang berjalan. */
+    private fun noteXppLimits() {
+        val grading = Cfg.hdrEffect || Cfg.fxBrightness != 0 || Cfg.fxContrast != 0 || Cfg.fxGamma != 100 || Cfg.fxSaturation != 100
+        if (XppHost.isDisplayX) {
+            if (grading && !notedXppDisplayX) {
+                notedXppDisplayX = true
+                Toast.makeText(TinyEnv.app, R.string.tc_fx_xpp_displayx, Toast.LENGTH_LONG).show()
+            }
+        } else if ((Cfg.casOn || Cfg.debandOn || Cfg.fxFxaa) && !notedXppPartial) {
+            notedXppPartial = true
+            Toast.makeText(TinyEnv.app, R.string.tc_fx_xpp_partial, Toast.LENGTH_LONG).show()
+        }
     }
 
     fun reset() {

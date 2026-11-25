@@ -115,6 +115,10 @@ struct NativeVisualOptions {
     int multiplier{2}, targetRate{-1}, flowScale{70};
     float refresh{60.f};
     int frameGenEngine{};
+    // Colour grade layar (satuan shader): brightness -1..1 (ditambahkan), contrast 0..2 (faktor, 1 = netral),
+    // gamma 0.1..5 (1 = netral, >1 lebih terang), saturation 0..2 (1 = netral). Nilai netral = pass grading mati.
+    float brightness{0.f}, contrast{1.f}, gamma{1.f}, saturation{1.f};
+    bool Graded() const { return brightness != 0.f || contrast != 1.f || gamma != 1.f || saturation != 1.f; }
     bool operator==(const NativeVisualOptions&) const = default;
 };
 struct NativeVisualState {

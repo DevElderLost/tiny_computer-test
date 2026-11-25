@@ -425,6 +425,8 @@
     <string name="tc_sc_sound_hint">Only this app is affected; it applies on its next launch. PulseAudio: the app uses the PulseAudio protocol (ALSA and SDL are routed to it). ALSA direct: ALSA plays straight to Android (AAudio) through the tinyaudio plugin. Default follows Settings &gt; Audio.</string>
     <string name="tc_sc_group_perf">Display &amp; memory</string>
     <string name="tc_sc_desktop_note">Overrides the main desktop settings for this app only, so you do not have to switch back to the desktop settings. Default follows Settings. Applies when this app starts a new session; an app opened while another session is running uses that session.</string>
+    <string name="tc_ui_xpp_displayx_plus">DisplayX+ (bypass X11)</string>
+    <string name="tc_ui_xpp_displayx_plus_hint">Opens the DisplayX+ socket in the X++ server (Winlator Ludashi 5.0). A Vulkan client that loads the VK_LAYER_DISPLAYX_display_x layer sends its swapchain buffers straight to the renderer, skipping X11 DRI3/Present/PutImage. Needs that layer inside the guest; without it nothing connects and normal X11 is used. Applies on the next X++ session.</string>
     <string name="tc_ui_xpp_qt_gpu">Qt apps: EGL + Vulkan on X++</string>
     <string name="tc_ui_xpp_qt_gpu_hint">On the X++ display server, Qt apps use EGL and Vulkan (QT_XCB_GL_INTEGRATION=xcb_egl, QSG_RHI_BACKEND=vulkan) instead of GLX. Fixes black windows in Qt Quick apps such as Audacity 4 without falling back to software rendering. Needs Turnip (GPU) enabled. Variables set in a Shortcut\'s own environment still win. Applies on the next session.</string>
     <string name="tc_ui_desktop_wayland_hint">Open desktop exports WAYLAND_DISPLAY so SDL/Vulkan apps draw straight to the compositor (X11 via Xwayland has no DRI3 and fails on Turnip). GTK, Qt, Firefox and Electron stay on X11. Applies on next desktop start.</string>
@@ -488,6 +490,9 @@
     <string name="tc_rs_count">%1$d shaders available</string>
     <string name="tc_rs_status">Status: %1$s</string>
     <string name="tc_fx_reset">Reset effects</string>
+    <string name="tc_fx_xpp_displayx">DisplayX has no shader pass, so screen effects do nothing there. Use EGL, Old Display or Vulkan for the X++ display mode.</string>
+    <string name="tc_fx_xpp_partial">On X++ only HDR effect, brightness, contrast, gamma and saturation work. CAS, debanding and FXAA are not available yet.</string>
+    <string name="tc_rs_xpp_unsupported">ReShade shaders are not available on X++ yet (they only run in the Wayland compositor).</string>
     <string name="tc_nav_flathub">Flathub</string>
     <string name="tc_fh_title">Flathub Store</string>
     <string name="tc_fh_subtitle">Install Linux apps from Flathub into the Debian container (ARM64 only)</string>

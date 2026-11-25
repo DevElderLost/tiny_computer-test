@@ -888,6 +888,12 @@ void VulkanRendererContext::setPostFXMode(int mode) {
     needsRender.store(true); dirtyCV.notify_one();
 }
 
+void VulkanRendererContext::setColorGrade(float brightness, float contrast, float gamma, float saturation) {
+    if (gradeBrightness == brightness && gradeContrast == contrast && gradeGamma == gamma && gradeSaturation == saturation) return;
+    gradeBrightness = brightness; gradeContrast = contrast; gradeGamma = gamma; gradeSaturation = saturation;
+    needsRender.store(true); dirtyCV.notify_one();
+}
+
 void VulkanRendererContext::setSharpness(float s) {
     sharpness = std::clamp(s, 0.0f, 1.0f);
     needsRender.store(true); dirtyCV.notify_one();
@@ -1671,6 +1677,7 @@ void VulkanRendererContext::recordCmdBuf(VkCommandBuffer cb, uint32_t imgIdx,
             pc.ndcX1=(ox+(float)(d.x+d.w)*sx)/cw*2.f-1.f; pc.ndcY1=(oy+(float)(d.y+d.h)*sy)/ch*2.f-1.f;
             pc.effectId=postFXMode; pc.sharpness=sharpness;
             pc.resW=(float)std::max(d.w,1); pc.resH=(float)std::max(d.h,1);
+            pc.brightness=gradeBrightness; pc.contrast=gradeContrast; pc.gamma=gradeGamma; pc.saturation=gradeSaturation;
             pc.cosR = rotCosR; pc.sinR = rotSinR;
             vk_.CmdPushConstants(cb, pipeLayout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pc), &pc);
         } else if (useStretch) {

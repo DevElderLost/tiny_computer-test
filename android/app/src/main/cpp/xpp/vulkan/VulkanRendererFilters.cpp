@@ -420,6 +420,8 @@ void VulkanRendererContext::recordCmdBuf(VkCommandBuffer cb, uint32_t imgIdx,
             pc.sharpness = sharpness;
             pc.resW = (float)std::max(d.w, 1);
             pc.resH = (float)std::max(d.h, 1);
+            pc.brightness = gradeBrightness; pc.contrast = gradeContrast;
+            pc.gamma = gradeGamma; pc.saturation = gradeSaturation;
             pc.cosR = rotCosR;
             pc.sinR = rotSinR;
             vk_.CmdPushConstants(cb, pipeLayout,

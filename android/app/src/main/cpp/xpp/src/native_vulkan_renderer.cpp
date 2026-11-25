@@ -71,7 +71,9 @@ public:
     void VisualOptions(const NativeVisualOptions& options) override {
         if (!context) return;
         context->setFilterMode(options.filter);
-        context->setPostFXMode(options.postFX);
+        // Colour grade dikirim lewat pass PostFX; tanpa efek PostFX terpilih, mode 22 = hanya grading (passthrough + grade).
+        context->setColorGrade(options.brightness, options.contrast, options.gamma, options.saturation);
+        context->setPostFXMode(options.postFX == 0 && options.Graded() ? 22 : options.postFX);
         context->setStretchMode(options.stretch);
         context->setSharpness(options.sharpness);
         wfgSelected = options.frameGenEngine == 1;

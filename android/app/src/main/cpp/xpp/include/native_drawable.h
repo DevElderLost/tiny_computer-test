@@ -29,7 +29,8 @@ public:
     u64 ID() const { return id; }
 private:
     void Writable();
-    void Line(Point a, Point b, u32 color, u32 width);
+    void FillClipped(int left, int top, int right, int bottom, u32 color, u8*& destination);
+    void Line(Point a, Point b, u32 color, u32 width, u8*& destination);
     sp<std::vector<u8>> pixels;
     u32 stride{};
     u64 revision{1}, id{};

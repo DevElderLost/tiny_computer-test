@@ -42,6 +42,7 @@ object XppHost {
     private var presentMode = 2
     private var bufferCount = 0
     private var memLimitMb = 0
+    private var trueDisplayX = false
     /** Batas FPS khusus sesi Shortcut yang menyalakan server ini; null = [Cfg.fpsLimit]. */
     @Volatile private var fpsLimitOverride: Int? = null
     private var boundSocket: String? = null
@@ -111,8 +112,11 @@ object XppHost {
         // di compositor Wayland; hanya backend Vulkan yang punya swapchain dan anggaran memori. Dikirim lewat bit flags nativeCreate.
         val wantBuffer = if (wantBackend == NativeX11.BACKEND_VULKAN) (bufferOverride ?: Cfg.swapBuffers).coerceIn(0, 15) else 0
         val wantMem = if (wantBackend == NativeX11.BACKEND_VULKAN) (memLimitOverride ?: Cfg.compositorMemMb).coerceIn(0, 32767) else 0
+        // DisplayX+ hanya bermakna pada backend DisplayX (bridge soket dibuat di sisi native hanya untuk kombinasi itu).
+        val wantTrueDisplayX = wantBackend == NativeX11.BACKEND_DISPLAYX && Cfg.xppDisplayXPlus
         if (handle != 0L && width == w && height == h && backend == wantBackend && presentMode == wantPresent &&
-            bufferCount == wantBuffer && memLimitMb == wantMem && boundSocket == sock.absolutePath) {
+            bufferCount == wantBuffer && memLimitMb == wantMem && trueDisplayX == wantTrueDisplayX &&
+            boundSocket == sock.absolutePath) {
             return true
         }
         stopLocked()
@@ -130,6 +134,7 @@ object XppHost {
             if (sock.exists()) sock.delete()
             var flags = NativeX11.FLAG_NO_MIT_SHM or NativeX11.FLAG_NO_DRI3 or
                 if (wantBackend == NativeX11.BACKEND_DISPLAYX) NativeX11.FLAG_PERFORMANCE or NativeX11.FLAG_PRESENT_AT_REFRESH else 0
+            if (wantTrueDisplayX) flags = flags or NativeX11.FLAG_TRUE_DISPLAYX
             flags = flags or (wantBuffer shl 12) or (wantMem shl 16) // bit 12-15 buffering, bit 16-30 batas memori (MiB)
             val h0 = NativeX11.nativeCreate(
                 w, h, false, "", "", ctx.applicationInfo.nativeLibraryDir, wantPresent, false, wantBackend, flags,
@@ -142,6 +147,7 @@ object XppHost {
             presentMode = wantPresent
             bufferCount = wantBuffer
             memLimitMb = wantMem
+            trueDisplayX = wantTrueDisplayX
             // jalur shm tidak dipakai (MIT-SHM tidak diiklankan), tetap diberikan karena parameter wajib
             NativeX11.nativeStart(h0, sock.absolutePath, File(sock.parentFile, ".xpp-shm").absolutePath)
             boundSocket = sock.absolutePath
@@ -152,7 +158,7 @@ object XppHost {
             surface?.let { NativeX11.nativeSurface(h0, it) }
             val backendName = when (backendKey) {
                 Cfg.XPP_VULKAN -> "Vulkan (${vkPresentName(wantPresent)})"
-                Cfg.XPP_DISPLAYX -> "DisplayX"
+                Cfg.XPP_DISPLAYX -> if (wantTrueDisplayX) "DisplayX+" else "DisplayX"
                 Cfg.XPP_OLD_DISPLAY -> "Old Display (EGL)"
                 else -> "EGL"
             }
@@ -194,8 +200,23 @@ object XppHost {
         NativeX11.nativeOptions(handle, fit != Cfg.FIT_FIT, true, fpsLimitOverride ?: Cfg.fpsLimit, refreshHz)
         // Cfg.upscaler: 2 = Nearest. Filter lain memakai bilinear (0 = linear, 1 = nearest di semua backend); efek lain milik
         // compositor Wayland tidak ada di server ini. Parameter stretch: 0 = Fit/Stretch biasa, 1 = Soft Stretch.
-        NativeX11.nativeVisualOptions(handle, if (Cfg.upscaler == 2) 1 else 0, 0, if (soft) 1 else 0, 0.5f, false, null, 2, -1, 70, refreshHz, 0)
+        // Efek layar dari Cfg (menu sesi > Effect): efek HDR (postFX 3) dan colour grade (brightness, contrast, gamma, saturation)
+        // berjalan di renderer Vulkan dan EGL/Old Display. DisplayX menyerahkan frame langsung ke SurfaceControl tanpa pass
+        // shader, jadi efeknya dinetralkan di sana. Satuan dikonversi dari slider ke satuan shader (netral 0, 1, 1, 1).
+        val fx = backend != NativeX11.BACKEND_DISPLAYX
+        val postFx = if (fx && Cfg.hdrEffect) 3 else 0
+        val brightness = if (fx) (Cfg.fxBrightness / 100f).coerceIn(-1f, 1f) else 0f
+        val contrast = if (fx) (1f + Cfg.fxContrast / 100f).coerceIn(0f, 2f) else 1f
+        val gamma = if (fx) (Cfg.fxGamma / 100f).coerceIn(0.1f, 5f) else 1f
+        val saturation = if (fx) (Cfg.fxSaturation / 100f).coerceIn(0f, 2f) else 1f
+        NativeX11.nativeVisualOptions(
+            handle, if (Cfg.upscaler == 2) 1 else 0, postFx, if (soft) 1 else 0, 0.5f, false, null, 2, -1, 70, refreshHz, 0,
+            brightness, contrast, gamma, saturation,
+        )
     }
+
+    /** True bila server X++ hidup dengan backend DisplayX (tanpa pass shader: efek layar tidak berlaku). */
+    val isDisplayX: Boolean get() = synchronized(lock) { handle != 0L && backend == NativeX11.BACKEND_DISPLAYX }
 
     /** Profil ICC layar: pakai `filesDir/display.icc` bila ada dan valid; selain itu server memakai sRGB bawaan. */
     private fun loadIccProfile(ctx: Context, h: Long) {

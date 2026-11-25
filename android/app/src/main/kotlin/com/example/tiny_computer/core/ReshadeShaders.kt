@@ -3,8 +3,11 @@ package com.example.tiny_computer.core
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.widget.Toast
 import com.droiddeck.launcher.wayland.CompositorHost
 import com.droiddeck.launcher.wayland.WaylandCompositor
+import com.example.tiny_computer.R
+import com.example.tiny_computer.xpp.XppHost
 import java.io.File
 import java.io.InputStream
 import java.util.zip.ZipInputStream
@@ -127,8 +130,14 @@ object ReshadeShaders {
     fun select(rel: String) {
         Cfg.reshadeShader = rel
         applyIfRunning()
+        // shader ReShade berjalan di compositor Wayland; server X++ belum punya jalurnya: jangan diam saja
+        if (rel.isNotEmpty() && XppHost.isRunning) Toast.makeText(TinyEnv.app, R.string.tc_rs_xpp_unsupported, Toast.LENGTH_LONG).show()
     }
 
     /** "off", "compiling X", "ok: N pass(es), X" atau "error: ..." dari compositor. */
-    fun status(): String = if (CompositorHost.isStarted) runCatching { WaylandCompositor.nativeReshadeStatus() }.getOrDefault("") else ""
+    fun status(): String = when {
+        CompositorHost.isStarted -> runCatching { WaylandCompositor.nativeReshadeStatus() }.getOrDefault("")
+        XppHost.isRunning -> TinyEnv.app.getString(R.string.tc_rs_xpp_unsupported)
+        else -> ""
+    }
 }

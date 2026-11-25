@@ -103,6 +103,13 @@ u64 NativeScreen::SetVisualOptions(NativeVisualOptions options) {
     options.flowScale = std::clamp(options.flowScale, 25, 100);
     options.refresh = std::isfinite(options.refresh) ? std::clamp(options.refresh, 24.f, 240.f) : 60.f;
     options.frameGen = options.frameGen && (options.frameGenEngine == 1 || !options.frameGenCache.empty());
+    const auto finiteOr = [](float v, float lo, float hi, float fallback) {
+        return std::isfinite(v) ? std::clamp(v, lo, hi) : fallback;
+    };
+    options.brightness = finiteOr(options.brightness, -1.f, 1.f, 0.f);
+    options.contrast = finiteOr(options.contrast, 0.f, 2.f, 1.f);
+    options.gamma = finiteOr(options.gamma, .1f, 5.f, 1.f);
+    options.saturation = finiteOr(options.saturation, 0.f, 2.f, 1.f);
     std::lock_guard lock(state);
     if (options == visualOptions) return visualRevision;
     visualOptions = std::move(options);

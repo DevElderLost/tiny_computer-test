@@ -185,6 +185,12 @@ fun SettingsScreen() {
                     ),
                     xppBackend,
                 ) { xppBackend = it; Cfg.xppBackend = it }
+                if (xppBackend == Cfg.XPP_DISPLAYX) {
+                    DeckSwitchRow(
+                        stringResource(R.string.tc_ui_xpp_displayx_plus), stringResource(R.string.tc_ui_xpp_displayx_plus_hint),
+                        Cfg.xppDisplayXPlus,
+                    ) { Cfg.xppDisplayXPlus = it }
+                }
             }
             DeckSwitchRow(stringResource(R.string.tc_ui_xfce_compositor), stringResource(R.string.tc_ui_xfce_compositor_hint), Cfg.xfceCompositor) { Cfg.xfceCompositor = it }
             DeckSwitchRow(stringResource(R.string.tc_ui_shortcut_desktop), stringResource(R.string.tc_ui_shortcut_desktop_hint), Cfg.shortcutDesktop) { Cfg.shortcutDesktop = it }

@@ -157,6 +157,15 @@ object Cfg {
         get() = TinyPrefs.getInt("xppBackend", XPP_EGL).let { if (it in XPP_VULKAN..XPP_OLD_DISPLAY) it else XPP_EGL }
         set(v) = TinyPrefs.setInt("xppBackend", if (v in XPP_VULKAN..XPP_OLD_DISPLAY) v else XPP_EGL)
     /**
+     * DisplayX+ (jalur "bypass X11" milik Winlator Ludashi 5.0): pada backend DisplayX, server X++ ikut membuka soket abstrak
+     * `displayx` (SOCK_SEQPACKET). Klien Vulkan yang memuat lapisan VK_LAYER_DISPLAYX_display_x mengirim AHardwareBuffer swapchain
+     * langsung ke renderer lewat soket itu, tanpa DRI3/Present/PutImage X11. Hanya berlaku bila [xppBackend] = [XPP_DISPLAYX].
+     * Bawaan mati; tanpa lapisan di sisi guest tidak ada klien yang tersambung, jadi X11 biasa tetap dipakai.
+     */
+    var xppDisplayXPlus: Boolean
+        get() = TinyPrefs.getBool("xppDisplayXPlus", false)
+        set(v) = TinyPrefs.setBool("xppDisplayXPlus", v)
+    /**
      * Compositor xfwm4 (blur/transparansi) dibiarkan menyala sesuai setelan XFCE saat Open desktop dimulai. Bawaan mati:
      * compositing dimatikan di awal sesi. Apa pun pilihannya, vblank_mode xfwm4 dipaksa off (lihat assets/tiny/xsession.sh):
      * jalur vblank-lah yang membuat layar hitam di Xwayland tanpa DRM.

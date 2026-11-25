@@ -60,9 +60,14 @@ public final class NativeX11 {
     /** Profil ICC layar (isi berkas .icc); null/kosong = sRGB bawaan. false bila data bukan profil ICC yang valid. */
     public static native boolean nativeIccProfile(long handle, byte[] profile);
 
+    /**
+     * Opsi visual renderer. [postFX] 3 = efek HDR; brightness/contrast/gamma/saturation = colour grade dalam satuan
+     * shader (netral 0, 1, 1, 1). Backend DisplayX tidak punya pass shader sehingga mengabaikan efek ini.
+     */
     public static native long nativeVisualOptions(long handle, int filter, int postFX, int stretch, float sharpness,
                                            boolean frameGen, String cachePath, int multiplier, int targetRate,
-                                           int flowScale, float refreshRate, int engine);
+                                           int flowScale, float refreshRate, int engine,
+                                           float brightness, float contrast, float gamma, float saturation);
 
     public static native String nativeError(long handle);
 

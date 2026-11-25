@@ -6,6 +6,7 @@
 #include <EGL/eglext.h>
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
+#include <algorithm>
 #include <unordered_set>
 
 namespace xorg {
@@ -33,6 +34,7 @@ class EGLNativeRenderer final : public NativeRenderer {
         AHardwareBuffer *buffer{};
         u64 revision{}, used{};
         int width{}, height{};
+        GLint sampling{};
         std::weak_ptr<NativeDrawable> owner;
     };
     int width, height, outerW{}, outerH{}, filter{}, stretch{};
@@ -47,7 +49,11 @@ class EGLNativeRenderer final : public NativeRenderer {
     // Soft Stretch: scene digambar ke FBO seukuran surface (mode Stretch), lalu dilebarkan horizontal dengan
     // kurva yang sama seperti window_stretch.frag milik backend Vulkan (strength .40, profile .60).
     GLuint softProgram{}, softFbo{}, softTexture{};
-    GLint softStrength{}, softProfile{}, softImage{};
+    GLint softStrength{}, softProfile{}, softImage{}, softGrade{}, softGradeOn{}, softHdr{}, softTexel{};
+    // Efek layar (Screen effects): colour grade + efek HDR dijalankan di lintasan akhir yang sama dengan Soft Stretch.
+    // gradeInvGamma = 1 / gamma; gradeOn = salah satu parameter grade tidak netral; hdr = efek HDR (postFX 3) aktif.
+    float gradeBrightness{0.f}, gradeContrast{1.f}, gradeInvGamma{1.f}, gradeSaturation{1.f};
+    bool gradeOn{}, hdr{};
     int softW{}, softH{};
     bool softFailed{};
     bool fullscreen{}, cursorVisible{true};
@@ -185,14 +191,41 @@ class EGLNativeRenderer final : public NativeRenderer {
                     precision mediump float;
                     #endif
                     uniform sampler2D image; uniform float strength; uniform float profile;
+                    uniform vec4 grade; uniform float gradeOn; uniform float hdr; uniform vec2 texel;
                     varying vec2 uv;
+                    #define HDR_TAP(o) b1 += texture2D(image, p + (o) * r1 * texel).rgb; b2 += texture2D(image, p + (o) * r2 * texel).rgb;
+                    // Efek HDR yang sama dengan applyHDR di window_postfx.frag milik backend Vulkan.
+                    vec3 hdrEffect(vec2 p, vec3 c) {
+                        float r1 = .793, r2 = .870;
+                        vec3 b1 = vec3(0.), b2 = vec3(0.);
+                        HDR_TAP(vec2( 1.5, -1.5))
+                        HDR_TAP(vec2(-1.5, -1.5))
+                        HDR_TAP(vec2( 1.5,  1.5))
+                        HDR_TAP(vec2(-1.5,  1.5))
+                        HDR_TAP(vec2( 0.0, -2.5))
+                        HDR_TAP(vec2( 0.0,  2.5))
+                        HDR_TAP(vec2(-2.5,  0.0))
+                        HDR_TAP(vec2( 2.5,  0.0))
+                        b1 *= .005; b2 *= .010;
+                        vec3 h = (c + (b2 - b1)) * (r2 - r1);
+                        return clamp(pow(abs(h + c), vec3(1.30)) + h, 0., 1.);
+                    }
                     void main() {
                         float x = uv.x * 2. - 1.;
                         float x2 = x * x;
                         float quintic = .5 * x2 * x2 * x - 1.5 * x2 * x + 2. * x;
                         float warped = mix(x, mix(sin(1.57079632679 * x), quintic, profile), strength);
                         float u = clamp(.5 * warped + .5, 0., 1.);
-                        gl_FragColor = vec4(texture2D(image, vec2(u, uv.y)).rgb, 1.);
+                        vec2 p = vec2(u, uv.y);
+                        vec3 c = texture2D(image, p).rgb;
+                        if (hdr > .5) c = hdrEffect(p, c);
+                        if (gradeOn > .5) {
+                            // grade.x brightness, grade.y contrast (faktor), grade.z = 1 / gamma, grade.w saturation
+                            c = (c - .5) * grade.y + .5 + grade.x;
+                            c = mix(vec3(dot(c, vec3(.2126, .7152, .0722))), c, grade.w);
+                            c = pow(clamp(c, 0., 1.), vec3(grade.z));
+                        }
+                        gl_FragColor = vec4(clamp(c, 0., 1.), 1.);
                     })";
                 GLuint vs = Shader(GL_VERTEX_SHADER, vertex), fs{};
                 try {
@@ -218,6 +251,10 @@ class EGLNativeRenderer final : public NativeRenderer {
                 softStrength = glGetUniformLocation(softProgram, "strength");
                 softProfile = glGetUniformLocation(softProgram, "profile");
                 softImage = glGetUniformLocation(softProgram, "image");
+                softGrade = glGetUniformLocation(softProgram, "grade");
+                softGradeOn = glGetUniformLocation(softProgram, "gradeOn");
+                softHdr = glGetUniformLocation(softProgram, "hdr");
+                softTexel = glGetUniformLocation(softProgram, "texel");
             }
             if (softFbo && softW == w && softH == h)
                 return true;
@@ -254,10 +291,24 @@ class EGLNativeRenderer final : public NativeRenderer {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, soften);
         glDisable(GL_SCISSOR_TEST);
         glDisable(GL_BLEND);
+        // Soft Stretch melebarkan seluruh layar; tanpa itu lintasan ini hanya efek layar (HDR/grade) dan hanya boleh
+        // menggambar di area gambar, jadi batang hitam Fit tetap hitam.
+        const bool warp = fullscreen && stretch == 1;
+        if (!warp) {
+            glClearColor(0, 0, 0, 1);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glEnable(GL_SCISSOR_TEST);
+            glScissor(geometry.left, outerH - geometry.bottom, geometry.right - geometry.left,
+                      geometry.bottom - geometry.top);
+        }
         glUseProgram(softProgram);
-        glUniform1f(softStrength, .40f);
+        glUniform1f(softStrength, warp ? .40f : 0.f);
         glUniform1f(softProfile, .60f);
         glUniform1i(softImage, 0);
+        glUniform4f(softGrade, gradeBrightness, gradeContrast, gradeInvGamma, gradeSaturation);
+        glUniform1f(softGradeOn, gradeOn ? 1.f : 0.f);
+        glUniform1f(softHdr, hdr ? 1.f : 0.f);
+        glUniform2f(softTexel, 1.f / float(std::max(outerW, 1)), 1.f / float(std::max(outerH, 1)));
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, softTexture);
         glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
@@ -298,10 +349,16 @@ class EGLNativeRenderer final : public NativeRenderer {
                 texture = {};
                 throw;
             }
+        } else {
+            glBindTexture(GL_TEXTURE_2D, texture.name);
         }
-        glBindTexture(GL_TEXTURE_2D, texture.name);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter == 1 ? GL_NEAREST : GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter == 1 ? GL_NEAREST : GL_LINEAR);
+        // Parameter sampling hanya ditulis ulang saat filter berubah (Winlator 5.0), bukan di setiap frame untuk setiap window.
+        const GLint sampling = filter == 1 ? GL_NEAREST : GL_LINEAR;
+        if (texture.sampling != sampling) {
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, sampling);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, sampling);
+            texture.sampling = sampling;
+        }
         if (!buffer && texture.revision != revision) {
             Require(bool(pixels), "Missing X++ EGL pixel snapshot");
             glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
@@ -418,7 +475,7 @@ class EGLNativeRenderer final : public NativeRenderer {
         if (outerW <= 0 || outerH <= 0)
             return false;
         geometry.Update(outerW, outerH, width, height, fullscreen, zoom, frame.cursorX, frame.cursorY, pan);
-        const bool wantSoft = fullscreen && stretch == 1;
+        const bool wantSoft = (fullscreen && stretch == 1) || gradeOn || hdr;
         // Bebaskan target off-screen (seukuran layar) begitu Soft Stretch dimatikan.
         if (!wantSoft && softFbo)
             ReleaseSoft();
@@ -526,6 +583,12 @@ class EGLNativeRenderer final : public NativeRenderer {
     void VisualOptions(const NativeVisualOptions &options) override {
         filter = options.filter == 1 ? 1 : 0;
         stretch = options.stretch == 1 ? 1 : 0;
+        gradeBrightness = options.brightness;
+        gradeContrast = options.contrast;
+        gradeInvGamma = 1.f / std::max(options.gamma, .01f);
+        gradeSaturation = options.saturation;
+        gradeOn = options.Graded();
+        hdr = options.postFX == 3;
     }
     NativeVisualState VisualState() const override {
         return {surface != EGL_NO_SURFACE, false, false, 0};

@@ -8,6 +8,11 @@ layout(push_constant) uniform PC {
     float sharpness;
     float resW;
     float resH;
+    // colour grade layar (netral 0, 1, 1, 1); offset 32..47, tidak menimpa cosR/sinR milik vertex shader di offset 48
+    float brightness;
+    float contrast;
+    float gamma;
+    float saturation;
 } pc;
 
 layout(location = 0) in  vec2 fragTexCoord;
@@ -486,6 +491,12 @@ void main() {
     else if (pc.effectId == 19) rgb = applyPixelClean            (uv, pc.sharpness);
     else if (pc.effectId == 20) rgb = applyAnimeEdge             (uv, pc.sharpness);
     else if (pc.effectId == 21) rgb = applyColorBoost            (uv, pc.sharpness);
-    else                        rgb = texture(texSampler, uv).rgb;
-    outColor = vec4(rgb, 1.0);
+    else                        rgb = texture(texSampler, uv).rgb;   // id 22 = hanya grading layar
+    // Colour grade layar (brightness, contrast, gamma, saturation); lewati bila semuanya netral.
+    if (pc.brightness != 0.0 || pc.contrast != 1.0 || pc.gamma != 1.0 || pc.saturation != 1.0) {
+        rgb = (rgb - 0.5) * pc.contrast + 0.5 + pc.brightness;
+        rgb = mix(vec3(luma(rgb)), rgb, pc.saturation);
+        rgb = pow(clamp(rgb, 0.0, 1.0), vec3(1.0 / max(pc.gamma, 0.01)));
+    }
+    outColor = vec4(clamp(rgb, 0.0, 1.0), 1.0);
 }
