@@ -92,6 +92,7 @@ struct dev {
     PFN_vkAcquireNextImage2KHR n_acquire2;
     PFN_vkQueuePresentKHR n_present;
     PFN_vkCreateImage create_image;
+    PFN_vkCreateImageView create_view;
     PFN_vkDestroyImage destroy_image;
     PFN_vkGetImageMemoryRequirements img_reqs;
     PFN_vkGetImageSubresourceLayout sub_layout;
@@ -111,6 +112,7 @@ struct sc {
     uint8_t id;
     uint32_t count, width, height;
     VkFormat format;
+    int bgra;                       /* aplikasi minta B8G8R8A8; buffer host tetap R8G8B8A8, view ditulis ulang */
     VkImage image[MAX_IMAGES];
     VkDeviceMemory mem[MAX_IMAGES];
     int state[MAX_IMAGES];          /* 0 bebas, 1 dipegang aplikasi, 2 sedang di host */
@@ -504,6 +506,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL dx_CreateDevice(VkPhysicalDevice pd, const
     DX_FN(n_acquire2, AcquireNextImage2KHR);
     DX_FN(n_present, QueuePresentKHR);
     DX_FN(create_image, CreateImage);
+    DX_FN(create_view, CreateImageView);
     DX_FN(destroy_image, DestroyImage);
     DX_FN(img_reqs, GetImageMemoryRequirements);
     DX_FN(sub_layout, GetImageSubresourceLayout);
@@ -705,6 +708,21 @@ static int pick_mem_type(struct dev *d, uint32_t bits) {
     for (uint32_t i = 0; i < d->mem.memoryTypeCount; i++) if (bits & (1u << i)) return (int)i;
     return -1;
 }
+/* Zink/Kopper memilih format swapchain dari visual X (BGRX/BGRA => B8G8R8A8), padahal buffer host selalu R8G8B8A8
+ * (AHardwareBuffer tidak punya BGRA). Image tetap dibuat sebagai R8G8B8A8 dan setiap VkImageView B8G8R8A8 atas image
+ * swapchain ditulis ulang jadi R8G8B8A8 (dx_CreateImageView): warna logis dari aplikasi (r,g,b,a) langsung tersimpan
+ * sebagai byte R,G,B,A seperti yang dibaca host, tanpa penukaran merah/biru. */
+static VkFormat dx_host_format(VkFormat f) {
+    switch (f) {
+    case VK_FORMAT_B8G8R8A8_UNORM: return VK_FORMAT_R8G8B8A8_UNORM;
+    case VK_FORMAT_B8G8R8A8_SRGB: return VK_FORMAT_R8G8B8A8_SRGB;
+    default: return f;
+    }
+}
+static int dx_is_bgra(VkFormat f) { return f == VK_FORMAT_B8G8R8A8_UNORM || f == VK_FORMAT_B8G8R8A8_SRGB; }
+static int dx_format_ok(VkFormat f) {
+    return f == VK_FORMAT_R8G8B8A8_UNORM || f == VK_FORMAT_R8G8B8A8_SRGB || dx_is_bgra(f);
+}
 static void sc_free_images(struct sc *s) {
     struct dev *d = s->d;
     for (uint32_t i = 0; i < s->count; i++) {
@@ -720,6 +738,7 @@ static VkResult import_image(struct dev *d, const VkSwapchainCreateInfoKHR *ci, 
     VkSubresourceLayout plane = { offset, 0, stride, 0, 0 };
     VkImageDrmFormatModifierExplicitCreateInfoEXT drm = { VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT, NULL, 0 /* LINEAR */, 1, &plane };
     VkImageFormatListCreateInfo list;
+    VkFormat viewFormats[8];
     const void *tail = NULL;
     VkImageCreateFlags flags = 0;
     if (ci->flags & VK_SWAPCHAIN_CREATE_MUTABLE_FORMAT_BIT_KHR) {
@@ -728,6 +747,9 @@ static VkResult import_image(struct dev *d, const VkSwapchainCreateInfoKHR *ci, 
             if (p->sType == VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO) {
                 list = *(const VkImageFormatListCreateInfo *)p;
                 list.pNext = NULL;
+                if (list.viewFormatCount > 8) list.viewFormatCount = 8;
+                for (uint32_t k = 0; k < list.viewFormatCount; k++) viewFormats[k] = dx_host_format(list.pViewFormats[k]);
+                list.pViewFormats = viewFormats;
                 tail = &list;
                 break;
             }
@@ -739,7 +761,7 @@ static VkResult import_image(struct dev *d, const VkSwapchainCreateInfoKHR *ci, 
     ic.pNext = &ext;
     ic.flags = flags;
     ic.imageType = VK_IMAGE_TYPE_2D;
-    ic.format = ci->imageFormat;
+    ic.format = dx_host_format(ci->imageFormat);
     ic.extent.width = w; ic.extent.height = h; ic.extent.depth = 1;
     ic.mipLevels = 1; ic.arrayLayers = 1;
     ic.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -793,7 +815,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL dx_CreateSwapchainKHR(VkDevice device, con
     struct surf *surf = surf_find(ci->surface);
     if (!surf) return d->n_create_sc ? d->n_create_sc(device, ci, cb, out) : VK_ERROR_EXTENSION_NOT_PRESENT;
     if (!d->active) return VK_ERROR_INITIALIZATION_FAILED;
-    if ((ci->imageFormat != VK_FORMAT_R8G8B8A8_UNORM && ci->imageFormat != VK_FORMAT_R8G8B8A8_SRGB) || ci->imageArrayLayers != 1 ||
+    if (!dx_format_ok(ci->imageFormat) || ci->imageArrayLayers != 1 ||
         (ci->imageUsage & ~d->usage)) {
         dlog(1, "parameter swapchain tidak didukung (format %d usage 0x%x)", ci->imageFormat, (unsigned)ci->imageUsage);
         return VK_ERROR_INITIALIZATION_FAILED;
@@ -808,7 +830,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL dx_CreateSwapchainKHR(VkDevice device, con
 
     struct sc *s = calloc(1, sizeof(*s));
     if (!s) return VK_ERROR_OUT_OF_HOST_MEMORY;
-    s->d = d; s->sock = -1; s->id = 0; s->count = count; s->format = ci->imageFormat;
+    s->d = d; s->sock = -1; s->id = 0; s->count = count; s->format = ci->imageFormat; s->bgra = dx_is_bgra(ci->imageFormat);
     pthread_mutex_init(&s->lock, NULL);
     pthread_condattr_t ca;
     pthread_condattr_init(&ca);
@@ -1050,6 +1072,28 @@ static VKAPI_ATTR VkResult VKAPI_CALL dx_QueuePresentKHR(VkQueue queue, const Vk
     return overall;
 }
 
+/* View B8G8R8A8 atas image swapchain DisplayX+ (sebenarnya R8G8B8A8) ditulis ulang jadi R8G8B8A8. */
+static int dx_swapchain_bgra_image(VkImage image) {
+    int found = 0;
+    pthread_mutex_lock(&g_lock);
+    for (struct sc *s = g_scs; s && !found; s = s->next) {
+        if (!s->bgra) continue;
+        for (uint32_t i = 0; i < s->count; i++) if (s->image[i] == image) { found = 1; break; }
+    }
+    pthread_mutex_unlock(&g_lock);
+    return found;
+}
+static VKAPI_ATTR VkResult VKAPI_CALL dx_CreateImageView(VkDevice device, const VkImageViewCreateInfo *ci, const VkAllocationCallbacks *cb, VkImageView *out) {
+    struct dev *d = dev_find(key_of(device));
+    if (!d || !d->create_view) return VK_ERROR_INITIALIZATION_FAILED;
+    if (dx_is_bgra(ci->format) && dx_swapchain_bgra_image(ci->image)) {
+        VkImageViewCreateInfo mod = *ci;
+        mod.format = dx_host_format(ci->format);
+        return d->create_view(device, &mod, cb, out);
+    }
+    return d->create_view(device, ci, cb, out);
+}
+
 /* ===================== penyelesaian nama ===================== */
 static VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL dx_GetDeviceProcAddr(VkDevice device, const char *name) {
     if (!strcmp(name, "vkGetDeviceProcAddr")) return (PFN_vkVoidFunction)dx_GetDeviceProcAddr;
@@ -1060,6 +1104,7 @@ static VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL dx_GetDeviceProcAddr(VkDevice de
     if (!strcmp(name, "vkAcquireNextImageKHR")) return (PFN_vkVoidFunction)dx_AcquireNextImageKHR;
     if (!strcmp(name, "vkAcquireNextImage2KHR")) return (PFN_vkVoidFunction)dx_AcquireNextImage2KHR;
     if (!strcmp(name, "vkQueuePresentKHR")) return (PFN_vkVoidFunction)dx_QueuePresentKHR;
+    if (!strcmp(name, "vkCreateImageView")) return (PFN_vkVoidFunction)dx_CreateImageView;
     struct dev *d = dev_find(key_of(device));
     return d && d->gdpa ? d->gdpa(device, name) : NULL;
 }
