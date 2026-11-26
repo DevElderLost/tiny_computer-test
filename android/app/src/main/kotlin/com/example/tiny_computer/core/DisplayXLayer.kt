@@ -24,17 +24,32 @@ object DisplayXLayer {
     /** Host hanya membuka soket DisplayX+ untuk X++ dengan backend DisplayX dan opsi DisplayX+ menyala. */
     private fun wanted(xpp: Boolean, backend: Int) = xpp && Cfg.xppDisplayXPlus && backend == Cfg.XPP_DISPLAYX
 
+    /**
+     * Setelan Display > VSync / present mode ([Cfg.presentMode]: 0 auto, 1 FIFO, 2 FIFO relaxed, 3 Mailbox, 4 Immediate) ->
+     * DISPLAYX_PRESENT_MODE (VkPresentModeKHR 0 IMMEDIATE, 1 MAILBOX, 2 FIFO, 3 FIFO_RELAXED), dibaca lapisan guest saat
+     * membuat swapchain. Auto = null: lapisan memakai mode yang diminta aplikasinya sendiri. Tanpa env ini swapchain
+     * memakai pilihan aplikasi (mis. PPSSPP meminta FIFO) dan setelan di aplikasi ini tidak berpengaruh.
+     */
+    private fun presentModeEnv(setting: Int): String? = when (setting) {
+        1 -> "2"
+        2 -> "3"
+        3 -> "1"
+        4 -> "0"
+        else -> null
+    }
+
     /** Variabel lingkungan guest yang mengaktifkan lapisan; null bila tidak dipakai atau tidak ada di APK ini. */
-    fun envList(xpp: Boolean = Cfg.desktopXpp, backend: Int = Cfg.xppBackend): List<String>? {
+    fun envList(xpp: Boolean = Cfg.desktopXpp, backend: Int = Cfg.xppBackend, present: Int = Cfg.presentMode): List<String>? {
         if (!wanted(xpp, backend)) return null
         if (!available()) {
             Log.w(TAG, "DisplayX+ aktif, tetapi lapisan tidak ada di APK ini (CI gagal membangunnya)")
             return null
         }
-        return listOf(
+        return listOfNotNull(
             "VK_LAYER_PATH=$GUEST_DIR",
             "VK_INSTANCE_LAYERS=$NAME",
             "VK_LOADER_LAYERS_ENABLE=$NAME",
+            presentModeEnv(present)?.let { "DISPLAYX_PRESENT_MODE=$it" },
         )
     }
 
@@ -42,8 +57,10 @@ object DisplayXLayer {
      * Potongan skrip shell untuk Shortcut: menambahkan lapisan ke env yang sudah ada (mis. memlimit) tanpa menimpanya dan
      * tanpa menggandakan bila env global sudah memuatnya. Null bila tidak dipakai.
      */
-    fun shellExports(xpp: Boolean, backend: Int): String? {
-        if (envList(xpp, backend) == null) return null
+    fun shellExports(xpp: Boolean, backend: Int, present: Int = Cfg.presentMode): String? {
+        if (envList(xpp, backend, present) == null) return null
+        // present mode Shortcut bisa beda dari setelan global yang sudah ada di env: selalu timpa, atau hapus bila Auto
+        val presentLine = presentModeEnv(present)?.let { "export DISPLAYX_PRESENT_MODE=$it" } ?: "unset DISPLAYX_PRESENT_MODE"
         return listOf(
             "case \":\${VK_INSTANCE_LAYERS:-}:\" in",
             "  *:$NAME:*) ;;",
@@ -53,6 +70,7 @@ object DisplayXLayer {
             "    export VK_LOADER_LAYERS_ENABLE=\"\${VK_LOADER_LAYERS_ENABLE:+\$VK_LOADER_LAYERS_ENABLE,}$NAME\"",
             "    ;;",
             "esac",
+            presentLine,
         ).joinToString("\n", postfix = "\n")
     }
 }
