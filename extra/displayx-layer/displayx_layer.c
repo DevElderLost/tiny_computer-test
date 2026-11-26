@@ -69,7 +69,9 @@ struct inst {
     VkInstance handle;
     PFN_vkGetInstanceProcAddr gipa;
     PFN_vkDestroyInstance destroy;
-    int api11;
+    int api11;                      /* instance berjalan di Vulkan >= 1.1 (setelah dinaikkan bila perlu) */
+    int disabled;                   /* DISPLAYX_DISABLE=1 */
+    uint32_t app_api, loader_api;   /* versi yang diminta aplikasi / yang didukung loader, untuk log */
     struct pdinfo *pds;
     struct inst *next;
 };
@@ -284,12 +286,22 @@ static struct pdinfo *pd_probe(struct inst *in, VkPhysicalDevice pd) {
     const char *why = NULL;
     VkPhysicalDeviceProperties props;
     VkFormatProperties fp;
-    if (!in->api11) why = "instance di bawah Vulkan 1.1";
+    char reason[160];
+    if (in->disabled) why = "dimatikan lewat DISPLAYX_DISABLE=1";
+    else if (!in->api11) {
+        snprintf(reason, sizeof(reason), "loader/driver Vulkan guest menolak instance 1.1 (aplikasi meminta %u.%u)",
+                 VK_API_VERSION_MAJOR(in->app_api), VK_API_VERSION_MINOR(in->app_api));
+        why = reason;
+    }
     else if (!gpdp || !gpdfp || !gesp || !gefp) why = "fungsi properti eksternal tidak ada";
     else {
         gpdp(pd, &props);
         gpdfp(pd, VK_FORMAT_R8G8B8A8_UNORM, &fp);
-        if (props.apiVersion < VK_API_VERSION_1_1) why = "driver di bawah Vulkan 1.1";
+        if (props.apiVersion < VK_API_VERSION_1_1) {
+            snprintf(reason, sizeof(reason), "driver hanya melapor Vulkan %u.%u.%u (butuh >= 1.1)", VK_API_VERSION_MAJOR(props.apiVersion),
+                     VK_API_VERSION_MINOR(props.apiVersion), VK_API_VERSION_PATCH(props.apiVersion));
+            why = reason;
+        }
         else if (!ext) why = "tidak bisa membaca ekstensi device";
         else if (!has_ext(ext, n, "VK_KHR_external_memory_fd") || !has_ext(ext, n, "VK_EXT_external_memory_dma_buf"))
             why = "driver tanpa VK_EXT_external_memory_dma_buf (impor dma-buf)";
@@ -335,7 +347,38 @@ static VKAPI_ATTR VkResult VKAPI_CALL dx_CreateInstance(const VkInstanceCreateIn
     chain->u.pLayerInfo = chain->u.pLayerInfo->pNext;
     PFN_vkCreateInstance next_create = (PFN_vkCreateInstance)next_gipa(VK_NULL_HANDLE, "vkCreateInstance");
     if (!next_create) return VK_ERROR_INITIALIZATION_FAILED;
-    VkResult r = next_create(ci, cb, out);
+    uint32_t api = ci->pApplicationInfo && ci->pApplicationInfo->apiVersion ? ci->pApplicationInfo->apiVersion : VK_API_VERSION_1_0;
+    const char *off = getenv("DISPLAYX_DISABLE");
+    int disabled = off && atoi(off);
+    /* Banyak program (vkcube, vulkaninfo, aplikasi lama) meminta instance Vulkan 1.0 walau driver-nya jauh lebih baru.
+     * Impor dma-buf dan sync_fd butuh fungsi inti 1.1, jadi instance dinaikkan ke 1.1 bila loader mendukung; aplikasi
+     * 1.0 tidak terpengaruh (versi device yang dilihatnya tetap versi driver). */
+    uint32_t loader_api = VK_API_VERSION_1_1;     /* diturunkan ke 1.0 bila loader menolak instance 1.1 (lihat di bawah) */
+    VkInstanceCreateInfo mod = *ci;
+    VkApplicationInfo app;
+    uint32_t app_api = api;
+    int bumped = 0;
+    /* Posisi rantai layer SETELAH lapisan ini; dipulihkan bila perlu mengulang, karena lapisan di bawah ikut menggesernya. */
+    __typeof__(chain->u.pLayerInfo) saved_link = chain->u.pLayerInfo;
+    if (!disabled && api < VK_API_VERSION_1_1) {
+        if (ci->pApplicationInfo) app = *ci->pApplicationInfo; else { memset(&app, 0, sizeof(app)); app.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO; }
+        app.apiVersion = VK_API_VERSION_1_1;
+        mod.pApplicationInfo = &app;
+        api = VK_API_VERSION_1_1;
+        bumped = 1;
+        dlog(2, "aplikasi meminta Vulkan %u.%u: instance dinaikkan ke 1.1 untuk DisplayX+",
+             VK_API_VERSION_MAJOR(app_api), VK_API_VERSION_MINOR(app_api));
+    }
+    VkResult r = next_create(&mod, cb, out);
+    if (bumped && r == VK_ERROR_INCOMPATIBLE_DRIVER) {
+        /* loader/driver benar-benar tidak mendukung 1.1: jalankan apa adanya, lapisan tidak aktif */
+        dlog(1, "instance 1.1 ditolak (VK_ERROR_INCOMPATIBLE_DRIVER); memakai versi aplikasi");
+        chain->u.pLayerInfo = saved_link;
+        mod = *ci;
+        api = app_api;
+        loader_api = VK_API_VERSION_1_0;
+        r = next_create(&mod, cb, out);
+    }
     if (r != VK_SUCCESS) return r;
     struct inst *i = calloc(1, sizeof(*i));
     if (!i) return r;
@@ -343,9 +386,10 @@ static VKAPI_ATTR VkResult VKAPI_CALL dx_CreateInstance(const VkInstanceCreateIn
     i->handle = *out;
     i->gipa = next_gipa;
     i->destroy = (PFN_vkDestroyInstance)next_gipa(*out, "vkDestroyInstance");
-    uint32_t api = ci->pApplicationInfo && ci->pApplicationInfo->apiVersion ? ci->pApplicationInfo->apiVersion : VK_API_VERSION_1_0;
-    const char *off = getenv("DISPLAYX_DISABLE");
-    i->api11 = api >= VK_API_VERSION_1_1 && !(off && atoi(off));
+    i->disabled = disabled;
+    i->app_api = app_api;
+    i->loader_api = loader_api;
+    i->api11 = api >= VK_API_VERSION_1_1 && !disabled;
     pthread_mutex_lock(&g_lock);
     i->next = g_insts; g_insts = i;
     pthread_mutex_unlock(&g_lock);
