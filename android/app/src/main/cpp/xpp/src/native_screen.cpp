@@ -263,8 +263,15 @@ void NativeScreen::Collect(Window* w, Scene& frame, bool ancestorsMapped) {
                 if (auto copy = ShapedCopy(w, d)) shown = std::move(copy);
             }
             // Window depth 32 (visual ARGB, premultiplied) digambar dengan blending alpha, bukan opaque.
+            // Buffer swapchain DisplayX/DisplayX+ (AHardwareBuffer/dma-buf, RGBA8888) selalu dibuat sebagai drawable
+            // 32-bit walau window X-nya depth 24, dan layer Vulkan guest hanya menawarkan VK_COMPOSITE_ALPHA_OPAQUE,
+            // jadi byte alpha dari aplikasi tidak terdefinisi (mis. clear alpha 0). Kalau tetap di-blend, window GPU
+            // menjadi tembus pandang dan desktop di bawahnya terlihat. Frame eksternal karena itu selalu opaque; untuk
+            // window lain, window depth 24 juga tidak pernah ber-alpha walau drawable yang ditampilkan 32-bit.
+            const bool externalFrame = external != externalFrames.end();
+            const bool opaque = shown == d && (externalFrame || w->GetDepth() != 32 || d->GetDepth() != 32);
             frame.entries.push_back({shown, i == direct.end() ? nullptr : i->second, shown->Pixels(), shown->Revision(),
-                    rect.left, rect.top, shown == d && d->GetDepth() != 32, w->id, int(w->GetWidth()), int(w->GetHeight()), {}});
+                    rect.left, rect.top, opaque, w->id, int(w->GetWidth()), int(w->GetHeight()), {}});
             if (external != externalFrames.end()) {
                 frame.entries.back().ticket.reset();
                 frame.entries.back().external = external->second.frame;
