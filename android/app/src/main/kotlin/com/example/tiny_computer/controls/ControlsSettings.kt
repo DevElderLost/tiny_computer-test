@@ -111,6 +111,15 @@ object ControllerCapture {
 }
 
 /**
+ * Penanda perubahan profil yang dibagi daftar controller (kiri) dan panel penetapan tombol (kanan, atau halaman penuh di
+ * potret): keduanya memuat profil dari berkas sendiri-sendiri, jadi setiap simpan menaikkan [version] supaya yang lain
+ * memuat ulang dan tidak menimpa perubahan satu sama lain.
+ */
+internal object PadSync {
+    var version by mutableIntStateOf(0)
+}
+
+/**
  * Tema Material untuk halaman pengaturan Winlator: warna "primary" Material diganti warna sinyal palet (yang dipakai DroidDeck untuk
  * yang aktif). Tanpa ini saklar, slider, dan tombol utama memakai primary palet, yang putih di tema Paper, sehingga tidak
  * mengikuti warna tema seperti baris DroidDeck lainnya.
@@ -219,8 +228,9 @@ private fun ProfileSection(onOpenController: (String) -> Unit) {
     var rev by remember { mutableIntStateOf(0) }
     var resumeRev by remember { mutableIntStateOf(0) }
     var dialog by remember { mutableStateOf<(@Composable () -> Unit)?>(null) }
-    val list = remember(rev, resumeRev) { ProfileStore.profiles(ctx) }
-    val activeId = remember(rev, resumeRev) { ProfileStore.active(ctx).id }
+    val sync = PadSync.version
+    val list = remember(rev, resumeRev, sync) { ProfileStore.profiles(ctx) }
+    val activeId = remember(rev, resumeRev, sync) { ProfileStore.active(ctx).id }
 
     // kembali dari editor tata letak atau halaman pemetaan: daftar dibaca ulang
     val owner = LocalLifecycleOwner.current
@@ -248,12 +258,12 @@ private fun ProfileSection(onOpenController: (String) -> Unit) {
         }
     }
 
-    val p = remember(rev, resumeRev, activeId) { ProfileStore.get(ctx, activeId) ?: ProfileStore.active(ctx) }
+    val p = remember(rev, resumeRev, activeId, sync) { ProfileStore.get(ctx, activeId) ?: ProfileStore.active(ctx) }
     var opacity by remember { mutableIntStateOf(ProfileStore.overlayOpacity(ctx)) }
     var speed by remember(p.id) { mutableIntStateOf((p.cursorSpeed * 10).roundToInt().coerceIn(2, 50)) }
     LaunchedEffect(speed) {
         delay(200)
-        if ((p.cursorSpeed * 10).roundToInt() != speed) { p.cursorSpeed = speed / 10f; p.save(ctx) }
+        if ((p.cursorSpeed * 10).roundToInt() != speed) { p.cursorSpeed = speed / 10f; p.save(ctx); PadSync.version++ }
     }
     val pads = run {
         val added = p.controllers.map { PadItem(it.id, it.name, it.bindings.size, it.isConnected(), true) }
@@ -342,11 +352,10 @@ private fun ProfileSection(onOpenController: (String) -> Unit) {
     for (pad in pads) {
         ControllerCard(
             pad,
-            onOpen = {
-                if (!pad.added) { p.controllers.add(PadController(pad.id, pad.name)); p.save(ctx) }
-                onOpenController(pad.id)
-            },
-            onRemove = { p.controller(pad.id)?.let { c -> p.controllers.remove(c); p.save(ctx); rev++ } },
+            // controller yang baru tersambung belum punya binding sehingga tidak ikut tersimpan di berkas profil;
+            // halaman penetapan tombol membuatnya sendiri di memori, jadi di sini cukup membukanya
+            onOpen = { onOpenController(pad.id) },
+            onRemove = { p.controller(pad.id)?.let { c -> p.controllers.remove(c); p.save(ctx); PadSync.version++; rev++ } },
         )
     }
     dialog?.invoke()
@@ -447,25 +456,35 @@ private fun EmptyControllers() {
     }
 }
 
-/** Halaman penetapan tombol controller fisik [padId] (dibuka dari daftar controller eksternal di halaman Controller). */
+/**
+ * Penetapan tombol controller fisik [padId] (dibuka dari daftar controller eksternal di halaman Controller). Di potret
+ * berupa halaman penuh; di lanskap [embedded] = true: dipasang di kolom kanan yang kosong di samping daftar, tanpa
+ * scroll/ukuran penuhnya sendiri karena sudah berada di dalam kolom yang bisa digulir.
+ */
 @Composable
-fun WinlatorControlsPage(padId: String, onBack: () -> Unit) = WlTheme { WinlatorControlsPageBody(padId, onBack) }
+fun WinlatorControlsPage(padId: String, onBack: () -> Unit, embedded: Boolean = false) = WlTheme { WinlatorControlsPageBody(padId, onBack, embedded) }
+
+/** Nama controller yang sedang tersambung dengan descriptor [id]. */
+private fun padName(id: String): String =
+    connectedPads().firstOrNull { it.descriptor == id }?.name ?: "Controller"
 
 @Composable
-private fun WinlatorControlsPageBody(padId: String, onBack: () -> Unit) {
+private fun WinlatorControlsPageBody(padId: String, onBack: () -> Unit, embedded: Boolean) {
     val ctx = LocalContext.current
-    var rev by remember { mutableIntStateOf(0) }
-    val p = remember(rev) { ProfileStore.active(ctx) }
-    val c = p.controller(padId)
+    // dimuat ulang setiap [PadSync.version] berubah; controller tanpa binding tidak pernah ada di berkas (PadController.toJson
+    // mengembalikan null), jadi dibuat kosong di memori. Dulu ini dianggap "tidak ada" lalu halaman langsung menutup diri,
+    // tampak seperti layar hanya ter-refresh.
+    val ver = PadSync.version
+    val p = remember(ver) { ProfileStore.active(ctx) }
+    val c = remember(ver, padId) { p.controller(padId) ?: PadController(padId, padName(padId)).also { p.controllers.add(it) } }
     DisposableEffect(Unit) { onDispose { ControllerCapture.callback = null } }
     BackHandler { ControllerCapture.callback = null; onBack() }
-    if (c == null) {
-        LaunchedEffect(Unit) { onBack() }
-        return
-    }
-    var waiting by remember { mutableStateOf(false) }
+    var waiting by remember(padId) { mutableStateOf(false) }
     var lastBind by remember { mutableIntStateOf(0) }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
+    fun commit() { p.save(ctx); lastBind++; PadSync.version++ }
+    val frame = if (embedded) Modifier.fillMaxWidth().padding(bottom = 24.dp)
+    else Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)
+    Column(frame) {
         ScreenTitle(c.name, stringResource(R.string.wl_ctrl_hint))
         DeckGroup(stringResource(R.string.wl_bindings)) {
             for (b in c.bindings) {
@@ -474,12 +493,12 @@ private fun WinlatorControlsPageBody(padId: String, onBack: () -> Unit) {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         DeckButton(if (b.binding == Binding.NONE) stringResource(R.string.wl_none) else b.binding.label, primary = false) { open = true }
                         DeckButton(stringResource(R.string.wl_delete), primary = false) {
-                            c.bindings.remove(b); p.save(ctx); lastBind++; rev++
+                            c.bindings.remove(b); commit()
                         }
                     }
                 }
                 if (open) BindingPickerDialog(b.binding, { open = false }) {
-                    b.binding = it; p.save(ctx); open = false; lastBind++; rev++
+                    b.binding = it; open = false; commit()
                 }
             }
             if (c.bindings.isEmpty()) DeckNote(stringResource(R.string.wl_no_bindings))
@@ -490,14 +509,14 @@ private fun WinlatorControlsPageBody(padId: String, onBack: () -> Unit) {
                 waiting = true
                 ControllerCapture.callback = { code ->
                     waiting = false
-                    if (c.find(code) == null) { c.bindings.add(PadBinding(code)); p.save(ctx); lastBind++; rev++ }
+                    if (c.find(code) == null) { c.bindings.add(PadBinding(code)); commit() }
                 }
             }
             if (waiting) DeckNote(stringResource(R.string.wl_capture_hint))
         }
         DeckGroup(stringResource(R.string.wl_manage)) {
             DeckButton(stringResource(R.string.wl_remove_controller), Modifier.padding(14.dp), primary = false) {
-                p.controllers.remove(c); p.save(ctx); ControllerCapture.callback = null; onBack()
+                p.controllers.remove(c); p.save(ctx); PadSync.version++; ControllerCapture.callback = null; onBack()
             }
         }
         DeckButton(stringResource(R.string.wl_back), Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) { ControllerCapture.callback = null; onBack() }

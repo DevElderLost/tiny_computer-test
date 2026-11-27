@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -99,8 +98,9 @@ fun ControllerScreen() {
         if (ControllerPrefs.gyroSensitivity(ctx) != gyroSens) ControllerPrefs.setGyroSensitivity(ctx, gyroSens)
     }
 
+    // potret: penetapan tombol = halaman penuh; lanskap (tab Winlator): tampil di kolom kanan yang kosong di samping daftar
     val openPad = winPad
-    if (openPad != null) {
+    if (openPad != null && !(land && tab == 1)) {
         WinlatorControlsPage(openPad, onBack = { winPad = null })
         return
     }
@@ -238,7 +238,7 @@ fun ControllerScreen() {
             Modifier.fillMaxWidth(if (land) 0.5f else 1f).padding(horizontal = 16.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            DeckButton("DroidDeck", Modifier.weight(1f), primary = tab == 0) { tab = 0 }
+            DeckButton("DroidDeck", Modifier.weight(1f), primary = tab == 0) { tab = 0; winPad = null }
             DeckButton("Winlator", Modifier.weight(1f), primary = tab == 1) { tab = 1 }
         }
         if (tab == 0) {
@@ -255,7 +255,11 @@ fun ControllerScreen() {
             if (land) {
                 Row(Modifier.fillMaxWidth()) {
                     Column(Modifier.weight(1f)) { winlator() }
-                    Spacer(Modifier.weight(1f))
+                    Column(Modifier.weight(1f)) {
+                        if (openPad != null) androidx.compose.runtime.key(openPad) {
+                            WinlatorControlsPage(openPad, onBack = { winPad = null }, embedded = true)
+                        }
+                    }
                 }
             } else {
                 winlator()
