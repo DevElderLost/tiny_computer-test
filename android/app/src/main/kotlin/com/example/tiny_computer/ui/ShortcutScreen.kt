@@ -568,14 +568,13 @@ private fun AppSettingsDialog(app: DesktopApps.App, onRemoved: () -> Unit, onSho
                                 listOf(ShortcutPrefs.DEFAULT to def, ShortcutPrefs.ON to on, ShortcutPrefs.OFF to off),
                                 s.displayXPlus,
                             ) { update(s.copy(displayXPlus = it)) }
-                            if (ShortcutPrefs.xppDisplayXPlus(app.id)) {
-                                DeckChoiceRow(
-                                    stringResource(R.string.tc_ui_xpp_surface_format), null,
-                                    listOf(ShortcutPrefs.DEFAULT to def, "rgba" to "RGBA", "bgra" to "BGRA"),
-                                    s.surfaceFormat,
-                                ) { update(s.copy(surfaceFormat = it)) }
-                            }
                         }
+                        // urutan warna swapchain Vulkan: berlaku di semua mode X++ (default = ikut pengaturan Desktop)
+                        DeckChoiceRow(
+                            stringResource(R.string.tc_ui_xpp_surface_format), null,
+                            listOf(ShortcutPrefs.DEFAULT to def, "rgba" to "RGBA", "bgra" to "BGRA"),
+                            s.surfaceFormat,
+                        ) { update(s.copy(surfaceFormat = it)) }
                         DeckChoiceRow(
                             stringResource(R.string.tc_ui_xpp_qt_gpu), null,
                             listOf(ShortcutPrefs.DEFAULT to def, ShortcutPrefs.ON to on, ShortcutPrefs.OFF to off),

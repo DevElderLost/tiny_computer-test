@@ -72,6 +72,7 @@ struct inst {
     PFN_vkDestroyInstance destroy;
     int api11;                      /* instance berjalan di Vulkan >= 1.1 (setelah dinaikkan bila perlu) */
     int disabled;                   /* DISPLAYX_DISABLE=1 */
+    int shim_only;                  /* DISPLAYX_SHIM_ONLY=1: hanya shim urutan warna (DisplayX+ mati), tanpa menyentuh device */
     uint32_t app_api, loader_api;   /* versi yang diminta aplikasi / yang didukung loader, untuk log */
     struct pdinfo *pds;
     struct inst *next;
@@ -131,6 +132,91 @@ static struct inst *g_insts;
 static struct dev *g_devs;
 static struct surf *g_surfs;
 static struct sc *g_scs;
+
+/* ===== Shim urutan warna (RGBA/BGRA) untuk surface WSI bawaan, yaitu semua mode X++ selain DisplayX+ =====
+ * Seperti "Surface format" Winlator: DISPLAYX_SURFACE_FORMAT=rgba8|bgra8 menentukan urutan format yang DIIKLANKAN ke
+ * aplikasi. WSI X11 Mesa hanya menawarkan satu urutan (BGRA), jadi untuk urutan lain format diganti lawannya di daftar
+ * format, swapchain dibuat dengan format native, dan setiap VkImageView atas image swapchain itu ditulis ulang ke format
+ * native (dx_CreateImageView): warna logis (r,g,b,a) aplikasi tetap tersimpan benar. Salinan buffer->image mentah
+ * mengikuti byte format native, jadi aplikasi yang menyalin byte langsung ke swapchain bisa tertukar merah/birunya. */
+static VkFormat dx_swap_rb(VkFormat f) {
+    switch (f) {
+    case VK_FORMAT_R8G8B8A8_UNORM: return VK_FORMAT_B8G8R8A8_UNORM;
+    case VK_FORMAT_R8G8B8A8_SRGB: return VK_FORMAT_B8G8R8A8_SRGB;
+    case VK_FORMAT_B8G8R8A8_UNORM: return VK_FORMAT_R8G8B8A8_UNORM;
+    case VK_FORMAT_B8G8R8A8_SRGB: return VK_FORMAT_R8G8B8A8_SRGB;
+    default: return f;
+    }
+}
+/* 1 = RGBA, 2 = BGRA, 0 = bukan format 8-bit yang dikenal */
+static int dx_fmt_order(VkFormat f) {
+    if (f == VK_FORMAT_R8G8B8A8_UNORM || f == VK_FORMAT_R8G8B8A8_SRGB) return 1;
+    if (f == VK_FORMAT_B8G8R8A8_UNORM || f == VK_FORMAT_B8G8R8A8_SRGB) return 2;
+    return 0;
+}
+/* Urutan yang diminta lewat env: 1 RGBA, 2 BGRA, 0 = Auto (tanpa env: perilaku bawaan, shim mati). */
+static int dx_wanted_order(void) {
+    const char *e = getenv("DISPLAYX_SURFACE_FORMAT");
+    if (!e) return 0;
+    if (!strncasecmp(e, "rgba", 4)) return 1;
+    if (!strncasecmp(e, "bgra", 4)) return 2;
+    return 0;
+}
+struct shim_sc { VkSwapchainKHR sw; VkImage *images; uint32_t count; struct shim_sc *next; };
+static struct shim_sc *g_shims;
+static void shim_add(VkSwapchainKHR sw) {
+    struct shim_sc *s = calloc(1, sizeof(*s));
+    if (!s) return;
+    s->sw = sw;
+    pthread_mutex_lock(&g_lock);
+    s->next = g_shims; g_shims = s;
+    pthread_mutex_unlock(&g_lock);
+}
+static void shim_remove(VkSwapchainKHR sw) {
+    pthread_mutex_lock(&g_lock);
+    for (struct shim_sc **pp = &g_shims; *pp; pp = &(*pp)->next)
+        if ((*pp)->sw == sw) { struct shim_sc *dead = *pp; *pp = dead->next; free(dead->images); free(dead); break; }
+    pthread_mutex_unlock(&g_lock);
+}
+/* Catat image milik swapchain shim (gabungan tanpa duplikat; aplikasi bisa memanggil dengan jumlah parsial). */
+static void shim_set_images(VkSwapchainKHR sw, const VkImage *im, uint32_t n) {
+    pthread_mutex_lock(&g_lock);
+    for (struct shim_sc *s = g_shims; s; s = s->next) {
+        if (s->sw != sw) continue;
+        VkImage *grown = realloc(s->images, (s->count + n) * sizeof(*grown));
+        if (grown) {
+            s->images = grown;
+            for (uint32_t i = 0; i < n; i++) {
+                int dup = 0;
+                for (uint32_t k = 0; k < s->count; k++) if (s->images[k] == im[i]) dup = 1;
+                if (!dup) s->images[s->count++] = im[i];
+            }
+        }
+        break;
+    }
+    pthread_mutex_unlock(&g_lock);
+}
+static int shim_has_image(VkImage image) {
+    int found = 0;
+    pthread_mutex_lock(&g_lock);
+    for (struct shim_sc *s = g_shims; s && !found; s = s->next)
+        for (uint32_t i = 0; i < s->count; i++) if (s->images[i] == image) { found = 1; break; }
+    pthread_mutex_unlock(&g_lock);
+    return found;
+}
+/* Daftar format native WSI -> urutan yang diminta: entri berurutan lain diganti lawannya, tanpa duplikat. */
+static uint32_t shim_transform(const VkSurfaceFormatKHR *in, uint32_t n, int want, VkSurfaceFormatKHR *out) {
+    uint32_t m = 0;
+    for (uint32_t i = 0; i < n; i++) {
+        VkSurfaceFormatKHR e = in[i];
+        int o = dx_fmt_order(e.format);
+        if (o && o != want) e.format = dx_swap_rb(e.format);
+        int dup = 0;
+        for (uint32_t k = 0; k < m; k++) if (out[k].format == e.format && out[k].colorSpace == e.colorSpace) dup = 1;
+        if (!dup) out[m++] = e;
+    }
+    return m;
+}
 
 static void *key_of(const void *h) { return *(void *const *)h; }
 static struct inst *inst_find(void *key) {
@@ -290,7 +376,8 @@ static struct pdinfo *pd_probe(struct inst *in, VkPhysicalDevice pd) {
     VkPhysicalDeviceProperties props;
     VkFormatProperties fp;
     char reason[160];
-    if (in->disabled) why = "dimatikan lewat DISPLAYX_DISABLE=1";
+    if (in->shim_only) why = "DisplayX+ tidak dipakai; lapisan hanya mengatur urutan warna format surface";
+    else if (in->disabled) why = "dimatikan lewat DISPLAYX_DISABLE=1";
     else if (!in->api11) {
         snprintf(reason, sizeof(reason), "loader/driver Vulkan guest menolak instance 1.1 (aplikasi meminta %u.%u)",
                  VK_API_VERSION_MAJOR(in->app_api), VK_API_VERSION_MINOR(in->app_api));
@@ -329,7 +416,7 @@ static struct pdinfo *pd_probe(struct inst *in, VkPhysicalDevice pd) {
     }
     free(ext);
     info->ok = why == NULL;
-    if (why) dlog(1, "tidak aktif untuk device ini: %s (WSI bawaan dipakai)", why);
+    if (why) dlog(in->shim_only ? 2 : 1, "tidak aktif untuk device ini: %s (WSI bawaan dipakai)", why);
     else dlog(2, "device didukung (drm_modifier=%d usage=0x%x)", info->drm_mod, (unsigned)info->usage);
     pthread_mutex_lock(&g_lock);
     info->next = in->pds; in->pds = info;
@@ -390,6 +477,8 @@ static VKAPI_ATTR VkResult VKAPI_CALL dx_CreateInstance(const VkInstanceCreateIn
     i->gipa = next_gipa;
     i->destroy = (PFN_vkDestroyInstance)next_gipa(*out, "vkDestroyInstance");
     i->disabled = disabled;
+    const char *shim = getenv("DISPLAYX_SHIM_ONLY");
+    i->shim_only = shim && atoi(shim);
     i->app_api = app_api;
     i->loader_api = loader_api;
     i->api11 = api >= VK_API_VERSION_1_1 && !disabled;
@@ -548,7 +637,7 @@ static VkResult create_surface_common(VkInstance instance, const char *fn, uint3
     if (!in) return VK_ERROR_INITIALIZATION_FAILED;
     PFN_dxCreateSurface next = (PFN_dxCreateSurface)inst_fn(in, fn);
     uint32_t w, h;
-    if (in->api11 && window && host_geometry(window, &w, &h) == 0) {
+    if (in->api11 && !in->shim_only && window && host_geometry(window, &w, &h) == 0) {
         struct surf *s = calloc(1, sizeof(*s));
         if (!s) return VK_ERROR_OUT_OF_HOST_MEMORY;
         s->window = window;
@@ -646,7 +735,52 @@ static VKAPI_ATTR VkResult VKAPI_CALL dx_GetPhysicalDeviceSurfaceCapabilities2KH
     DX_SURFACE_PREAMBLE(pd, si->surface, "vkGetPhysicalDeviceSurfaceCapabilities2KHR", PFN_vkGetPhysicalDeviceSurfaceCapabilities2KHR, pd, si, caps)
     return fill_caps(ours, info, &caps->surfaceCapabilities);
 }
+/* Surface WSI bawaan dengan DISPLAYX_SURFACE_FORMAT eksplisit: ambil daftar native, ubah urutannya, lalu sajikan. */
+static VkResult shim_formats(struct inst *in, VkPhysicalDevice pd, VkSurfaceKHR surface, const VkPhysicalDeviceSurfaceInfo2KHR *si,
+                             uint32_t *pCount, VkSurfaceFormatKHR *p1, VkSurfaceFormat2KHR *p2, int want) {
+    uint32_t n = 0;
+    VkResult r;
+    VkSurfaceFormatKHR *nat = NULL, *out = NULL;
+    VkSurfaceFormat2KHR *nat2 = NULL;
+    if (si) {
+        PFN_vkGetPhysicalDeviceSurfaceFormats2KHR next = (PFN_vkGetPhysicalDeviceSurfaceFormats2KHR)inst_fn(in, "vkGetPhysicalDeviceSurfaceFormats2KHR");
+        if (!next) return VK_ERROR_EXTENSION_NOT_PRESENT;
+        r = next(pd, si, &n, NULL);
+        if (r != VK_SUCCESS) return r;
+        nat2 = calloc(n ? n : 1, sizeof(*nat2));
+        nat = calloc(n ? n : 1, sizeof(*nat));
+        if (!nat2 || !nat) { free(nat2); free(nat); return VK_ERROR_OUT_OF_HOST_MEMORY; }
+        for (uint32_t i = 0; i < n; i++) nat2[i].sType = VK_STRUCTURE_TYPE_SURFACE_FORMAT_2_KHR;
+        r = next(pd, si, &n, nat2);
+        for (uint32_t i = 0; i < n; i++) nat[i] = nat2[i].surfaceFormat;
+    } else {
+        PFN_vkGetPhysicalDeviceSurfaceFormatsKHR next = (PFN_vkGetPhysicalDeviceSurfaceFormatsKHR)inst_fn(in, "vkGetPhysicalDeviceSurfaceFormatsKHR");
+        if (!next) return VK_ERROR_EXTENSION_NOT_PRESENT;
+        r = next(pd, surface, &n, NULL);
+        if (r != VK_SUCCESS) return r;
+        nat = calloc(n ? n : 1, sizeof(*nat));
+        if (!nat) return VK_ERROR_OUT_OF_HOST_MEMORY;
+        r = next(pd, surface, &n, nat);
+    }
+    out = calloc(n ? n : 1, sizeof(*out));
+    if (r < 0 || !out) { free(nat); free(nat2); free(out); return r < 0 ? r : VK_ERROR_OUT_OF_HOST_MEMORY; }
+    uint32_t m = shim_transform(nat, n, want, out);
+    VkResult ret = VK_SUCCESS;
+    if (!p1 && !p2) *pCount = m;
+    else {
+        uint32_t c = *pCount < m ? *pCount : m;
+        for (uint32_t k = 0; k < c; k++) { if (p2) p2[k].surfaceFormat = out[k]; else p1[k] = out[k]; }
+        *pCount = c;
+        if (c < m) ret = VK_INCOMPLETE;
+    }
+    free(nat); free(nat2); free(out);
+    return ret;
+}
 static VKAPI_ATTR VkResult VKAPI_CALL dx_GetPhysicalDeviceSurfaceFormatsKHR(VkPhysicalDevice pd, VkSurfaceKHR surface, uint32_t *pCount, VkSurfaceFormatKHR *pFormats) {
+    if (!surf_find(surface) && dx_wanted_order()) {
+        struct inst *in0 = inst_find(key_of(pd));
+        if (in0) return shim_formats(in0, pd, surface, NULL, pCount, pFormats, NULL, dx_wanted_order());
+    }
     DX_SURFACE_PREAMBLE(pd, surface, "vkGetPhysicalDeviceSurfaceFormatsKHR", PFN_vkGetPhysicalDeviceSurfaceFormatsKHR, pd, surface, pCount, pFormats)
     VkSurfaceFormatKHR all[2];
     int n = surface_formats(in, pd, all);
@@ -657,6 +791,10 @@ static VKAPI_ATTR VkResult VKAPI_CALL dx_GetPhysicalDeviceSurfaceFormatsKHR(VkPh
     return c < (uint32_t)n ? VK_INCOMPLETE : VK_SUCCESS;
 }
 static VKAPI_ATTR VkResult VKAPI_CALL dx_GetPhysicalDeviceSurfaceFormats2KHR(VkPhysicalDevice pd, const VkPhysicalDeviceSurfaceInfo2KHR *si, uint32_t *pCount, VkSurfaceFormat2KHR *pFormats) {
+    if (!surf_find(si->surface) && dx_wanted_order()) {
+        struct inst *in0 = inst_find(key_of(pd));
+        if (in0) return shim_formats(in0, pd, VK_NULL_HANDLE, si, pCount, NULL, pFormats, dx_wanted_order());
+    }
     DX_SURFACE_PREAMBLE(pd, si->surface, "vkGetPhysicalDeviceSurfaceFormats2KHR", PFN_vkGetPhysicalDeviceSurfaceFormats2KHR, pd, si, pCount, pFormats)
     VkSurfaceFormatKHR all[2];
     int n = surface_formats(in, pd, all);
@@ -818,11 +956,57 @@ fail:
     return r;
 }
 
+/* Apakah WSI bawaan menawarkan format ini secara native? (gagal bertanya = anggap ya: diteruskan apa adanya) */
+static int shim_native_has(struct dev *d, VkSurfaceKHR surface, VkFormat f) {
+    PFN_vkGetPhysicalDeviceSurfaceFormatsKHR next = d->in ? (PFN_vkGetPhysicalDeviceSurfaceFormatsKHR)inst_fn(d->in, "vkGetPhysicalDeviceSurfaceFormatsKHR") : NULL;
+    uint32_t n = 0;
+    if (!next || next(d->pd, surface, &n, NULL) != VK_SUCCESS || !n) return 1;
+    VkSurfaceFormatKHR *arr = calloc(n, sizeof(*arr));
+    if (!arr) return 1;
+    int has = 0;
+    if (next(d->pd, surface, &n, arr) >= 0) for (uint32_t i = 0; i < n; i++) if (arr[i].format == f) has = 1;
+    free(arr);
+    return has;
+}
+/* Buat swapchain WSI bawaan dengan format native (lawan dari yang diminta aplikasi) dan catat sebagai swapchain shim. */
+static VkResult shim_create_swapchain(struct dev *d, VkDevice device, const VkSwapchainCreateInfoKHR *ci, const VkAllocationCallbacks *cb,
+                                      VkSwapchainKHR *out) {
+    VkSwapchainCreateInfoKHR mod = *ci;
+    mod.imageFormat = dx_swap_rb(ci->imageFormat);
+    /* VkImageFormatListCreateInfo (bila ada) ikut ditukar sementara; array milik aplikasi dipulihkan setelah panggilan. */
+    VkFormat saved[32];
+    VkFormat *list = NULL;
+    uint32_t cnt = 0;
+    for (const VkBaseInStructure *p = ci->pNext; p; p = p->pNext)
+        if (p->sType == VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO) {
+            const VkImageFormatListCreateInfo *fl = (const VkImageFormatListCreateInfo *)p;
+            cnt = fl->viewFormatCount;
+            if (cnt <= 32) {
+                list = (VkFormat *)fl->pViewFormats;
+                for (uint32_t i = 0; i < cnt; i++) { saved[i] = list[i]; list[i] = dx_swap_rb(list[i]); }
+            }
+            break;
+        }
+    VkResult r = d->n_create_sc(device, &mod, cb, out);
+    if (list) for (uint32_t i = 0; i < cnt; i++) list[i] = saved[i];
+    if (r == VK_SUCCESS) {
+        shim_add(*out);
+        dlog(2, "shim format: swapchain WSI bawaan dibuat native %d untuk format aplikasi %d", mod.imageFormat, ci->imageFormat);
+    }
+    return r;
+}
+
 static VKAPI_ATTR VkResult VKAPI_CALL dx_CreateSwapchainKHR(VkDevice device, const VkSwapchainCreateInfoKHR *ci, const VkAllocationCallbacks *cb, VkSwapchainKHR *out) {
     struct dev *d = dev_find(key_of(device));
     if (!d) return VK_ERROR_INITIALIZATION_FAILED;
     struct surf *surf = surf_find(ci->surface);
-    if (!surf) return d->n_create_sc ? d->n_create_sc(device, ci, cb, out) : VK_ERROR_EXTENSION_NOT_PRESENT;
+    if (!surf) {
+        if (!d->n_create_sc) return VK_ERROR_EXTENSION_NOT_PRESENT;
+        const int want = dx_wanted_order();
+        if (want && dx_fmt_order(ci->imageFormat) == want && !shim_native_has(d, ci->surface, ci->imageFormat))
+            return shim_create_swapchain(d, device, ci, cb, out);
+        return d->n_create_sc(device, ci, cb, out);
+    }
     if (!d->active) return VK_ERROR_INITIALIZATION_FAILED;
     if (!dx_format_ok(ci->imageFormat) || ci->imageArrayLayers != 1 ||
         (ci->imageUsage & ~d->usage)) {
@@ -899,7 +1083,7 @@ fail:
 static VKAPI_ATTR void VKAPI_CALL dx_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR sw, const VkAllocationCallbacks *cb) {
     struct dev *d = dev_find(key_of(device));
     struct sc *s = sc_find(sw);
-    if (!s) { if (d && d->n_destroy_sc) d->n_destroy_sc(device, sw, cb); return; }
+    if (!s) { shim_remove(sw); if (d && d->n_destroy_sc) d->n_destroy_sc(device, sw, cb); return; }
     pthread_mutex_lock(&g_lock);
     for (struct sc **pp = &g_scs; *pp; pp = &(*pp)->next) if (*pp == s) { *pp = s->next; break; }
     pthread_mutex_unlock(&g_lock);
@@ -919,7 +1103,10 @@ static VKAPI_ATTR VkResult VKAPI_CALL dx_GetSwapchainImagesKHR(VkDevice device, 
     struct sc *s = sc_find(sw);
     if (!s) {
         struct dev *d = dev_find(key_of(device));
-        return d && d->n_get_images ? d->n_get_images(device, sw, pCount, pImages) : VK_ERROR_EXTENSION_NOT_PRESENT;
+        if (!d || !d->n_get_images) return VK_ERROR_EXTENSION_NOT_PRESENT;
+        VkResult r = d->n_get_images(device, sw, pCount, pImages);
+        if (pImages && (r == VK_SUCCESS || r == VK_INCOMPLETE)) shim_set_images(sw, pImages, *pCount);
+        return r;
     }
     if (!pImages) { *pCount = s->count; return VK_SUCCESS; }
     uint32_t c = *pCount < s->count ? *pCount : s->count;
@@ -1098,6 +1285,12 @@ static VKAPI_ATTR VkResult VKAPI_CALL dx_CreateImageView(VkDevice device, const 
     if (dx_is_bgra(ci->format) && dx_swapchain_bgra_image(ci->image)) {
         VkImageViewCreateInfo mod = *ci;
         mod.format = dx_host_format(ci->format);
+        return d->create_view(device, &mod, cb, out);
+    }
+    /* image swapchain shim (WSI bawaan): view dalam urutan yang diiklankan ditulis ulang ke format native */
+    if (dx_fmt_order(ci->format) && shim_has_image(ci->image)) {
+        VkImageViewCreateInfo mod = *ci;
+        mod.format = dx_swap_rb(ci->format);
         return d->create_view(device, &mod, cb, out);
     }
     return d->create_view(device, ci, cb, out);

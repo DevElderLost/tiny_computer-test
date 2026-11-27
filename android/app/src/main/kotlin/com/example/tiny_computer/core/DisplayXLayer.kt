@@ -21,11 +21,23 @@ object DisplayXLayer {
         return File(dir, "libVkLayer_tiny_displayx.so").isFile && File(dir, "VkLayer_tiny_displayx.json").isFile
     }
 
-    /** Host hanya membuka soket DisplayX+ untuk X++ dengan backend DisplayX dan opsi DisplayX+ menyala. */
-    private fun wanted(xpp: Boolean, backend: Int, plus: Boolean) = xpp && plus && backend == Cfg.XPP_DISPLAYX
+    /** DisplayX+ yang benar-benar dipakai: backend DisplayX dengan opsi DisplayX+ menyala (host baru membuka soketnya saat itu). */
+    private fun displayXActive(backend: Int, plus: Boolean) = plus && backend == Cfg.XPP_DISPLAYX
 
-    /** Format warna -> DISPLAYX_SURFACE_FORMAT (nama yang sama dengan Winlator: rgba8 / bgra8). */
-    private fun surfaceFormatEnv(format: Int) = if (format == Cfg.SURFACE_BGRA) "bgra8" else "rgba8"
+    /**
+     * Lapisan dibutuhkan untuk DisplayX+, atau sebagai shim urutan warna bila RGBA dipilih eksplisit di mode X++ lain
+     * (EGL, Vulkan, Old Display, DisplayX biasa). BGRA adalah urutan native WSI X11 sehingga tidak perlu shim; Auto = tidak
+     * mengubah apa pun.
+     */
+    private fun wanted(xpp: Boolean, backend: Int, plus: Boolean, format: Int) =
+        xpp && (displayXActive(backend, plus) || format == Cfg.SURFACE_RGBA)
+
+    /** Format warna -> DISPLAYX_SURFACE_FORMAT (nama yang sama dengan Winlator: rgba8 / bgra8); Auto = tanpa env. */
+    private fun surfaceFormatEnv(format: Int): String? = when (format) {
+        Cfg.SURFACE_RGBA -> "rgba8"
+        Cfg.SURFACE_BGRA -> "bgra8"
+        else -> null
+    }
 
     /**
      * Setelan Display > VSync / present mode ([Cfg.presentMode]: 0 auto, 1 FIFO, 2 FIFO relaxed, 3 Mailbox, 4 Immediate) ->
@@ -46,9 +58,9 @@ object DisplayXLayer {
         xpp: Boolean = Cfg.desktopXpp, backend: Int = Cfg.xppBackend, present: Int = Cfg.presentMode,
         plus: Boolean = Cfg.xppDisplayXPlus, format: Int = Cfg.xppSurfaceFormat,
     ): List<String>? {
-        if (!wanted(xpp, backend, plus)) return null
+        if (!wanted(xpp, backend, plus, format)) return null
         if (!available()) {
-            Log.w(TAG, "DisplayX+ aktif, tetapi lapisan tidak ada di APK ini (CI gagal membangunnya)")
+            Log.w(TAG, "lapisan DisplayX tidak ada di APK ini (CI gagal membangunnya)")
             return null
         }
         return listOfNotNull(
@@ -56,21 +68,29 @@ object DisplayXLayer {
             "VK_INSTANCE_LAYERS=$NAME",
             "VK_LOADER_LAYERS_ENABLE=$NAME",
             presentModeEnv(present)?.let { "DISPLAYX_PRESENT_MODE=$it" },
-            "DISPLAYX_SURFACE_FORMAT=${surfaceFormatEnv(format)}",
+            surfaceFormatEnv(format)?.let { "DISPLAYX_SURFACE_FORMAT=$it" },
+            // tanpa DisplayX+ lapisan hanya mengatur urutan warna format surface dan tidak menyentuh device
+            if (displayXActive(backend, plus)) null else "DISPLAYX_SHIM_ONLY=1",
         )
     }
 
     /**
      * Potongan skrip shell untuk Shortcut: menambahkan lapisan ke env yang sudah ada (mis. memlimit) tanpa menimpanya dan
-     * tanpa menggandakan bila env global sudah memuatnya. Null bila tidak dipakai.
+     * tanpa menggandakan bila env global sudah memuatnya. Null bila sesi bukan X++.
      */
     fun shellExports(
         xpp: Boolean, backend: Int, present: Int = Cfg.presentMode, plus: Boolean = Cfg.xppDisplayXPlus,
         format: Int = Cfg.xppSurfaceFormat,
     ): String? {
-        if (envList(xpp, backend, present, plus, format) == null) return null
-        // present mode Shortcut bisa beda dari setelan global yang sudah ada di env: selalu timpa, atau hapus bila Auto
+        if (!xpp) return null
+        // Setelan Shortcut bisa beda dari setelan global yang sudah ada di env: selalu timpa, atau hapus bila Auto
+        val formatLine = surfaceFormatEnv(format)?.let { "export DISPLAYX_SURFACE_FORMAT=$it" } ?: "unset DISPLAYX_SURFACE_FORMAT"
+        if (envList(xpp, backend, present, plus, format) == null) {
+            // lapisan tidak dipakai untuk Shortcut ini; bila env global memuatnya, lapisan harus netral
+            return listOf(formatLine, "export DISPLAYX_SHIM_ONLY=1").joinToString("\n", postfix = "\n")
+        }
         val presentLine = presentModeEnv(present)?.let { "export DISPLAYX_PRESENT_MODE=$it" } ?: "unset DISPLAYX_PRESENT_MODE"
+        val shimLine = if (displayXActive(backend, plus)) "unset DISPLAYX_SHIM_ONLY" else "export DISPLAYX_SHIM_ONLY=1"
         return listOf(
             "case \":\${VK_INSTANCE_LAYERS:-}:\" in",
             "  *:$NAME:*) ;;",
@@ -81,7 +101,8 @@ object DisplayXLayer {
             "    ;;",
             "esac",
             presentLine,
-            "export DISPLAYX_SURFACE_FORMAT=${surfaceFormatEnv(format)}",
+            formatLine,
+            shimLine,
         ).joinToString("\n", postfix = "\n")
     }
 }

@@ -167,15 +167,17 @@ object Cfg {
         set(v) = TinyPrefs.setBool("xppDisplayXPlus", v)
 
     /**
-     * Format warna swapchain DisplayX+ (seperti "Surface format" Winlator): [SURFACE_RGBA] atau [SURFACE_BGRA]. Dikirim ke
-     * lapisan guest sebagai DISPLAYX_SURFACE_FORMAT (rgba8 / bgra8) dan menentukan format yang diiklankan ke aplikasi Vulkan.
-     * Bawaan RGBA, sama dengan perilaku sebelum pengaturan ini ada.
+     * Format warna swapchain Vulkan di semua mode X++ (seperti "Surface format" Winlator): [SURFACE_RGBA] atau [SURFACE_BGRA].
+     * Dikirim ke lapisan guest sebagai DISPLAYX_SURFACE_FORMAT (rgba8 / bgra8) dan menentukan urutan format yang diiklankan
+     * ke aplikasi Vulkan. [SURFACE_AUTO] (bawaan) tidak mengubah apa pun: DisplayX+ menawarkan RGBA seperti sebelumnya dan
+     * mode lain memakai urutan native WSI X11 (BGRA).
      */
     const val SURFACE_RGBA = 0
     const val SURFACE_BGRA = 1
+    const val SURFACE_AUTO = 2
     var xppSurfaceFormat: Int
-        get() = TinyPrefs.getInt("xppSurfaceFormat", SURFACE_RGBA).let { if (it == SURFACE_BGRA) it else SURFACE_RGBA }
-        set(v) = TinyPrefs.setInt("xppSurfaceFormat", if (v == SURFACE_BGRA) v else SURFACE_RGBA)
+        get() = TinyPrefs.getInt("xppSurfaceFormat", SURFACE_AUTO).let { if (it == SURFACE_RGBA || it == SURFACE_BGRA) it else SURFACE_AUTO }
+        set(v) = TinyPrefs.setInt("xppSurfaceFormat", if (v == SURFACE_RGBA || v == SURFACE_BGRA) v else SURFACE_AUTO)
     /**
      * Compositor xfwm4 (blur/transparansi) dibiarkan menyala sesuai setelan XFCE saat Open desktop dimulai. Bawaan mati:
      * compositing dimatikan di awal sesi. Apa pun pilihannya, vblank_mode xfwm4 dipaksa off (lihat assets/tiny/xsession.sh):
