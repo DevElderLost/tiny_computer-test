@@ -92,7 +92,7 @@ object XppHost {
      */
     fun ensureStarted(
         ctx: Context, w: Int, h: Int, backendOverride: Int? = null, presentOverride: Int? = null, fpsOverride: Int? = null,
-        bufferOverride: Int? = null, memLimitOverride: Int? = null,
+        bufferOverride: Int? = null, memLimitOverride: Int? = null, displayXPlusOverride: Boolean? = null,
     ): Boolean = synchronized(lock) {
         val sock = socketFile()
         // batas FPS sesi ini: pilihan khusus Shortcut atau Display > FPS; null (Open desktop) mengembalikan ke pengaturan utama
@@ -113,7 +113,7 @@ object XppHost {
         val wantBuffer = if (wantBackend == NativeX11.BACKEND_VULKAN) (bufferOverride ?: Cfg.swapBuffers).coerceIn(0, 15) else 0
         val wantMem = if (wantBackend == NativeX11.BACKEND_VULKAN) (memLimitOverride ?: Cfg.compositorMemMb).coerceIn(0, 32767) else 0
         // DisplayX+ hanya bermakna pada backend DisplayX (bridge soket dibuat di sisi native hanya untuk kombinasi itu).
-        val wantTrueDisplayX = wantBackend == NativeX11.BACKEND_DISPLAYX && Cfg.xppDisplayXPlus
+        val wantTrueDisplayX = wantBackend == NativeX11.BACKEND_DISPLAYX && (displayXPlusOverride ?: Cfg.xppDisplayXPlus)
         if (handle != 0L && width == w && height == h && backend == wantBackend && presentMode == wantPresent &&
             bufferCount == wantBuffer && memLimitMb == wantMem && trueDisplayX == wantTrueDisplayX &&
             boundSocket == sock.absolutePath) {

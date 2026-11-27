@@ -27,6 +27,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -581,16 +582,24 @@ static VKAPI_ATTR void VKAPI_CALL dx_DestroySurfaceKHR(VkInstance instance, VkSu
     if (next) next(instance, surface, cb);
 }
 
+/* DISPLAYX_SURFACE_FORMAT (sama dengan "Surface format" Winlator): rgba8 (bawaan) atau bgra8. Menentukan format yang
+ * DIIKLANKAN ke aplikasi; buffer host tetap R8G8B8A8 dan view B8G8R8A8 ditulis ulang (lihat dx_swapchain_bgra_image). */
+static int want_bgra_formats(void) {
+    const char *e = getenv("DISPLAYX_SURFACE_FORMAT");
+    return e && !strncasecmp(e, "bgra", 4);
+}
 static int surface_formats(struct inst *in, VkPhysicalDevice pd, VkSurfaceFormatKHR *out) {
     PFN_vkGetPhysicalDeviceFormatProperties gfp = (PFN_vkGetPhysicalDeviceFormatProperties)inst_fn(in, "vkGetPhysicalDeviceFormatProperties");
     static const VkFormat fmts[2] = { VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R8G8B8A8_SRGB };
+    static const VkFormat shown_bgra[2] = { VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_B8G8R8A8_SRGB };
+    const int bgra = want_bgra_formats();
     int n = 0;
     for (int k = 0; k < 2; k++) {
         VkFormatProperties fp;
         if (!gfp) break;
         gfp(pd, fmts[k], &fp);
         if (!(fp.linearTilingFeatures & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT)) continue;
-        out[n].format = fmts[k];
+        out[n].format = bgra ? shown_bgra[k] : fmts[k];
         out[n].colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
         n++;
     }

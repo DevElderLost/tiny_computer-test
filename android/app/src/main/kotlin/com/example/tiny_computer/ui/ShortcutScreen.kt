@@ -561,6 +561,21 @@ private fun AppSettingsDialog(app: DesktopApps.App, onRemoved: () -> Unit, onSho
                             ),
                             s.xppBackend,
                         ) { update(s.copy(xppBackend = it)) }
+                        if (ShortcutPrefs.xppBackend(app.id) == Cfg.XPP_DISPLAYX) {
+                            // DisplayX+ per Shortcut: menyalakan soket bypass X11 di server X++ (sesi dimulai ulang bila berubah)
+                            DeckChoiceRow(
+                                stringResource(R.string.tc_ui_xpp_displayx_plus), null,
+                                listOf(ShortcutPrefs.DEFAULT to def, ShortcutPrefs.ON to on, ShortcutPrefs.OFF to off),
+                                s.displayXPlus,
+                            ) { update(s.copy(displayXPlus = it)) }
+                            if (ShortcutPrefs.xppDisplayXPlus(app.id)) {
+                                DeckChoiceRow(
+                                    stringResource(R.string.tc_ui_xpp_surface_format), null,
+                                    listOf(ShortcutPrefs.DEFAULT to def, "rgba" to "RGBA", "bgra" to "BGRA"),
+                                    s.surfaceFormat,
+                                ) { update(s.copy(surfaceFormat = it)) }
+                            }
+                        }
                         DeckChoiceRow(
                             stringResource(R.string.tc_ui_xpp_qt_gpu), null,
                             listOf(ShortcutPrefs.DEFAULT to def, ShortcutPrefs.ON to on, ShortcutPrefs.OFF to off),

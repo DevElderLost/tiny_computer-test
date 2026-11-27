@@ -77,6 +77,7 @@ object Launcher {
     @Volatile var appSessionFps = 0
     @Volatile var appSessionBuffers = 0
     @Volatile var appSessionMem = 0
+    @Volatile var appSessionDisplayXPlus = false
 
     /**
      * Apakah aplikasi Shortcut berikutnya berjalan di desktop XFCE lengkap. Desktop yang dibuka lewat Open desktop sudah punya
@@ -130,7 +131,8 @@ object Launcher {
             appSessionDesktop != ShortcutPrefs.desktopMode(appId) ||
             (wantXpp && (appSessionBackend != ShortcutPrefs.xppBackend(appId) ||
                 appSessionPresent != ShortcutPrefs.presentMode(appId) || appSessionFps != ShortcutPrefs.fpsLimit(appId) ||
-                appSessionBuffers != ShortcutPrefs.swapBuffers(appId) || appSessionMem != ShortcutPrefs.compositorMemMb(appId))) ||
+                appSessionBuffers != ShortcutPrefs.swapBuffers(appId) || appSessionMem != ShortcutPrefs.compositorMemMb(appId) ||
+                (ShortcutPrefs.xppBackend(appId) == Cfg.XPP_DISPLAYX && appSessionDisplayXPlus != ShortcutPrefs.xppDisplayXPlus(appId)))) ||
             (!wantXpp && appSessionWayland != (ShortcutPrefs.displayServer(appId) == Cfg.DISPLAY_WAYLAND)) ||
             (appSessionDesktop && appSessionComp != ShortcutPrefs.compositor(appId))
     }
@@ -1394,6 +1396,8 @@ fi
             val compMem = ShortcutPrefs.compositorMemMb(appId)
             appSessionBuffers = buffers
             appSessionMem = compMem
+            val displayXPlus = ShortcutPrefs.xppDisplayXPlus(appId)
+            appSessionDisplayXPlus = displayXPlus
             appSessionComp = comp
             appSessionWayland = wayland
             if (xpp) {
@@ -1401,12 +1405,12 @@ fi
                 // (Vulkan, EGL, DisplayX, Old Display). Harus menyala SEBELUM proot sesi dan aplikasi: soket X4 dibuat di sini.
                 val backendName = when (backend) {
                     Cfg.XPP_VULKAN -> "Vulkan"
-                    Cfg.XPP_DISPLAYX -> "DisplayX"
+                    Cfg.XPP_DISPLAYX -> if (displayXPlus) "DisplayX+" else "DisplayX"
                     Cfg.XPP_OLD_DISPLAY -> "Old Display (EGL)"
                     else -> "EGL"
                 }
                 LaunchLog.write(sLog, "session", "sesi aplikasi Shortcut dimulai (X++ $backendName ${size.first}x${size.second}), dipicu oleh $appId")
-                if (!XppHost.ensureStarted(ctx, size.first, size.second, backend, present, fps, buffers, compMem)) {
+                if (!XppHost.ensureStarted(ctx, size.first, size.second, backend, present, fps, buffers, compMem, displayXPlus)) {
                     val reason = XppHost.lastError ?: "unknown error"
                     LaunchLog.write(sLog, "session", "X++ gagal dinyalakan: $reason")
                     appSessionXpp = false

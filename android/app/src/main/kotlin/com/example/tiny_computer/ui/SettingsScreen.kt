@@ -186,10 +186,19 @@ fun SettingsScreen() {
                     xppBackend,
                 ) { xppBackend = it; Cfg.xppBackend = it }
                 if (xppBackend == Cfg.XPP_DISPLAYX) {
+                    var displayXPlus by remember { mutableStateOf(Cfg.xppDisplayXPlus) }
                     DeckSwitchRow(
                         stringResource(R.string.tc_ui_xpp_displayx_plus), stringResource(R.string.tc_ui_xpp_displayx_plus_hint),
-                        Cfg.xppDisplayXPlus,
-                    ) { Cfg.xppDisplayXPlus = it }
+                        displayXPlus,
+                    ) { displayXPlus = it; Cfg.xppDisplayXPlus = it }
+                    if (displayXPlus) {
+                        var surfaceFormat by remember { mutableStateOf(Cfg.xppSurfaceFormat) }
+                        DeckChoiceRow(
+                            stringResource(R.string.tc_ui_xpp_surface_format), stringResource(R.string.tc_ui_xpp_surface_format_hint),
+                            listOf(Cfg.SURFACE_RGBA to "RGBA", Cfg.SURFACE_BGRA to "BGRA"),
+                            surfaceFormat,
+                        ) { surfaceFormat = it; Cfg.xppSurfaceFormat = it }
+                    }
                 }
             }
             DeckSwitchRow(stringResource(R.string.tc_ui_xfce_compositor), stringResource(R.string.tc_ui_xfce_compositor_hint), Cfg.xfceCompositor) { Cfg.xfceCompositor = it }

@@ -574,7 +574,9 @@ fi
         }
         // DisplayX+ untuk aplikasi Vulkan guest di atas X++. Backend dipilih per Shortcut, jadi lapisan ditambahkan di sini
         // (digabung dengan env memlimit yang sudah ada, tanpa menggandakan env global).
-        DisplayXLayer.shellExports(xpp, ShortcutPrefs.xppBackend(id), ShortcutPrefs.presentMode(id))?.let { sb.append(it) }
+        DisplayXLayer.shellExports(
+            xpp, ShortcutPrefs.xppBackend(id), ShortcutPrefs.presentMode(id), ShortcutPrefs.xppDisplayXPlus(id), ShortcutPrefs.xppSurfaceFormat(id),
+        )?.let { sb.append(it) }
         // Qt di X++: EGL + Vulkan RHI (bukan GLX + Zink/Kopper, yang membuat jendela Qt Quick hitam karena tidak ada DRI3).
         // Hanya bila GPU Turnip dipakai aplikasi ini; env buatan pengguna di bawah bisa menimpa (mis. QT_QUICK_BACKEND=software).
         if (xpp && turnipOn && (ShortcutPrefs.triState(s.qtGpu) ?: Cfg.xppQtGpu)) {

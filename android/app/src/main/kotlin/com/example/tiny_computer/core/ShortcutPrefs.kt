@@ -50,6 +50,10 @@ object ShortcutPrefs {
         val display: String = DEFAULT,
         /** Mode tampilan X++ khusus aplikasi ini: default | vulkan | egl | displayx | old */
         val xppBackend: String = DEFAULT,
+        /** DisplayX+ di X++ (hanya bermakna pada backend DisplayX): default | on | off */
+        val displayXPlus: String = DEFAULT,
+        /** Format warna swapchain DisplayX+: default | rgba | bgra */
+        val surfaceFormat: String = DEFAULT,
         /** Compositor xfwm4 di desktop sesi Shortcut: default | on | off */
         val compositor: String = DEFAULT,
         /** Shortcut membuka desktop XFCE lengkap atau sesi minimal: default | on | off */
@@ -91,6 +95,7 @@ object ShortcutPrefs {
                 workDir = o.optString("workDir"), gpu = o.optString("gpu", DEFAULT), hidpi = o.optString("hidpi", DEFAULT),
                 pad = o.optString("pad", DEFAULT), screen = o.optString("screen"),
                 display = o.optString("display", DEFAULT), xppBackend = o.optString("xppBackend", DEFAULT),
+                displayXPlus = o.optString("displayXPlus", DEFAULT), surfaceFormat = o.optString("surfaceFormat", DEFAULT),
                 compositor = o.optString("compositor", DEFAULT), desktopMode = o.optString("desktopMode", DEFAULT),
                 qtGpu = o.optString("qtGpu", DEFAULT),
                 fps = o.optInt("fps", -1), presentMode = o.optInt("presentMode", -1), buffering = o.optInt("buffering", -1),
@@ -110,7 +115,8 @@ object ShortcutPrefs {
             val o = JSONObject()
                 .put("name", s.name).put("command", s.command).put("args", s.args).put("env", s.env).put("workDir", s.workDir)
                 .put("gpu", s.gpu).put("hidpi", s.hidpi).put("pad", s.pad).put("screen", s.screen)
-                .put("display", s.display).put("xppBackend", s.xppBackend).put("compositor", s.compositor)
+                .put("display", s.display).put("xppBackend", s.xppBackend).put("displayXPlus", s.displayXPlus).put("surfaceFormat", s.surfaceFormat)
+                .put("compositor", s.compositor)
                 .put("desktopMode", s.desktopMode).put("qtGpu", s.qtGpu)
                 .put("fps", s.fps).put("presentMode", s.presentMode).put("buffering", s.buffering)
                 .put("compositorMem", s.compositorMem).put("vulkanMem", s.vulkanMem).put("sound", s.sound)
@@ -144,6 +150,16 @@ object ShortcutPrefs {
         "displayx" -> Cfg.XPP_DISPLAYX
         "old" -> Cfg.XPP_OLD_DISPLAY
         else -> Cfg.xppBackend
+    }
+
+    /** DisplayX+ untuk aplikasi ini: pilihan khusus Shortcut atau pengaturan Display server utama ([Cfg.xppDisplayXPlus]). */
+    fun xppDisplayXPlus(id: String?): Boolean = id?.let { triState(get(it).displayXPlus) } ?: Cfg.xppDisplayXPlus
+
+    /** Format warna swapchain DisplayX+ ([Cfg.SURFACE_RGBA] / [Cfg.SURFACE_BGRA]) untuk aplikasi ini. */
+    fun xppSurfaceFormat(id: String?): Int = when (id?.let { get(it).surfaceFormat }) {
+        "rgba" -> Cfg.SURFACE_RGBA
+        "bgra" -> Cfg.SURFACE_BGRA
+        else -> Cfg.xppSurfaceFormat
     }
 
     fun compositor(id: String?): Boolean = id?.let { triState(get(it).compositor) } ?: Cfg.xfceCompositor
