@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import android.util.Log
 import android.widget.Toast
 import android.view.HapticFeedbackConstants
@@ -73,6 +74,8 @@ class DisplayUiState {
     var trackpadSpeed by mutableStateOf(5)
     /** Keyboard PC di layar (dari DroidDeck): tombol evdev asli, bukan keyboard Android. */
     var pcKeyboard by mutableStateOf(false)
+    /** Tinggi keyboard PC di layar (piksel), diisi PcKeyboard saat diukur: dasar pergeseran tampilan ([KeyboardPan]). */
+    var pcKeyboardHeight by mutableStateOf(0)
     /** True bila layar ini menjalankan aplikasi Shortcut (bukan desktop): tombol Shutdown dan layar progres aktif. */
     var appMode by mutableStateOf(false)
     /** Ukuran scene compositor (kecepatan kursor trackpad mode mouse) dan penghitung muat-ulang tata letak controller. */
@@ -139,6 +142,15 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
     private var moved = false
     private var leftHeld = false
     private var scrollAcc = 0f
+
+    // keyboard PC di layar muncul: tampilan digeser ke atas dan mengikuti kursor ([KeyboardPan], logika layar AVNC)
+    private var cursorView: CursorView? = null
+    private lateinit var keyboardPan: KeyboardPan
+    /** Pergeseran vertikal (<= 0) View layar saat ini. Sentuhan dibaca di ruang induk, jadi posisi sentuh = posisi layar + ini. */
+    private var panY = 0f
+    /** Jari sedang menyentuh langsung (mode sentuh langsung) atau mouse mutlak baru bergerak: tampilan ditahan, kursor ada di bawah jari. */
+    private var directDown = false
+    private var lastMouseMs = 0L
 
     /**
      * True bila layar ini menampilkan X++ native X server, bukan compositor Wayland: desktop dengan Display server = X++,
@@ -261,12 +273,27 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
                 }
             }
         }
+        keyboardPan = KeyboardPan(
+            ui,
+            viewSize = { surfaceView.width.toFloat() to surfaceView.height.toFloat() },
+            scene = { currentScene() },
+            directContact = { directDown || SystemClock.uptimeMillis() - lastMouseMs < MOUSE_HOLD_MS },
+        ) { y ->
+            // layar dan kursor rootfs digeser bersama; kursor X++ ada di dalam gambar server
+            panY = y
+            surfaceView.translationY = y
+            cursorView?.translationY = y
+        }
         setContentView(FrameLayout(this).apply {
             setBackgroundColor(0xFF000000.toInt())
             addView(surfaceView, FrameLayout.LayoutParams(-1, -1))
             // kursor rootfs: di atas compositor, di bawah menu; tidak menerima sentuhan
             // X++ menggambar kursor X sendiri di dalam server, jadi CursorView (kursor wl_pointer) tidak dipasang
-            if (!useXpp) addView(CursorView(this@DisplayActivity, ui) { currentScene() }, FrameLayout.LayoutParams(-1, -1))
+            if (!useXpp) {
+                val cv = CursorView(this@DisplayActivity, ui) { currentScene() }
+                cursorView = cv
+                addView(cv, FrameLayout.LayoutParams(-1, -1))
+            }
             addView(controls, FrameLayout.LayoutParams(-1, -1))
             addView(profileControls, FrameLayout.LayoutParams(-1, -1))
             addView(overlay, FrameLayout.LayoutParams(-1, -1))
@@ -347,11 +374,14 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
         resumed = true
         syncMotion()
         surfaceView.requestFocus()
+        keyboardPan.start()
     }
 
     override fun onPause() {
         // sensor tidak dibaca saat layar ini tidak tampil
         resumed = false
+        keyboardPan.stop()
+        directDown = false
         stopMotion()
         profileView?.releaseAll()
         extHandler?.reset()
@@ -584,8 +614,9 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
         return DisplayFit.sceneY(vy, surfaceView.width.toFloat(), surfaceView.height.toFloat(), sw, sh)
     }
 
+    /** [x]/[y] di ruang induk (sentuhan/mouse); dikurangi [panY] jadi koordinat di dalam View layar yang tergeser. */
     private fun move(x: Float, y: Float) =
-        SceneInput.send(SCENE_MOTION, sceneX(x), sceneY(y))
+        SceneInput.send(SCENE_MOTION, sceneX(x), sceneY(y - panY))
 
     private fun button(code: Int, down: Boolean) =
         SceneInput.send(SCENE_BUTTON, code, if (down) 1 else 0)
@@ -628,6 +659,7 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
         if (touchpad != lastTouchpad) {
             // mode diganti di tengah gestur: lepas tombol yang masih tertahan
             if (leftHeld) { button(BTN_LEFT, false); leftHeld = false }
+            directDown = false
             touchpadInput.cancel()
             lastTouchpad = touchpad
         }
@@ -643,6 +675,7 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 lastX = e.x; lastY = e.y; downTime = e.eventTime; moved = false; scrollAcc = 0f
+                directDown = true
                 move(e.x, e.y); button(BTN_LEFT, true); leftHeld = true
             }
             MotionEvent.ACTION_POINTER_DOWN -> {
@@ -670,6 +703,7 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
                 if (!moved && e.eventTime - downTime < TAP_MS) { button(BTN_RIGHT, true); button(BTN_RIGHT, false) }
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                directDown = false
                 if (leftHeld) { button(BTN_LEFT, false); leftHeld = false }
             }
         }
@@ -677,6 +711,7 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
     }
 
     private fun handleMouse(e: MotionEvent): Boolean {
+        lastMouseMs = SystemClock.uptimeMillis()
         move(e.x, e.y)
         val left = e.buttonState and MotionEvent.BUTTON_PRIMARY != 0
         val right = e.buttonState and MotionEvent.BUTTON_SECONDARY != 0
@@ -734,7 +769,16 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
     /** SurfaceView yang menerima sentuhan. Teks diketik lewat keyboard PC di layar atau keyboard fisik. */
     private inner class DeskSurface(context: Context) : SurfaceView(context) {
         @SuppressLint("ClickableViewAccessibility")
-        override fun onTouchEvent(event: MotionEvent): Boolean = handleTouch(event)
+        override fun onTouchEvent(event: MotionEvent): Boolean {
+            // View ini tergeser ([KeyboardPan]) dan Android memberi koordinat di dalam View. Gerak touchpad dihitung dari selisih
+            // koordinat, jadi bila ikut bergeser saat tampilan mengikuti kursor, jari yang diam terbaca bergerak dan kursor
+            // lari sendiri. Dikembalikan ke ruang induk (tidak ikut bergeser); move() mengurangi panY lagi untuk sentuh langsung.
+            val dy = translationY
+            if (dy == 0f) return handleTouch(event)
+            val shifted = MotionEvent.obtain(event)
+            shifted.offsetLocation(0f, dy)
+            return try { handleTouch(shifted) } finally { shifted.recycle() }
+        }
     }
 
     companion object {
@@ -756,6 +800,8 @@ class DisplayActivity : ComponentActivity(), SurfaceHolder.Callback {
         private const val BTN_RIGHT = 273
         private const val BTN_MIDDLE = 274
         private const val TAP_MS = 250L
+        /** Setelah gerak mouse mutlak, tampilan ditahan selama ini supaya tidak lari dari penunjuk mouse. */
+        private const val MOUSE_HOLD_MS = 400L
         private const val SCROLL_STEP_PX = 40f
     }
 }

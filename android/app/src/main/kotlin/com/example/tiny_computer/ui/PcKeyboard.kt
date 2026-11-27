@@ -50,6 +50,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -114,6 +115,8 @@ fun PcKeyboard(
     /** evdev code, pressed. */
     sendKey: (Int, Boolean) -> Unit,
     onClose: () -> Unit,
+    /** Tinggi keyboard dalam piksel (untuk menggeser tampilan di atasnya); dipanggil tiap ukurannya berubah. */
+    onHeight: (Int) -> Unit = {},
 ) {
     val pal = LocalPalette.current
     val colors = MaterialTheme.colorScheme
@@ -154,6 +157,7 @@ fun PcKeyboard(
         val rowHeight = ((maxHeight * 0.47f - 24.dp - 3.dp * 6 - 10.dp) / 6).coerceIn(24.dp, 44.dp)
         Box(
             Modifier.fillMaxWidth()
+                .onSizeChanged { onHeight(it.height) }
                 .background(Color(0xE6101418), RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp))
                 .border(1.dp, pal.line2, RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp))
                 // Touches on the keyboard stop here; the program underneath never sees them.

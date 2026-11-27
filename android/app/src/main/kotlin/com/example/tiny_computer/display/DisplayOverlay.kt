@@ -78,7 +78,7 @@ fun DisplayOverlay(
             )
         }
         if (state.pcKeyboard) {
-            PcKeyboard(sendKey = sendKey, onClose = { state.pcKeyboard = false })
+            PcKeyboard(sendKey = sendKey, onClose = { state.pcKeyboard = false }, onHeight = { state.pcKeyboardHeight = it })
         }
         SessionDrawer(
             state = state,
