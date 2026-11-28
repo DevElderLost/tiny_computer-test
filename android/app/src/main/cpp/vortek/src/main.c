@@ -7,6 +7,7 @@
 #include "request_handler.h"
 #include "vulkan_helper.h"
 #include "jni_utils.h"
+#include "vortek_log.h"
 
 #include "adrenotools/driver.h"
 
@@ -35,7 +36,8 @@ static void* openVulkanLibrary(JNIEnv* env, jstring nativeLibraryDir, jstring li
     }
     else libvulkan = dlopen(LIBVULKAN_PATH, RTLD_NOW | RTLD_LOCAL);
 
-    if (!libvulkan) println("vortek: unable to open libvulkan: %s", dlerror());
+    if (!libvulkan) vortekLog("gagal membuka libvulkan host: %s", dlerror());
+    else vortekLog("libvulkan host terbuka (%s)", libvulkanPath ? "adrenotools" : LIBVULKAN_PATH);
     return libvulkan;
 }
 
@@ -62,6 +64,7 @@ Java_com_example_tiny_1computer_vortek_VortekRenderer_initVulkanWrapper(JNIEnv *
                                                                                     jstring libvulkanPath) {
     void* libvulkan = openVulkanLibrary(env, nativeLibraryDir, libvulkanPath);
     initVulkanWrapper(&vulkanWrapper, libvulkan);
+    vortekLog("wrapper Vulkan siap: vkCreateInstance=%p", (void*)vulkanWrapper.vkCreateInstance);
 }
 
 JNIEXPORT jboolean JNICALL

@@ -2,6 +2,7 @@
 #include "vk_context.h"
 #include "vulkan_helper.h"
 #include "sysvshared_memory.h"
+#include "vortek_log.h"
 
 #define MSG_DEBUG_UNIMPLEMENTED_FUNC "%s not implemented yet\n"
 
@@ -25,7 +26,8 @@ void vt_handle_vkCreateInstance(VkContext* context) {
                      skipExtensions, ARRAY_SIZE(skipExtensions));
 
     VkInstance instance;
-    VkResult result = vulkanWrapper.vkCreateInstance(&createInfo, NULL, &instance);
+    VkResult result = vulkanWrapper.vkCreateInstance ? vulkanWrapper.vkCreateInstance(&createInfo, NULL, &instance) : VK_ERROR_INITIALIZATION_FAILED;
+    vortekLog("vkCreateInstance: ekstensi=%u hasil=%d", createInfo.enabledExtensionCount, (int)result);
     if (result == VK_SUCCESS) initVulkanInstance(context, instance, createInfo.pApplicationInfo);
 
     VT_SERIALIZE_CMD(VkInstance, instance);

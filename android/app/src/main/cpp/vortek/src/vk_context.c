@@ -1,4 +1,5 @@
 #include "vk_context.h"
+#include "vortek_log.h"
 #include "vulkan_helper.h"
 #include "request_handler.h"
 #include "sysvshared_memory.h"
@@ -48,7 +49,8 @@ static void* requestHandlerThread(void* param) {
 
     while (context->status >= 0) {
         int requestCode = vt_recv(context->serverRing, &context->inputBuffer, &context->inputBufferSize, &context->memoryPool);
-        if (requestCode < 0) break;
+        if (requestCode < 0) { vortekLog("context %p: ring ditutup/err (%d)", (void*)context, requestCode); break; }
+        { static int logged = 0; if (logged < 40) { logged++; vortekLog("context %p: request %d", (void*)context, requestCode); } }
 
         if (requestCode > INT16_MAX) {
             uint16_t requestId = requestCode & 0xffff;
