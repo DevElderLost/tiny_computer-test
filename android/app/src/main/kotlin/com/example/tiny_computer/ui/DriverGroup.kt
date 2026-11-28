@@ -58,6 +58,15 @@ fun DriverGroup() {
             stringResource(if (busy) R.string.tc_drv_importing else R.string.tc_btn_import),
         ) { if (!busy) picker.launch(arrayOf("application/zip", "application/octet-stream", "application/x-zstd", "*/*")) }
 
+        var vortek by remember { mutableStateOf(Cfg.vortek) }
+        DeckToggleRow(stringResource(R.string.tc_vortek), stringResource(R.string.tc_vortek_hint), vortek) { vortek = it; Cfg.vortek = it }
+        var vortekSel by remember { mutableStateOf(Cfg.vortekDriver) }
+        DeckChoiceRow(
+            stringResource(R.string.tc_vortek_driver), null,
+            listOf("" to stringResource(R.string.tc_vortek_driver_system)) + android.map { it to VulkanDrivers.label(ctx, it, false) },
+            if (vortekSel in android) vortekSel else "",
+        ) { vortekSel = it; Cfg.vortekDriver = it }
+
         DeckChoiceRow(
             stringResource(R.string.tc_drv_linux), null,
             listOf("" to stringResource(R.string.tc_drv_auto)) + linux.map { it to VulkanDrivers.label(ctx, it, true) },

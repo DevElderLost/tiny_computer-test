@@ -32,3 +32,6 @@ target_link_libraries(sdnative log)
 
 # --- X++ native X server (dari Winlator Ludashi): pilihan Display server di Pengaturan Desktop ---
 add_subdirectory(xpp)
+
+# --- Vortek (dari Winlator): renderer Vulkan guest -> Android, tampil lewat window X++ ---
+add_subdirectory(vortek)

@@ -8,6 +8,8 @@
 #include "core/atom.h"
 #include "native_screen.h"
 #include "native_icc.h"
+#include "native_drawable.h"
+#include <android/hardware_buffer.h>
 #include <map>
 
 namespace {
@@ -71,6 +73,23 @@ struct WindowListener {
     }
 };
 }
+
+// ---- Jembatan Vortek: window X -> AHardwareBuffer yang ditulis renderer Vulkan Vortek ----
+// Vortek (ICD guest) menggambar ke AHB milik window; X++ menampilkannya lewat jalur yang sama dengan
+// Present DRI3 (drawable AHB + PresentTicket), sehingga tidak ada salinan CPU.
+namespace {
+struct VortekWindowBuffer { sp<xorg::NativeDrawable> drawable; u16 w{}, h{}; bool bgra{}; };
+std::mutex vortek_mutex;
+std::map<std::pair<jlong, u32>, VortekWindowBuffer> vortek_buffers;
+xorg::Window* vortekWindow(xorg::XServer& server, u32 id) {
+    auto* r = server.GetResource(id);
+    return r && r->GetType() == xorg::XResourceType::Window ? r->As<xorg::Window>() : nullptr;
+}
+void vortekClear(jlong handle) {
+    std::lock_guard lock(vortek_mutex);
+    std::erase_if(vortek_buffers, [handle](const auto& e) { return e.first.first == handle; });
+}
+}
 #define JNI_NAME(name) Java_com_example_tiny_1computer_xpp_NativeX11_##name
 extern "C" JNIEXPORT void JNICALL JNI_NAME(nativeWindowListener)(JNIEnv* env, jclass, jlong handle, jobject view) {
     auto server = session(handle); if (!server) return;
@@ -124,6 +143,7 @@ extern "C" JNIEXPORT void JNICALL JNI_NAME(nativeDestroy)(JNIEnv*, jclass, jlong
     sp<xorg::XServer> server;
     { std::lock_guard lock(sessions_mutex); auto i = sessions.find(handle);
       if (i != sessions.end()) { server = std::move(i->second); sessions.erase(i); } }
+    vortekClear(handle);
     // Release outside registry lock: shutdown joins native worker threads.
     server.reset();
 }
@@ -315,3 +335,52 @@ extern "C" JNIEXPORT jobjectArray JNICALL JNI_NAME(nativeHudSnapshot)(JNIEnv* en
     return result;
 }
 
+
+extern "C" JNIEXPORT jint JNICALL JNI_NAME(nativeVortekWindowWidth)(JNIEnv*, jclass, jlong handle, jint id) {
+    auto server = session(handle); if (!server) return 0;
+    auto lock = server->Lock(); auto* w = vortekWindow(*server, u32(id)); return w ? jint(w->GetWidth()) : 0;
+}
+extern "C" JNIEXPORT jint JNICALL JNI_NAME(nativeVortekWindowHeight)(JNIEnv*, jclass, jlong handle, jint id) {
+    auto server = session(handle); if (!server) return 0;
+    auto lock = server->Lock(); auto* w = vortekWindow(*server, u32(id)); return w ? jint(w->GetHeight()) : 0;
+}
+// Mengembalikan AHardwareBuffer* (0 bila gagal). Dipakai ulang selama ukuran dan format window tetap.
+extern "C" JNIEXPORT jlong JNICALL JNI_NAME(nativeVortekWindowBuffer)(JNIEnv*, jclass, jlong handle, jint id, jboolean bgra) {
+    auto server = session(handle); if (!server) return 0;
+    auto lock = server->Lock();
+    auto* window = vortekWindow(*server, u32(id)); if (!window) return 0;
+    const u16 w = u16(window->GetWidth()), h = u16(window->GetHeight());
+    if (!w || !h) return 0;
+    std::lock_guard cache(vortek_mutex);
+    auto& slot = vortek_buffers[{handle, u32(id)}];
+    if (slot.drawable && slot.w == w && slot.h == h && slot.bgra == (bgra == JNI_TRUE) && slot.drawable->HardwareBuffer())
+        return reinterpret_cast<jlong>(slot.drawable->HardwareBuffer());
+    AHardwareBuffer_Desc desc{};
+    desc.width = w; desc.height = h; desc.layers = 1;
+    // 5 = HAL_PIXEL_FORMAT_BGRA_8888 (sama dengan GPUImage Winlator)
+    desc.format = bgra == JNI_TRUE ? 5u : uint32_t(AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM);
+    desc.usage = AHARDWAREBUFFER_USAGE_GPU_COLOR_OUTPUT | AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE |
+                 AHARDWAREBUFFER_USAGE_CPU_READ_RARELY | AHARDWAREBUFFER_USAGE_CPU_WRITE_RARELY;
+    AHardwareBuffer* ahb = nullptr;
+    if (AHardwareBuffer_allocate(&desc, &ahb) != 0 || !ahb) { slot = {}; return 0; }
+    try {
+        // NativeDrawable memegang referensinya sendiri (AHardwareBuffer_acquire); lepas referensi alokasi.
+        slot.drawable = std::make_shared<xorg::NativeDrawable>(w, h, window->GetDepth(), ahb);
+    } catch (...) { AHardwareBuffer_release(ahb); slot = {}; return 0; }
+    AHardwareBuffer_release(ahb);
+    slot.w = w; slot.h = h; slot.bgra = bgra == JNI_TRUE;
+    return reinterpret_cast<jlong>(slot.drawable->HardwareBuffer());
+}
+// Isi AHB window baru selesai ditulis: tampilkan lewat jalur Present.
+extern "C" JNIEXPORT void JNICALL JNI_NAME(nativeVortekWindowUpdate)(JNIEnv*, jclass, jlong handle, jint id) {
+    auto server = session(handle); if (!server) return;
+    auto lock = server->Lock();
+    if (!vortekWindow(*server, u32(id))) return;
+    sp<xorg::NativeDrawable> drawable;
+    { std::lock_guard cache(vortek_mutex);
+      auto i = vortek_buffers.find({handle, u32(id)}); if (i == vortek_buffers.end()) return; drawable = i->second.drawable; }
+    if (!drawable) return;
+    auto ticket = std::make_shared<xorg::PresentTicket>();
+    ticket->window = u32(id); ticket->drawable = std::move(drawable);
+    static_cast<xorg::NativeScreen&>(server->GetScreen()).Present(std::move(ticket));
+}

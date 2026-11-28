@@ -31,3 +31,6 @@
 
 # X++ native X server (libxpp.so): kelas JNI-nya dicari native lewat nama.
 -keep class com.example.tiny_computer.xpp.** { *; }
+
+# Vortek: native mencari field Options dan method callback lewat nama (JNI).
+-keep class com.example.tiny_computer.vortek.** { *; }

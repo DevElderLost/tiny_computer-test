@@ -668,6 +668,12 @@ TMPDIR=${'$'}DATA_DIR/pulseaudio_tmp HOME=${'$'}DATA_DIR/pulseaudio_tmp XDG_CONF
     fun turnipOpt(ctx: Context): String {
         val re = Regex("""\s*VK_(?:ICD_FILENAMES|DRIVER_FILES)=\S+""")
         val base = Cfg.defaultTurnipOpt
+        // Vortek: ICD guest = libvulkan_vortek.so; render dijalankan renderer native di proses aplikasi (driver host via adrenotools).
+        if (Cfg.vortek && com.example.tiny_computer.vortek.VortekRenderer.ensureStarted(ctx)) {
+            val icd = com.example.tiny_computer.vortek.VortekRenderer.GUEST_ICD
+            Log.i("Launcher", "Vortek aktif: ICD $icd")
+            return re.replace(base, "").trim() + " VK_ICD_FILENAMES=$icd VK_DRIVER_FILES=$icd"
+        }
         val imported = VulkanDrivers.activeIcd(ctx)
         if (imported != null) {
             Log.i("Launcher", "driver Vulkan Linux hasil impor: $imported")

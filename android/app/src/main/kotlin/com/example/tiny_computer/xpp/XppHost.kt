@@ -35,7 +35,9 @@ object XppHost {
     private const val TAG = "XppHost"
     private val lock = Any()
 
-    private var handle = 0L
+    @Volatile private var handle = 0L
+    /** Handle sesi X++ untuk jembatan Vortek (dibaca dari thread native tanpa mengambil [lock]). */
+    val nativeHandle: Long get() = handle
     private var width = 0
     private var height = 0
     private var backend = NativeX11.BACKEND_EGL

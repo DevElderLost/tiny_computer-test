@@ -220,6 +220,10 @@
     <string name="tc_pckb_key_altgr">AltGr</string>
     <!-- Impor driver (seperti DroidDeck) -->
     <string name="tc_drv_title">GPU drivers</string>
+    <string name="tc_vortek">Vortek (Vulkan renderer)</string>
+    <string name="tc_vortek_driver">Vortek host driver</string>
+    <string name="tc_vortek_driver_system">System (default)</string>
+    <string name="tc_vortek_hint">Guest Vulkan calls run in the app process on the Android driver chosen below, separate from the compositor driver. Needs the X++ display server. Applies on next launch.</string>
     <string name="tc_drv_hint">Import a Turnip zip/tzst: Linux (glibc) for programs inside the container, Android (adrenotools) for the display, or a DroidDeck bundle with both. Applies on next launch.</string>
     <string name="tc_drv_import">Import driver (.zip / .tzst)</string>
     <string name="tc_drv_importing">Importing…</string>

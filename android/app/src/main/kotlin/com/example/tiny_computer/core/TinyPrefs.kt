@@ -117,6 +117,14 @@ object Cfg {
     var turnip: Boolean
         get() = TinyPrefs.getBool("turnip", false)
         set(v) = TinyPrefs.setBool("turnip", v)
+    /** Vortek (Winlator): Vulkan guest diteruskan ke renderer di proses aplikasi. Hanya bermakna dengan Display server X++. */
+    var vortek: Boolean
+        get() = TinyPrefs.getBool("vortek", false)
+        set(v) = TinyPrefs.setBool("vortek", v)
+    /** Driver Android (adrenotools) khusus renderer Vortek; kosong = driver sistem (libvulkan.so), bawaan Winlator. Terpisah dari [androidDriver] compositor. */
+    var vortekDriver: String
+        get() = TinyPrefs.getString("vortekDriver", "")
+        set(v) = TinyPrefs.setString("vortekDriver", v)
     var dri3: Boolean
         get() = TinyPrefs.getBool("dri3", false)
         set(v) = TinyPrefs.setBool("dri3", v)

@@ -72,4 +72,10 @@ public final class NativeX11 {
     public static native String nativeError(long handle);
 
     public static native boolean nativeStartupContent(long handle);
+
+    // Jembatan Vortek: window X <-> AHardwareBuffer (lihat native_jni.cpp).
+    public static native int nativeVortekWindowWidth(long handle, int windowId);
+    public static native int nativeVortekWindowHeight(long handle, int windowId);
+    public static native long nativeVortekWindowBuffer(long handle, int windowId, boolean bgra);
+    public static native void nativeVortekWindowUpdate(long handle, int windowId);
 }
