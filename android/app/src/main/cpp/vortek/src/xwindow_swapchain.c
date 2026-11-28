@@ -1,5 +1,6 @@
 #include "xwindow_swapchain.h"
 #include "vortek_log.h"
+#include "legacy_reply.h"
 #include "vulkan_helper.h"
 #include "time_utils.h"
 
@@ -360,10 +361,14 @@ static void acquireNextImageThread(void* param) {
         vulkanWrapper.vkQueueSubmit(req->swapchain->queue, 1, &submitInfo, req->fence);
     }
 
+#ifdef VORTEK_LEGACY_ICD
+    LegacyReply_ringResult(req->responseRing, (int)result, &imageIndex, sizeof(int));
+#else
     char outputBuffer[8];
     *(int*)(outputBuffer + 0) = result;
     *(int*)(outputBuffer + 4) = imageIndex;
     RingBuffer_write(req->responseRing, outputBuffer, sizeof(outputBuffer));
+#endif
     free(req);
 }
 

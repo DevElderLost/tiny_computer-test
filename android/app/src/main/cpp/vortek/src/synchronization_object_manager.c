@@ -12,6 +12,7 @@ typedef struct WaitForFencesRequest {
     uint64_t timeout;
     VkFence* fences;
     MemoryPool memoryPool;
+    int replyFd; // ICD lama: ujung tulis pipe (timeout != 0) atau -1 (balas lewat ring)
 } WaitForFencesRequest;
 
 typedef struct WaitSemaphoresRequest {
@@ -26,7 +27,12 @@ typedef struct WaitSemaphoresRequest {
 static void waitForFencesThread(void* param) {
     WaitForFencesRequest* req = param;
     VkResult result = vulkanWrapper.vkWaitForFences(req->device, req->fenceCount, req->fences, req->waitAll, req->timeout);
+#ifdef VORTEK_LEGACY_ICD
+    if (req->replyFd >= 0) LegacyReply_finishFence(req->replyFd, (int)result);
+    else LegacyReply_ringResult(req->responseRing, (int)result, NULL, 0);
+#else
     RingBuffer_write(req->responseRing, &result, sizeof(VkResult));
+#endif
 
     mp_free(&req->memoryPool);
     free(req);
@@ -54,6 +60,9 @@ void SynchronizationObjectManager_waitForFences(VkContext* context) {
     uint64_t deviceId;
     vt_unserialize_vkWaitForFences((VkDevice)&deviceId, &waitForFencesRequest->fenceCount, NULL, &waitForFencesRequest->waitAll, &waitForFencesRequest->timeout, inputBuffer, &waitForFencesRequest->memoryPool);
     waitForFencesRequest->device  = VkObject_fromId(deviceId);
+#ifdef VORTEK_LEGACY_ICD
+    waitForFencesRequest->replyFd = waitForFencesRequest->timeout != 0 ? LegacyReply_beginFence(context->clientFd) : -1;
+#endif
 
     waitForFencesRequest->fences = mp_alloc(&waitForFencesRequest->memoryPool, waitForFencesRequest->fenceCount * sizeof(VkFence));
     vt_unserialize_vkWaitForFences(VK_NULL_HANDLE, NULL, waitForFencesRequest->fences, NULL, NULL, inputBuffer, &waitForFencesRequest->memoryPool);
