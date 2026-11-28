@@ -1,4 +1,5 @@
 #include "xwindow_swapchain.h"
+#include "vortek_log.h"
 #include "vulkan_helper.h"
 #include "time_utils.h"
 
@@ -38,8 +39,10 @@ static VkResult createWindowImage(XWindowSwapchain* swapchain, VkFormat imageFor
     jboolean useHALPixelFormatBGRA8888 = imageFormat == VK_FORMAT_B8G8R8A8_UNORM || imageFormat == VK_FORMAT_B8G8R8A8_SRGB;
     AHardwareBuffer* hardwareBuffer = getWindowHardwareBuffer(swapchain->jmethods, swapchain->windowId, useHALPixelFormatBGRA8888);
 
+    if (!hardwareBuffer) { vortekLog("swapchain: window 0x%x tidak punya AHardwareBuffer (bridge X++ gagal)", swapchain->windowId); return VK_ERROR_INITIALIZATION_FAILED; }
     AHardwareBuffer_Desc ahbDesc = {0};
     AHardwareBuffer_describe(hardwareBuffer, &ahbDesc);
+    vortekLog("swapchain: window 0x%x ahb=%p %ux%u format=%u formatVk=%d", swapchain->windowId, (void*)hardwareBuffer, ahbDesc.width, ahbDesc.height, ahbDesc.format, (int)imageFormat);
     swapchain->imageSize[0] = ahbDesc.width;
     swapchain->imageSize[1] = ahbDesc.height;
 
@@ -100,6 +103,7 @@ static VkResult createWindowImage(XWindowSwapchain* swapchain, VkFormat imageFor
     if (result != VK_SUCCESS) return result;
 
     result = vulkanWrapper.vkBindImageMemory(swapchain->device, swapchain->windowImage, swapchain->windowMemory, 0);
+    vortekLog("swapchain: image window siap, bind=%d", (int)result);
     return result;
 }
 
@@ -383,6 +387,7 @@ void XWindowSwapchain_acquireNextImage(XWindowSwapchain* swapchain, VkContext* c
 }
 
 void XWindowSwapchain_presentImage(XWindowSwapchain* swapchain, VkContext* context, uint32_t imageIndex, VkSemaphore* waitSemaphores, uint32_t waitSemaphoreCount) {
+    { static int presents = 0; presents++; if (presents <= 5 || presents % 300 == 0) vortekLog("present #%d window=0x%x image=%u mode=%d", presents, swapchain->windowId, imageIndex, (int)swapchain->presentMode); }
     if (swapchain->presentMode == VK_PRESENT_MODE_IMMEDIATE_KHR) {
         (*swapchain->jmethods->env)->CallVoidMethod(swapchain->jmethods->env, swapchain->jmethods->obj,
                                                     swapchain->jmethods->updateWindowContent, swapchain->windowId);

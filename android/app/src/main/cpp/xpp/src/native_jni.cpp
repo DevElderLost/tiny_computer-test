@@ -9,6 +9,8 @@
 #include "native_screen.h"
 #include "native_icc.h"
 #include "native_drawable.h"
+#include <cstdarg>
+#include <cstdio>
 #include <android/hardware_buffer.h>
 #include <map>
 
@@ -78,6 +80,10 @@ struct WindowListener {
 // Vortek (ICD guest) menggambar ke AHB milik window; X++ menampilkannya lewat jalur yang sama dengan
 // Present DRI3 (drawable AHB + PresentTicket), sehingga tidak ada salinan CPU.
 namespace {
+void vortekBridgeLog(const char* fmt, ...) {
+    char msg[300]; va_list ap; va_start(ap, fmt); vsnprintf(msg, sizeof(msg), fmt, ap); va_end(ap);
+    if (FILE* f = fopen("/storage/emulated/0/Download/Wayland-logs/vortek.log", "a")) { fprintf(f, "           [xpp] %s\n", msg); fclose(f); }
+}
 struct VortekWindowBuffer { sp<xorg::NativeDrawable> drawable; u16 w{}, h{}; bool bgra{}; };
 std::mutex vortek_mutex;
 std::map<std::pair<jlong, u32>, VortekWindowBuffer> vortek_buffers;
@@ -348,9 +354,9 @@ extern "C" JNIEXPORT jint JNICALL JNI_NAME(nativeVortekWindowHeight)(JNIEnv*, jc
 extern "C" JNIEXPORT jlong JNICALL JNI_NAME(nativeVortekWindowBuffer)(JNIEnv*, jclass, jlong handle, jint id, jboolean bgra) {
     auto server = session(handle); if (!server) return 0;
     auto lock = server->Lock();
-    auto* window = vortekWindow(*server, u32(id)); if (!window) return 0;
+    auto* window = vortekWindow(*server, u32(id)); if (!window) { vortekBridgeLog("buffer: window 0x%x tidak ada", u32(id)); return 0; }
     const u16 w = u16(window->GetWidth()), h = u16(window->GetHeight());
-    if (!w || !h) return 0;
+    if (!w || !h) { vortekBridgeLog("buffer window=0x%x ukuran 0 (%ux%u)", u32(id), w, h); return 0; }
     std::lock_guard cache(vortek_mutex);
     auto& slot = vortek_buffers[{handle, u32(id)}];
     if (slot.drawable && slot.w == w && slot.h == h && slot.bgra == (bgra == JNI_TRUE) && slot.drawable->HardwareBuffer())
@@ -369,6 +375,7 @@ extern "C" JNIEXPORT jlong JNICALL JNI_NAME(nativeVortekWindowBuffer)(JNIEnv*, j
     } catch (...) { AHardwareBuffer_release(ahb); slot = {}; return 0; }
     AHardwareBuffer_release(ahb);
     slot.w = w; slot.h = h; slot.bgra = bgra == JNI_TRUE;
+    vortekBridgeLog("buffer window=0x%x %ux%u bgra=%d ahb=%p", u32(id), w, h, int(slot.bgra), (void*)slot.drawable->HardwareBuffer());
     return reinterpret_cast<jlong>(slot.drawable->HardwareBuffer());
 }
 // Isi AHB window baru selesai ditulis: tampilkan lewat jalur Present.
@@ -380,6 +387,7 @@ extern "C" JNIEXPORT void JNICALL JNI_NAME(nativeVortekWindowUpdate)(JNIEnv*, jc
     { std::lock_guard cache(vortek_mutex);
       auto i = vortek_buffers.find({handle, u32(id)}); if (i == vortek_buffers.end()) return; drawable = i->second.drawable; }
     if (!drawable) return;
+    { static int updates = 0; updates++; if (updates <= 5 || updates % 300 == 0) vortekBridgeLog("update #%d window=0x%x", updates, u32(id)); }
     auto ticket = std::make_shared<xorg::PresentTicket>();
     ticket->window = u32(id); ticket->drawable = std::move(drawable);
     static_cast<xorg::NativeScreen&>(server->GetScreen()).Present(std::move(ticket));

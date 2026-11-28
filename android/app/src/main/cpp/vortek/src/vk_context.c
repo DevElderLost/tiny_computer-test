@@ -50,7 +50,8 @@ static void* requestHandlerThread(void* param) {
     while (context->status >= 0) {
         int requestCode = vt_recv(context->serverRing, &context->inputBuffer, &context->inputBufferSize, &context->memoryPool);
         if (requestCode < 0) { vortekLog("context %p: ring ditutup/err (%d)", (void*)context, requestCode); break; }
-        { static int logged = 0; if (logged < 40) { logged++; vortekLog("context %p: request %d", (void*)context, requestCode); } }
+        { static unsigned char seen[1024]; int c = requestCode & 0xffff;
+          if (c < 1024 && !seen[c]) { seen[c] = 1; vortekLog("request baru: %d (context %p)", requestCode, (void*)context); } }
 
         if (requestCode > INT16_MAX) {
             uint16_t requestId = requestCode & 0xffff;
