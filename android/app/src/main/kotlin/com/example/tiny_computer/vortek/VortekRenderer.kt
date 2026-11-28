@@ -65,6 +65,7 @@ class VortekRenderer private constructor(private val options: Options) {
             while (server === s) {
                 val c = try { s.accept() } catch (_: IOException) { break }
                 synchronized(clients) { clients += c }
+                vlog("klien terhubung")
                 Thread({ serve(c) }, "Vortek-client").start()
             }
             runCatching { bound.close() }
@@ -84,20 +85,24 @@ class VortekRenderer private constructor(private val options: Options) {
                 while (n < 8) { val r = input.read(header, n, 8 - n); if (r < 0) return; n += r }
                 val code = bb.getInt(0)
                 val length = bb.getInt(4)
+                if (contextPtr == 0L || code != REQUEST_CODE_CREATE_CONTEXT) vlog("header code=$code length=$length")
                 if (code == REQUEST_CODE_CREATE_CONTEXT) {
                     // fd harus tetap terbuka selama context hidup (native tidak menutupnya)
                     pfd = ParcelFileDescriptor.dup(client.fileDescriptor)
+                    vlog("createVkContext fd=${pfd.fd} driver=${options.libvulkanPath ?: "sistem"}")
                     contextPtr = createVkContext(pfd.fd, options)
-                    if (contextPtr <= 0L) { Log.e(TAG, "createVkContext gagal"); return }
+                    vlog("createVkContext -> $contextPtr")
+                    if (contextPtr <= 0L) { vlog("createVkContext gagal (ring buffer/ashmem/send_fds)"); return }
                 } else if (code > Short.MAX_VALUE && (code shr 16) == REQUEST_CODE_SEND_EXTRA_DATA) {
                     if (contextPtr == 0L || !handleExtraDataRequest(contextPtr, code and 0xffff, length)) {
-                        Log.e(TAG, "handleExtraDataRequest gagal"); return
+                        vlog("handleExtraDataRequest gagal code=${code and 0xffff} length=$length"); return
                     }
                 }
             }
         } catch (e: IOException) {
-            Log.w(TAG, "klien putus: ${e.message}")
+            vlog("klien putus: ${e.message}")
         } finally {
+            vlog("klien selesai (context=$contextPtr)")
             if (contextPtr > 0L) runCatching { destroyVkContext(contextPtr) }
             runCatching { pfd?.close() }
             runCatching { client.close() }
@@ -114,6 +119,15 @@ class VortekRenderer private constructor(private val options: Options) {
 
     companion object {
         private const val TAG = "Vortek"
+
+        /** Log ke logcat dan ke Download/Wayland-logs/vortek.log (agar bisa dikirim tanpa adb). */
+        fun vlog(msg: String) {
+            Log.i(TAG, msg)
+            runCatching {
+                val dir = File(com.example.tiny_computer.core.LaunchLog.DIR).apply { mkdirs() }
+                File(dir, "vortek.log").appendText("${java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())} $msg\n")
+            }
+        }
         private const val REQUEST_CODE_CREATE_CONTEXT = 1
         private const val REQUEST_CODE_SEND_EXTRA_DATA = 2
         // Soket di dalam kontainer: guest membukanya sebagai /tmp/.vortek/V0 (path ini ditanam di libvulkan_vortek.so aset).
@@ -164,10 +178,11 @@ class VortekRenderer private constructor(private val options: Options) {
                 val r = VortekRenderer(opts)
                 r.start(ctx.applicationContext, socketFile())
                 instance = r; startedDriver = driver
-                Log.i(TAG, "Vortek siap di ${socketFile()} (driver host: ${driver ?: "libvulkan sistem"})")
+                vlog("Vortek siap di ${socketFile()} (driver host: ${driver.ifEmpty { "libvulkan sistem" }})")
                 true
             } catch (t: Throwable) {
-                Log.e(TAG, "Vortek gagal start: ${t.message}", t)
+                vlog("Vortek gagal start: ${t.javaClass.simpleName}: ${t.message}")
+                Log.e(TAG, "Vortek gagal start", t)
                 false
             }
         }
