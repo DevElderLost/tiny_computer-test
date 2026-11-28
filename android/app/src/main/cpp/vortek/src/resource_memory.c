@@ -3,7 +3,20 @@
 #include "vulkan_helper.h"
 #include "dma_utils.h"
 
-extern int AHardwareBuffer_getFd(AHardwareBuffer* hardwareBuffer);
+#include <dlfcn.h>
+
+// AHardwareBuffer_getFd bukan API publik NDK (Winlator mendapatkannya dari stub libandroid miliknya), jadi tidak bisa
+// di-link. Ambil fd dma-buf lewat AHardwareBuffer_getNativeHandle (API 31+, dicari lewat dlsym agar minSdk tidak naik);
+// fd yang dikembalikan adalah salinan (dup) milik pemanggil, seperti semantik aslinya.
+typedef struct { int version, numFds, numInts; int data[1]; } VortekNativeHandle;
+static int AHardwareBuffer_getFd(AHardwareBuffer* hardwareBuffer) {
+    typedef const VortekNativeHandle* (*GetNativeHandleFn)(const AHardwareBuffer*);
+    static GetNativeHandleFn fn = NULL;
+    if (!fn) fn = (GetNativeHandleFn)dlsym(RTLD_DEFAULT, "AHardwareBuffer_getNativeHandle");
+    if (!fn) return -1;
+    const VortekNativeHandle* handle = fn(hardwareBuffer);
+    return handle && handle->numFds >= 1 ? dup(handle->data[0]) : -1;
+}
 extern DeviceMemoryInfo deviceMemoryInfo;
 
 static ResourceMemory* internalAllocate() {
