@@ -131,7 +131,9 @@ class VortekRenderer private constructor(private val options: Options) {
         private const val REQUEST_CODE_CREATE_CONTEXT = 1
         private const val REQUEST_CODE_SEND_EXTRA_DATA = 2
         // Soket di dalam kontainer: guest membukanya sebagai /tmp/.vortek/V0 (path ini ditanam di libvulkan_vortek.so aset).
-        const val GUEST_ICD = "/usr/share/vulkan/icd.d/vortek_icd.aarch64.json"
+        // Sengaja di luar /usr/share/vulkan/icd.d: loader tidak memindai folder ini, jadi hanya proses yang diberi VK_ICD_FILENAMES
+        // (sesi dengan Vortek aktif) yang memakai Vortek; aplikasi Vulkan lain tidak ikut tersambung ke server.
+        const val GUEST_ICD = "/usr/share/vulkan/vortek/vortek_icd.aarch64.json"
 
         init { System.loadLibrary("vortekrenderer") }
 
@@ -149,7 +151,8 @@ class VortekRenderer private constructor(private val options: Options) {
                 dest.parentFile?.mkdirs(); dest.writeBytes(bytes); dest.setReadable(true, false)
             }
             copy("vortek/libvulkan_vortek.so", File(root, "usr/lib/libvulkan_vortek.so"))
-            copy("vortek/vortek_icd.aarch64.json", File(root, "usr/share/vulkan/icd.d/vortek_icd.aarch64.json"))
+            copy("vortek/vortek_icd.aarch64.json", File(root, "usr/share/vulkan/vortek/vortek_icd.aarch64.json"))
+            File(root, "usr/share/vulkan/icd.d/vortek_icd.aarch64.json").delete() // lokasi lama (versi sebelumnya)
         }
 
         /**

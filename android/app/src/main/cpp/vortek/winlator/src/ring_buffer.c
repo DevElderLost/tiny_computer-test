@@ -12,6 +12,17 @@
 #include "time_utils.h"
 #include "events.h"
 
+#ifdef VORTEK_LEGACY_ICD
+// Layout shared memory ICD Vortek 2.1: header 16 byte (head, tail, status, cadangan) lalu data. Tanpa semaphore di shm.
+#define STRUCT_OFFSETS() \
+    struct Offsets { \
+        uint32_t head; \
+        uint32_t tail; \
+        uint32_t status; \
+        uint32_t reserved; \
+        void* buffer; \
+    }
+#else
 #define STRUCT_OFFSETS() \
     struct Offsets { \
         uint32_t head; \
@@ -21,6 +32,7 @@
         uint32_t writeSemaphore; \
         void* buffer; \
     }
+#endif
 
 #define SEMAPHORE_WAIT_TIMEOUT_NS 16000000
 
@@ -73,8 +85,15 @@ RingBuffer* RingBuffer_create(int shmFd, uint32_t bufferSize) {
     ring->head = sharedData + offsetof(struct Offsets, head);
     ring->tail = sharedData + offsetof(struct Offsets, tail);
     ring->status = sharedData + offsetof(struct Offsets, status);
+#ifdef VORTEK_LEGACY_ICD
+    // Semaphore hanya dipakai ring pool (tidak ada di mode ICD lama); sediakan penampung di heap agar pointer valid.
+    atomic_uint* semaphores = calloc(2, sizeof(atomic_uint));
+    ring->writeSemaphore = &semaphores[0];
+    ring->readSemaphore = &semaphores[1];
+#else
     ring->writeSemaphore = sharedData + offsetof(struct Offsets, writeSemaphore);
     ring->readSemaphore = sharedData + offsetof(struct Offsets, readSemaphore);
+#endif
     ring->buffer = sharedData + offsetof(struct Offsets, buffer);
     ring->bufferSize = bufferSize;
 
@@ -156,6 +175,9 @@ void RingBuffer_free(RingBuffer* ring) {
         ring->sharedData = NULL;
     }
 
+#ifdef VORTEK_LEGACY_ICD
+    free(ring->writeSemaphore); // awal array dua semaphore heap
+#endif
     free(ring);
 }
 
