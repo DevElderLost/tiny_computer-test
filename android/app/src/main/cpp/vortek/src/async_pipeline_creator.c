@@ -2,6 +2,7 @@
 #include "vortek_serializer.h"
 #include "vulkan_helper.h"
 #include "vortek_log.h"
+#include "legacy_reply.h"
 
 typedef struct PipelineCreateRequest {
     RingBuffer* responseRing;
@@ -11,6 +12,7 @@ typedef struct PipelineCreateRequest {
     void* pipelineInfos;
     ShaderInspector* shaderInspector;
     MemoryPool memoryPool;
+    int replyFd; // ICD lama: ujung tulis pipe balasan
 } PipelineCreateRequest;
 
 static void createGraphicsPipelinesThread(void* param) {
@@ -36,7 +38,11 @@ static void createGraphicsPipelinesThread(void* param) {
         *(uint64_t*)(outputBuffer + j) = (uint64_t)pipelines[i];
     }
 
+#ifdef VORTEK_LEGACY_ICD
+    LegacyReply_finish(req->replyFd, outputBuffer, bufferSize);
+#else
     RingBuffer_write(req->responseRing, outputBuffer, bufferSize);
+#endif
     vortekLog("graphics pipeline: respons ditulis (%d byte)", bufferSize);
     free(req);
 }
@@ -61,7 +67,11 @@ static void createComputePipelinesThread(void* param) {
         *(uint64_t*)(outputBuffer + j) = (uint64_t)pipelines[i];
     }
 
+#ifdef VORTEK_LEGACY_ICD
+    LegacyReply_finish(req->replyFd, outputBuffer, bufferSize);
+#else
     RingBuffer_write(req->responseRing, outputBuffer, bufferSize);
+#endif
     free(req);
 }
 
@@ -70,6 +80,9 @@ void AsyncPipelineCreator_createGraphicsPipelines(VkContext* context) {
     PipelineCreateRequest* pipelineCreateRequest = calloc(1, sizeof(PipelineCreateRequest));
     pipelineCreateRequest->responseRing = VT_RESPONSE_RING(context, ringId);
     pipelineCreateRequest->shaderInspector = context->shaderInspector;
+#ifdef VORTEK_LEGACY_ICD
+    pipelineCreateRequest->replyFd = LegacyReply_begin(context->clientFd);
+#endif
 
     char* inputBuffer = context->inputBuffer + VT_RING_ID_SIZE;
     vortekLog("graphics pipeline: request diterima");
@@ -93,6 +106,9 @@ void AsyncPipelineCreator_createComputePipelines(VkContext* context) {
     PipelineCreateRequest* pipelineCreateRequest = calloc(1, sizeof(PipelineCreateRequest));
     pipelineCreateRequest->responseRing = VT_RESPONSE_RING(context, ringId);
     pipelineCreateRequest->shaderInspector = context->shaderInspector;
+#ifdef VORTEK_LEGACY_ICD
+    pipelineCreateRequest->replyFd = LegacyReply_begin(context->clientFd);
+#endif
 
     char* inputBuffer = context->inputBuffer + VT_RING_ID_SIZE;
 

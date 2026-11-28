@@ -2,6 +2,7 @@
 #include "vortek_serializer.h"
 #include "string_utils.h"
 #include "vulkan_helper.h"
+#include "legacy_reply.h"
 
 typedef struct WaitForFencesRequest {
     RingBuffer* responseRing;
@@ -19,6 +20,7 @@ typedef struct WaitSemaphoresRequest {
     VkSemaphoreWaitInfo waitInfo;
     uint64_t timeout;
     MemoryPool memoryPool;
+    int replyFd; // ICD lama: ujung tulis pipe balasan
 } WaitSemaphoresRequest;
 
 static void waitForFencesThread(void* param) {
@@ -33,7 +35,11 @@ static void waitForFencesThread(void* param) {
 static void waitSemaphoresThread(void* param) {
     WaitSemaphoresRequest* req = param;
     VkResult result = vulkanWrapper.vkWaitSemaphores(req->device, &req->waitInfo, req->timeout);
+#ifdef VORTEK_LEGACY_ICD
+    LegacyReply_finish(req->replyFd, &result, sizeof(VkResult));
+#else
     RingBuffer_write(req->responseRing, &result, sizeof(VkResult));
+#endif
 
     mp_free(&req->memoryPool);
     free(req);
@@ -58,7 +64,10 @@ void SynchronizationObjectManager_waitForFences(VkContext* context) {
 void SynchronizationObjectManager_waitSemaphores(VkContext* context) {
     ringid_t ringId = VT_REQUEST_RING_ID(context);
     WaitSemaphoresRequest* waitSemaphoresRequest = calloc(1, sizeof(WaitSemaphoresRequest));
-    waitSemaphoresRequest->responseRing = VT_RESPONSE_RING(context, ringId);;
+    waitSemaphoresRequest->responseRing = VT_RESPONSE_RING(context, ringId);
+#ifdef VORTEK_LEGACY_ICD
+    waitSemaphoresRequest->replyFd = LegacyReply_begin(context->clientFd);
+#endif
 
     char* inputBuffer = context->inputBuffer + VT_RING_ID_SIZE;
     uint64_t deviceId;
