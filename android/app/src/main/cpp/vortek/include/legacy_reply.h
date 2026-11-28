@@ -10,7 +10,10 @@
 static inline int LegacyReply_begin(int clientFd) {
     int p[2];
     if (pipe(p) < 0) return -1;
-    int sent = send_fds(clientFd, &p[0], 1, NULL, 0);
+    // Byte data harus NON-NOL: ICD lama menganggap byte 0 sebagai "gagal" (cmp w0,#0; ccmp w24,#0,#0,ne; b.ne error)
+    // dan baru mau membaca pipe bila byte != 0 dan tepat satu fd diterima.
+    char ok = 1;
+    int sent = send_fds(clientFd, &p[0], 1, &ok, 1);
     int err = errno;
     vortekLog("balasan lama: pipe r=%d w=%d, send_fds -> %d (errno=%d)", p[0], p[1], sent, sent < 0 ? err : 0);
     close(p[0]);
