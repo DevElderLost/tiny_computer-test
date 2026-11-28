@@ -9,6 +9,12 @@ add_library(vortekrenderer SHARED
     winlator/src/ring_buffer.c
     winlator/src/arrays.c
     winlator/src/sysvshared_memory.c)
+# ICD guest bawaan (aset vortek/libvulkan_vortek.so, Vortek 2.1) memakai protokol lama tanpa ring pool; OFF bila ICD diganti
+# dengan build yang cocok dengan sumber host ini (2 + RING_POOL_ARRAY_LEN fd, request diawali ringId).
+option(VORTEK_LEGACY_ICD "Bicara dengan ICD Vortek lama (2 fd, tanpa ringId)" ON)
 target_compile_definitions(vortekrenderer PRIVATE VK_USE_PLATFORM_ANDROID_KHR)
+if(VORTEK_LEGACY_ICD)
+    target_compile_definitions(vortekrenderer PRIVATE VORTEK_LEGACY_ICD)
+endif()
 target_include_directories(vortekrenderer PRIVATE include winlator/include)
 target_link_libraries(vortekrenderer adrenotools log android)

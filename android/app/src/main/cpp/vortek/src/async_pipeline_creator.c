@@ -61,12 +61,12 @@ static void createComputePipelinesThread(void* param) {
 }
 
 void AsyncPipelineCreator_createGraphicsPipelines(VkContext* context) {
-    ringid_t ringId = *(ringid_t*)(context->inputBuffer + 0);
+    ringid_t ringId = VT_REQUEST_RING_ID(context);
     PipelineCreateRequest* pipelineCreateRequest = calloc(1, sizeof(PipelineCreateRequest));
-    pipelineCreateRequest->responseRing = context->ringPool[ringId].ring;
+    pipelineCreateRequest->responseRing = VT_RESPONSE_RING(context, ringId);
     pipelineCreateRequest->shaderInspector = context->shaderInspector;
 
-    char* inputBuffer = context->inputBuffer + sizeof(ringid_t);
+    char* inputBuffer = context->inputBuffer + VT_RING_ID_SIZE;
 
     uint64_t deviceId = 0;
     uint64_t pipelineCacheId = 0;
@@ -83,12 +83,12 @@ void AsyncPipelineCreator_createGraphicsPipelines(VkContext* context) {
 }
 
 void AsyncPipelineCreator_createComputePipelines(VkContext* context) {
-    ringid_t ringId = *(ringid_t*)(context->inputBuffer + 0);
+    ringid_t ringId = VT_REQUEST_RING_ID(context);
     PipelineCreateRequest* pipelineCreateRequest = calloc(1, sizeof(PipelineCreateRequest));
-    pipelineCreateRequest->responseRing = context->ringPool[ringId].ring;
+    pipelineCreateRequest->responseRing = VT_RESPONSE_RING(context, ringId);
     pipelineCreateRequest->shaderInspector = context->shaderInspector;
 
-    char* inputBuffer = context->inputBuffer + sizeof(ringid_t);
+    char* inputBuffer = context->inputBuffer + VT_RING_ID_SIZE;
 
     uint64_t deviceId = 0;
     uint64_t pipelineCacheId = 0;

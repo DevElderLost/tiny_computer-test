@@ -85,6 +85,11 @@ static void* requestHandlerThread(void* param) {
 }
 
 static bool setupRingBuffers(VkContext* context) {
+#ifdef VORTEK_LEGACY_ICD
+    const int fdCount = 2;
+#else
+    const int fdCount = 2 + RING_POOL_ARRAY_LEN;
+#endif
     int shmFds[2 + RING_POOL_ARRAY_LEN];
     shmFds[0] = ashmemCreateRegion("vt-server-ring", RingBuffer_getSHMemSize(SERVER_RING_BUFFER_SIZE));
     shmFds[1] = ashmemCreateRegion("vt-client-ring", RingBuffer_getSHMemSize(CLIENT_RING_BUFFER_SIZE));
@@ -95,16 +100,19 @@ static bool setupRingBuffers(VkContext* context) {
     context->clientRing = RingBuffer_create(shmFds[1], CLIENT_RING_BUFFER_SIZE);
     if (!context->clientRing) return false;
 
+#ifndef VORTEK_LEGACY_ICD
     for (int i = 0; i < RING_POOL_ARRAY_LEN; i++) {
         shmFds[2+i] = ashmemCreateRegion("vt-ring-pool", RingBuffer_getSHMemSize(RING_POOL_BUFFER_SIZE));
         context->ringPool[i].ring = RingBuffer_create(shmFds[2+i], RING_POOL_BUFFER_SIZE);
+        if (!context->ringPool[i].ring) return false;
         context->ringPool[i].ring->useSemaphores = true;
         context->ringPool[i].acquired = false;
-        if (!context->ringPool[i].ring) return false;
     }
+#endif
 
-    int result = send_fds(context->clientFd, shmFds, ARRAY_SIZE(shmFds), NULL, 0);
-    for (int i = 0; i < ARRAY_SIZE(shmFds); i++) close(shmFds[i]);
+    int result = send_fds(context->clientFd, shmFds, fdCount, NULL, 0);
+    vortekLog("setupRingBuffers: kirim %d fd -> %d", fdCount, result);
+    for (int i = 0; i < fdCount; i++) close(shmFds[i]);
     if (result < 0) return false;
 
     pthread_create(&context->requestHandlerThread, NULL, requestHandlerThread, context);
@@ -153,7 +161,7 @@ void destroyVkContext(JNIEnv* env, VkContext* context) {
         RingBuffer_setStatus(context->clientRing, RING_STATUS_EXIT);
 
         for (int i = 0; i < RING_POOL_ARRAY_LEN; i++) {
-            RingBuffer_setStatus(context->ringPool[i].ring, RING_STATUS_EXIT);
+            if (context->ringPool[i].ring) RingBuffer_setStatus(context->ringPool[i].ring, RING_STATUS_EXIT);
         }
 
         pthread_join(context->requestHandlerThread, NULL);
@@ -166,7 +174,7 @@ void destroyVkContext(JNIEnv* env, VkContext* context) {
         RingBuffer_free(context->clientRing);
 
         for (int i = 0; i < RING_POOL_ARRAY_LEN; i++) {
-            RingBuffer_free(context->ringPool[i].ring);
+            if (context->ringPool[i].ring) RingBuffer_free(context->ringPool[i].ring);
         }
     }
 

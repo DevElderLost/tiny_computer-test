@@ -14,6 +14,18 @@
 
 typedef unsigned char ringid_t;
 
+// Mode ICD lama (libvulkan_vortek.so 2.1 di aset): host hanya mengirim 2 ring (server 4MB, client 256KB), request tidak
+// diawali ringId, dan semua respons dibaca ICD dari clientRing. Mode baru memakai ring pool (2 + RING_POOL_ARRAY_LEN fd).
+#ifdef VORTEK_LEGACY_ICD
+#define VT_RING_ID_SIZE 0
+#define VT_REQUEST_RING_ID(ctx) ((ringid_t)0)
+#define VT_RESPONSE_RING(ctx, id) ((ctx)->clientRing)
+#else
+#define VT_RING_ID_SIZE sizeof(ringid_t)
+#define VT_REQUEST_RING_ID(ctx) (*(ringid_t*)((ctx)->inputBuffer + 0))
+#define VT_RESPONSE_RING(ctx, id) ((ctx)->ringPool[id].ring)
+#endif
+
 typedef struct RingBufferPool {
     bool acquired;
     RingBuffer* ring;

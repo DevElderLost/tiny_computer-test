@@ -372,7 +372,7 @@ void XWindowSwapchain_acquireNextImage(XWindowSwapchain* swapchain, VkContext* c
     }
 
     AcquireNextImageRequest* acquireNextImageRequest = calloc(1, sizeof(AcquireNextImageRequest));
-    acquireNextImageRequest->responseRing = context->ringPool[ringId].ring;
+    acquireNextImageRequest->responseRing = VT_RESPONSE_RING(context, ringId);
     acquireNextImageRequest->context = context;
     acquireNextImageRequest->swapchain = swapchain;
     acquireNextImageRequest->signalSemaphore = signalSemaphore;

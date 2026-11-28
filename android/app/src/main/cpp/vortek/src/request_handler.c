@@ -2044,8 +2044,8 @@ void vt_handle_vkAcquireNextImageKHR(VkContext* context) {
     uint64_t semaphoreId;
     uint64_t fenceId;
 
-    ringid_t ringId = *(ringid_t*)(context->inputBuffer + 0);
-    char* inputBuffer = context->inputBuffer + sizeof(ringid_t);
+    ringid_t ringId = VT_REQUEST_RING_ID(context);
+    char* inputBuffer = context->inputBuffer + VT_RING_ID_SIZE;
     vt_unserialize_vkAcquireNextImageKHR((VkDevice)&deviceId, (VkSwapchainKHR)&swapchainId, &timeout, (VkSemaphore)&semaphoreId, (VkFence)&fenceId, NULL, inputBuffer, &context->memoryPool);
     VkDevice device = VkObject_fromId(deviceId);
     XWindowSwapchain* swapchain = VkObject_fromId(swapchainId);
@@ -2371,8 +2371,8 @@ void vt_handle_vkCmdSetDeviceMask(VkContext* context) {
 }
 
 void vt_handle_vkAcquireNextImage2KHR(VkContext* context) {
-    ringid_t ringId = *(ringid_t*)(context->inputBuffer + 0);
-    char* inputBuffer = context->inputBuffer + sizeof(ringid_t);
+    ringid_t ringId = VT_REQUEST_RING_ID(context);
+    char* inputBuffer = context->inputBuffer + VT_RING_ID_SIZE;
 
     VkAcquireNextImageInfoKHR acquireInfo = {0};
     vt_unserialize_VkAcquireNextImageInfoKHR(&acquireInfo, inputBuffer, &context->memoryPool);

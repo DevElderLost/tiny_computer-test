@@ -40,11 +40,11 @@ static void waitSemaphoresThread(void* param) {
 }
 
 void SynchronizationObjectManager_waitForFences(VkContext* context) {
-    ringid_t ringId = *(ringid_t*)(context->inputBuffer + 0);
+    ringid_t ringId = VT_REQUEST_RING_ID(context);
     WaitForFencesRequest* waitForFencesRequest = calloc(1, sizeof(WaitForFencesRequest));
-    waitForFencesRequest->responseRing = context->ringPool[ringId].ring;
+    waitForFencesRequest->responseRing = VT_RESPONSE_RING(context, ringId);
 
-    char* inputBuffer = context->inputBuffer + sizeof(ringid_t);
+    char* inputBuffer = context->inputBuffer + VT_RING_ID_SIZE;
     uint64_t deviceId;
     vt_unserialize_vkWaitForFences((VkDevice)&deviceId, &waitForFencesRequest->fenceCount, NULL, &waitForFencesRequest->waitAll, &waitForFencesRequest->timeout, inputBuffer, &waitForFencesRequest->memoryPool);
     waitForFencesRequest->device  = VkObject_fromId(deviceId);
@@ -56,11 +56,11 @@ void SynchronizationObjectManager_waitForFences(VkContext* context) {
 }
 
 void SynchronizationObjectManager_waitSemaphores(VkContext* context) {
-    ringid_t ringId = *(ringid_t*)(context->inputBuffer + 0);
+    ringid_t ringId = VT_REQUEST_RING_ID(context);
     WaitSemaphoresRequest* waitSemaphoresRequest = calloc(1, sizeof(WaitSemaphoresRequest));
-    waitSemaphoresRequest->responseRing = context->ringPool[ringId].ring;;
+    waitSemaphoresRequest->responseRing = VT_RESPONSE_RING(context, ringId);;
 
-    char* inputBuffer = context->inputBuffer + sizeof(ringid_t);
+    char* inputBuffer = context->inputBuffer + VT_RING_ID_SIZE;
     uint64_t deviceId;
     vt_unserialize_vkWaitSemaphores((VkDevice)&deviceId, &waitSemaphoresRequest->waitInfo, &waitSemaphoresRequest->timeout, inputBuffer, &waitSemaphoresRequest->memoryPool);
     waitSemaphoresRequest->device = VkObject_fromId(deviceId);
