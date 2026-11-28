@@ -50,8 +50,7 @@ static void* requestHandlerThread(void* param) {
     while (context->status >= 0) {
         int requestCode = vt_recv(context->serverRing, &context->inputBuffer, &context->inputBufferSize, &context->memoryPool);
         if (requestCode < 0) { vortekLog("context %p: ring ditutup/err (%d)", (void*)context, requestCode); break; }
-        { static unsigned char seen[1024]; int c = requestCode & 0xffff;
-          if (c < 1024 && !seen[c]) { seen[c] = 1; vortekLog("request baru: %d (context %p)", requestCode, (void*)context); } }
+        { extern int vortekRequestLogBudget; if (vortekRequestLogBudget > 0) { vortekRequestLogBudget--; vortekLog("req %d", requestCode); } }
 
         if (requestCode > INT16_MAX) {
             uint16_t requestId = requestCode & 0xffff;
@@ -120,11 +119,14 @@ static bool setupRingBuffers(VkContext* context) {
     return true;
 }
 
+int vortekRequestLogBudget = 0;
+
 VkContext* createVkContext(JNIEnv* env, jobject obj, int clientFd, jobject options) {
     jobjectArray exposedDeviceExtensions = getJFieldByName(env, options, "exposedDeviceExtensions", JSIGNATURE_ARRAY_STRING).l;
 
     VkContext* context = calloc(1, sizeof(VkContext));
     context->clientFd = clientFd;
+    vortekRequestLogBudget = 400; // catat 400 request pertama context terbaru
     context->vkMaxVersion = getJFieldByName(env, options, "vkMaxVersion", "I").i;
     context->maxDeviceMemory = getJFieldByName(env, options, "maxDeviceMemory", "S").s;
     context->imageCacheSize = getJFieldByName(env, options, "imageCacheSize", "S").s;

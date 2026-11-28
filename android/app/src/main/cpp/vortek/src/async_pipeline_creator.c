@@ -1,6 +1,7 @@
 #include "async_pipeline_creator.h"
 #include "vortek_serializer.h"
 #include "vulkan_helper.h"
+#include "vortek_log.h"
 
 typedef struct PipelineCreateRequest {
     RingBuffer* responseRing;
@@ -18,10 +19,13 @@ static void createGraphicsPipelinesThread(void* param) {
     VkResult result = VK_SUCCESS;
 
     VkGraphicsPipelineCreateInfo* createInfos = req->pipelineInfos;
+    vortekLog("graphics pipeline: mulai (jumlah=%u)", req->pipelineCount);
     for (int i = 0; i < req->pipelineCount; i++) {
         ShaderInspector_inspectShaderStages(req->shaderInspector, req->device, (VkPipelineShaderStageCreateInfo*)createInfos[i].pStages, createInfos[i].stageCount, createInfos[i].pVertexInputState);
     }
+    vortekLog("graphics pipeline: inspeksi shader selesai, memanggil driver host");
     result = vulkanWrapper.vkCreateGraphicsPipelines(req->device, req->pipelineCache, req->pipelineCount, createInfos, NULL, pipelines);
+    vortekLog("graphics pipeline: driver host mengembalikan %d", (int)result);
     mp_free(&req->memoryPool);
 
     int bufferSize = sizeof(VkResult) + req->pipelineCount * VK_HANDLE_BYTE_COUNT;
@@ -33,6 +37,7 @@ static void createGraphicsPipelinesThread(void* param) {
     }
 
     RingBuffer_write(req->responseRing, outputBuffer, bufferSize);
+    vortekLog("graphics pipeline: respons ditulis (%d byte)", bufferSize);
     free(req);
 }
 
@@ -67,6 +72,7 @@ void AsyncPipelineCreator_createGraphicsPipelines(VkContext* context) {
     pipelineCreateRequest->shaderInspector = context->shaderInspector;
 
     char* inputBuffer = context->inputBuffer + VT_RING_ID_SIZE;
+    vortekLog("graphics pipeline: request diterima");
 
     uint64_t deviceId = 0;
     uint64_t pipelineCacheId = 0;
